@@ -7,8 +7,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RootStackParamList } from '../navigation/types';
 import { getStreamingSources, getRecommendedSource, StreamingSource } from '../services/streamingApi';
-// Using Consumet HTTP API for better reliability (works with React Native)
-import { getConsumetEpisodeSources, ConsumetProvider } from '../services/consumetApiService';
+// Using Aniwatch for episodes (Consumet API is down)
+import { getAniwatchApiSources } from '../services/aniwatchApiService';
 
 type VideoPlayerScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'VideoPlayer'>;
@@ -61,57 +61,106 @@ const VideoPlayerScreen: React.FC<VideoPlayerScreenProps> = ({ navigation, route
     setError(null);
 
     try {
-      console.log('=== Loading Streaming Sources with Consumet ===');
+      console.log('=== Loading Streaming Sources (Aniwatch Primary) ===');
       console.log('Episode ID:', episodeId);
-      console.log('Episode URL:', episodeUrl);
+      console.log('Anime Title:', animeTitle);
+      console.log('Episode Number:', episodeNumber);
 
-      // Try Consumet first (most reliable)
       let sources: any[] = [];
 
-      try {
-        console.log('🔄 Trying Consumet GoGoAnime...');
-        const consumetData = await getConsumetEpisodeSources(episodeId, ConsumetProvider.GOGOANIME);
+      // Check if this is an Aniwatch episode ID (format: "anime-name-123?ep=456")
+      const isAniwatchId = episodeId && episodeId.includes('?ep=');
 
-        if (consumetData && consumetData.sources && consumetData.sources.length > 0) {
-          console.log(`✅ Found ${consumetData.sources.length} sources from Consumet GoGoAnime`);
-          sources = consumetData.sources.map((s: any) => ({
-            url: s.url,
-            quality: s.quality || 'auto',
-            isM3U8: s.isM3U8 || s.url.includes('.m3u8'),
-          }));
-        }
-      } catch (consumetError) {
-        console.log('⚠️ Consumet GoGoAnime failed, trying Zoro...');
-
+      // PRIMARY: Use Aniwatch (now fully working!)
+      if (isAniwatchId) {
         try {
-          const zoroData = await getConsumetEpisodeSources(episodeId, ConsumetProvider.ZORO);
-          if (zoroData && zoroData.sources && zoroData.sources.length > 0) {
-            console.log(`✅ Found ${zoroData.sources.length} sources from Consumet Zoro`);
-            sources = zoroData.sources.map((s: any) => ({
+          console.log('🎬 Loading from Aniwatch (primary source)...');
+
+          // Try both sub and dub servers for best coverage
+          let aniwatchSources = await getAniwatchApiSources(episodeId, 'hd-1', 'sub');
+
+          if (aniwatchSources && aniwatchSources.length > 0) {
+            console.log(`✅ Found ${aniwatchSources.length} source(s) from Aniwatch (sub)`);
+            sources = aniwatchSources.map((s: any) => ({
               url: s.url,
-              quality: s.quality || 'auto',
+              quality: s.quality || 'HD',
               isM3U8: s.isM3U8 || s.url.includes('.m3u8'),
             }));
+          } else {
+            // Try dub as fallback
+            console.log('🔄 Trying Aniwatch dub version...');
+            aniwatchSources = await getAniwatchApiSources(episodeId, 'hd-1', 'dub');
+
+            if (aniwatchSources && aniwatchSources.length > 0) {
+              console.log(`✅ Found ${aniwatchSources.length} source(s) from Aniwatch (dub)`);
+              sources = aniwatchSources.map((s: any) => ({
+                url: s.url,
+                quality: s.quality || 'HD',
+                isM3U8: s.isM3U8 || s.url.includes('.m3u8'),
+              }));
+            }
           }
-        } catch (zoroError) {
-          console.log('⚠️ Consumet Zoro failed, trying old API...');
+        } catch (aniwatchError: any) {
+          console.log('⚠️ Aniwatch failed:', aniwatchError.message);
         }
       }
 
-      // Fallback to old API if Consumet fails
+      // FALLBACK: Use old scrapers only if Aniwatch fails (rare)
       if (sources.length === 0) {
-        console.log('🔄 Falling back to old API...');
-        const streamingData = await getStreamingSources(
-          episodeId,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          episodeUrl
-        );
+        console.log('⚠️ Aniwatch unavailable, trying fallback sources...');
 
-        if (streamingData && streamingData.sources) {
-          sources = streamingData.sources;
+        try {
+          if (isAniwatchId && animeTitle && episodeNumber) {
+            // Search by anime title for fallback
+            console.log(`🔍 Searching fallback for: ${animeTitle} Episode ${episodeNumber}`);
+            const { searchAnimeForStreaming, getAnimeStreamingInfo } = require('../services/streamingApi');
+
+            const searchResults = await searchAnimeForStreaming(animeTitle);
+
+            if (searchResults && searchResults.length > 0) {
+              const anime = searchResults[0];
+              console.log(`✅ Found on ${anime.source}: ${anime.title}`);
+
+              const streamingInfo = await getAnimeStreamingInfo(anime.id, anime.source);
+
+              if (streamingInfo && streamingInfo.episodes) {
+                const episode = streamingInfo.episodes.find(ep => ep.number === episodeNumber);
+
+                if (episode) {
+                  const episodeSources = await getStreamingSources(
+                    episode.id,
+                    anime.id,
+                    anime.source,
+                    anime.title,
+                    episodeNumber,
+                    episode.url
+                  );
+
+                  if (episodeSources && episodeSources.sources) {
+                    console.log(`✅ Found ${episodeSources.sources.length} sources from ${anime.source}`);
+                    sources = episodeSources.sources;
+                  }
+                }
+              }
+            }
+          } else {
+            // Non-Aniwatch episode, use old method directly
+            const streamingData = await getStreamingSources(
+              episodeId,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              episodeUrl
+            );
+
+            if (streamingData && streamingData.sources) {
+              console.log(`✅ Found ${streamingData.sources.length} sources from old API`);
+              sources = streamingData.sources;
+            }
+          }
+        } catch (fallbackError: any) {
+          console.log('⚠️ Fallback sources failed:', fallbackError.message);
         }
       }
 

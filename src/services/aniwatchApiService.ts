@@ -143,12 +143,21 @@ export const getAniwatchApiInfo = async (animeId: string): Promise<AniwatchApiIn
 
 /**
  * Get episode streaming sources using official Aniwatch API
+ * @param episodeId - Episode ID (e.g., "one-piece-100?ep=2142")
+ * @param server - Server name (default: "hd-1")
+ * @param category - "sub" or "dub" (default: "sub")
  */
-export const getAniwatchApiSources = async (episodeId: string): Promise<AniwatchApiSource[]> => {
+export const getAniwatchApiSources = async (
+  episodeId: string,
+  server: string = 'hd-1',
+  category: 'sub' | 'dub' = 'sub'
+): Promise<AniwatchApiSource[]> => {
   try {
     console.log(`🎬 Fetching sources from Aniwatch API: ${episodeId}`);
+    console.log(`   Server: ${server}, Category: ${category}`);
 
-    const data = await aniwatch.getEpisodeSources(episodeId);
+    // Call with correct parameters: episodeId, server, category
+    const data = await aniwatch.getEpisodeSources(episodeId, server, category);
 
     if (!data || !data.sources) {
       console.error('No sources found');
@@ -169,10 +178,10 @@ export const getAniwatchApiSources = async (episodeId: string): Promise<Aniwatch
       });
     }
 
-    console.log(`✓ Found ${sources.length} sources`);
+    console.log(`✓ Found ${sources.length} sources from ${server}`);
     return sources;
   } catch (error: any) {
-    console.error('Aniwatch API sources error:', error.message);
+    console.error(`Aniwatch API sources error (${server}):`, error.message);
     return [];
   }
 };

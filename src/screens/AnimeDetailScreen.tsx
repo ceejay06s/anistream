@@ -92,24 +92,24 @@ const AnimeDetailScreen: React.FC<AnimeDetailScreenProps> = ({ navigation, route
         return;
       }
 
-      console.log('🔍 Searching for episodes with Consumet:', anime.title);
+      console.log('🔍 Searching for episodes with Aniwatch:', anime.title);
 
-      // Try Consumet first (most reliable)
+      // Try Aniwatch first (most reliable)
       let foundEpisodes: Episode[] = [];
 
-      // Try GoGoAnime provider
+      // Try Aniwatch scraper
       try {
-        console.log('🔄 Trying Consumet GoGoAnime...');
-        const gogoResults = await searchConsumetAnime(anime.title, ConsumetProvider.GOGOANIME);
+        console.log('🔄 Trying Aniwatch scraper...');
+        const aniwatchResults = await searchAniwatchApi(anime.title);
 
-        if (gogoResults && gogoResults.length > 0) {
-          const firstResult = gogoResults[0];
-          console.log(`✅ Found on GoGoAnime: ${firstResult.title}`);
+        if (aniwatchResults && aniwatchResults.length > 0) {
+          const firstResult = aniwatchResults[0];
+          console.log(`✅ Found on Aniwatch: ${firstResult.title}`);
 
-          const animeInfo = await getConsumetAnimeInfo(firstResult.id, ConsumetProvider.GOGOANIME);
+          const animeInfo = await getAniwatchApiInfo(firstResult.id);
 
           if (animeInfo && animeInfo.episodes && animeInfo.episodes.length > 0) {
-            console.log(`✅ Loaded ${animeInfo.episodes.length} episodes from Consumet GoGoAnime`);
+            console.log(`✅ Loaded ${animeInfo.episodes.length} episodes from Aniwatch`);
             foundEpisodes = animeInfo.episodes.map((ep: any) => ({
               id: ep.id,
               number: ep.number,
@@ -119,36 +119,8 @@ const AnimeDetailScreen: React.FC<AnimeDetailScreenProps> = ({ navigation, route
             }));
           }
         }
-      } catch (gogoError) {
-        console.log('⚠️ Consumet GoGoAnime failed, trying Zoro...');
-      }
-
-      // Try Zoro if GoGoAnime failed
-      if (foundEpisodes.length === 0) {
-        try {
-          console.log('🔄 Trying Consumet Zoro...');
-          const zoroResults = await searchConsumetAnime(anime.title, ConsumetProvider.ZORO);
-
-          if (zoroResults && zoroResults.length > 0) {
-            const firstResult = zoroResults[0];
-            console.log(`✅ Found on Zoro: ${firstResult.title}`);
-
-            const animeInfo = await getConsumetAnimeInfo(firstResult.id, ConsumetProvider.ZORO);
-
-            if (animeInfo && animeInfo.episodes && animeInfo.episodes.length > 0) {
-              console.log(`✅ Loaded ${animeInfo.episodes.length} episodes from Consumet Zoro`);
-              foundEpisodes = animeInfo.episodes.map((ep: any) => ({
-                id: ep.id,
-                number: ep.number,
-                title: ep.title || `Episode ${ep.number}`,
-                url: ep.url,
-                image: ep.image,
-              }));
-            }
-          }
-        } catch (zoroError) {
-          console.log('⚠️ Consumet Zoro failed, trying old API...');
-        }
+      } catch (aniwatchError) {
+        console.log('⚠️ Aniwatch failed, trying old API...');
       }
 
       // Fallback to old API if Consumet fails
