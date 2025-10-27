@@ -1,0 +1,30 @@
+{
+  "name": "anistream-proxy-server",
+  "version": "1.0.0",
+  "description": "CORS Proxy server for AniStream app (Educational purposes only)",
+  "main": "proxy-server.js",
+  "scripts": {
+    "start": "node proxy-server.js",
+    "dev": "nodemon proxy-server.js"
+  },
+  "keywords": [
+    "proxy",
+    "cors",
+    "anistream",
+    "educational"
+  ],
+  "author": "AniStream",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.6.0",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
+
