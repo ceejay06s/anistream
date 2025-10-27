@@ -7,6 +7,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RootStackParamList } from '../navigation/types';
 import { getStreamingSources, getRecommendedSource, StreamingSource } from '../services/streamingApi';
+// Using Consumet HTTP API for better reliability (works with React Native)
+import { getConsumetEpisodeSources, ConsumetProvider } from '../services/consumetApiService';
 
 type VideoPlayerScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'VideoPlayer'>;
@@ -57,50 +59,90 @@ const VideoPlayerScreen: React.FC<VideoPlayerScreenProps> = ({ navigation, route
   const loadStreamingSources = async () => {
     setLoading(true);
     setError(null);
-    
+
     try {
-      console.log('=== Loading Streaming Sources ===');
+      console.log('=== Loading Streaming Sources with Consumet ===');
       console.log('Episode ID:', episodeId);
       console.log('Episode URL:', episodeUrl);
-      
-      // Pass episode URL for AniWatch scraping
-      const streamingData = await getStreamingSources(
-        episodeId,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        episodeUrl
-      );
-      
-      if (!streamingData || streamingData.sources.length === 0) {
-        console.error('No streaming sources returned');
-        setError('No streaming sources available for this episode');
+
+      // Try Consumet first (most reliable)
+      let sources: any[] = [];
+
+      try {
+        console.log('🔄 Trying Consumet GoGoAnime...');
+        const consumetData = await getConsumetEpisodeSources(episodeId, ConsumetProvider.GOGOANIME);
+
+        if (consumetData && consumetData.sources && consumetData.sources.length > 0) {
+          console.log(`✅ Found ${consumetData.sources.length} sources from Consumet GoGoAnime`);
+          sources = consumetData.sources.map((s: any) => ({
+            url: s.url,
+            quality: s.quality || 'auto',
+            isM3U8: s.isM3U8 || s.url.includes('.m3u8'),
+          }));
+        }
+      } catch (consumetError) {
+        console.log('⚠️ Consumet GoGoAnime failed, trying Zoro...');
+
+        try {
+          const zoroData = await getConsumetEpisodeSources(episodeId, ConsumetProvider.ZORO);
+          if (zoroData && zoroData.sources && zoroData.sources.length > 0) {
+            console.log(`✅ Found ${zoroData.sources.length} sources from Consumet Zoro`);
+            sources = zoroData.sources.map((s: any) => ({
+              url: s.url,
+              quality: s.quality || 'auto',
+              isM3U8: s.isM3U8 || s.url.includes('.m3u8'),
+            }));
+          }
+        } catch (zoroError) {
+          console.log('⚠️ Consumet Zoro failed, trying old API...');
+        }
+      }
+
+      // Fallback to old API if Consumet fails
+      if (sources.length === 0) {
+        console.log('🔄 Falling back to old API...');
+        const streamingData = await getStreamingSources(
+          episodeId,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          episodeUrl
+        );
+
+        if (streamingData && streamingData.sources) {
+          sources = streamingData.sources;
+        }
+      }
+
+      if (sources.length === 0) {
+        console.error('❌ No streaming sources returned from any provider');
+        setError('No streaming sources available. Try a different episode or anime.');
         setLoading(false);
         return;
       }
 
-      console.log('Found sources:', streamingData.sources.length);
-      streamingData.sources.forEach((s, i) => {
+      console.log(`✅ Total sources found: ${sources.length}`);
+      sources.forEach((s, i) => {
         console.log(`Source ${i + 1}: ${s.quality} - ${s.url.substring(0, 50)}...`);
       });
 
-      setAvailableSources(streamingData.sources);
-      
+      setAvailableSources(sources);
+
       // Get recommended quality source
-      const recommendedSource = getRecommendedSource(streamingData.sources);
-      
+      const recommendedSource = getRecommendedSource(sources);
+
       if (recommendedSource) {
-        console.log('Selected source:', recommendedSource.quality);
+        console.log('✅ Selected source:', recommendedSource.quality);
         setVideoSource(recommendedSource.url);
         setSelectedQuality(recommendedSource.quality);
         setIsPlaying(true);
       } else {
-        console.error('No suitable source found');
+        console.error('❌ No suitable source found');
         setError('Could not find a suitable video source');
       }
     } catch (err) {
-      console.error('Error loading streaming sources:', err);
+      console.error('❌ Error loading streaming sources:', err);
       setError(`Failed to load video: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setLoading(false);

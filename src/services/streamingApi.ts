@@ -20,12 +20,13 @@ import {
   aniwatchRateLimiter,
 } from './aniwatchScraper';
 
-import {
-  searchShafilmAnime,
-  scrapeShafilmEpisodes,
-  ShafilmAnime,
-  ShafilmEpisode,
-} from './shafilmScraper';
+// Shafilm disabled
+// import {
+//   searchShafilmAnime,
+//   scrapeShafilmEpisodes,
+//   ShafilmAnime,
+//   ShafilmEpisode,
+// } from './shafilmScraper';
 
 import {
   scrapeGogoanimeSearch,
@@ -70,7 +71,7 @@ export interface AnimeStreamingInfo {
 }
 
 /**
- * Search for anime on AniWatch (with Shafilm fallback)
+ * Search for anime on AniWatch (with GoGoAnime fallback)
  */
 export const searchAnimeForStreaming = async (query: string): Promise<any[]> => {
   try {
@@ -95,34 +96,13 @@ export const searchAnimeForStreaming = async (query: string): Promise<any[]> => 
     
     console.log(`Found ${formattedResults.length} results from AniWatch`);
     
-    // If no results from AniWatch, try Shafilm as fallback
+    // If no results from AniWatch, try GoGoAnime as fallback
     if (formattedResults.length === 0) {
-      console.log('No AniWatch results, trying Shafilm fallback...');
-      
-      try {
-        const shafilmResults = await searchShafilmAnime(query);
-        
-        if (shafilmResults.length > 0) {
-          const shafilmFormatted = shafilmResults.map((anime: ShafilmAnime) => ({
-            id: anime.folderName, // Use folder name as ID
-            title: anime.title,
-            url: anime.url,
-            image: undefined, // Shafilm doesn't have thumbnails
-            description: undefined,
-            source: 'Shafilm',
-            type: 'File Server',
-            folderName: anime.folderName, // Keep folder name for later use
-          }));
-          
-          console.log(`Found ${shafilmFormatted.length} results from Shafilm`);
-          return shafilmFormatted;
-        }
-      } catch (shafilmError) {
-        console.error('Shafilm fallback failed:', shafilmError);
-      }
-      
-      // If Shafilm also failed, try GoGoAnime as final fallback
-      console.log('No Shafilm results, trying GoGoAnime fallback...');
+      // Shafilm is disabled
+      // console.log('No AniWatch results, trying Shafilm fallback...');
+
+      // If no results, try GoGoAnime as fallback
+      console.log('No AniWatch results, trying GoGoAnime fallback...');
       
       try {
         const gogoanimeResults = await scrapeGogoanimeSearch(query);
@@ -153,7 +133,7 @@ export const searchAnimeForStreaming = async (query: string): Promise<any[]> => 
 };
 
 /**
- * Get anime info and episodes (supports AniWatch, Shafilm, and GoGoAnime)
+ * Get anime info and episodes (supports AniWatch and GoGoAnime)
  */
 export const getAnimeStreamingInfo = async (animeId: string, source?: string): Promise<AnimeStreamingInfo | null> => {
   try {
@@ -194,38 +174,9 @@ export const getAnimeStreamingInfo = async (animeId: string, source?: string): P
       }
     }
     
-    // Check if this is a Shafilm source (folder name contains dots/special chars)
-    const isShafilmSource = source === 'Shafilm' || (animeId.includes('.') && !source);
-    
-    if (isShafilmSource) {
-      console.log('Detected Shafilm source, fetching from file server...');
-      
-      try {
-        const episodes = await scrapeShafilmEpisodes(animeId);
-        
-        return {
-          id: animeId,
-          title: animeId.replace(/[\._]/g, ' ').trim(),
-          image: undefined,
-          description: 'Available on Shafilm file server',
-          genres: [],
-          releaseDate: undefined,
-          status: 'Available',
-          totalEpisodes: episodes.length,
-          episodes: episodes.map((ep: ShafilmEpisode) => ({
-            id: ep.id,
-            number: ep.number,
-            title: ep.title,
-            image: undefined,
-            description: `${ep.quality || ''} ${ep.size || ''}`.trim(),
-            url: ep.url, // Direct video URL
-          })),
-        };
-      } catch (shafilmError) {
-        console.error('Error fetching from Shafilm:', shafilmError);
-        return null;
-      }
-    }
+    // Shafilm is disabled
+    // const isShafilmSource = source === 'Shafilm' || (animeId.includes('.') && !source);
+    // if (isShafilmSource) { ... }
     
     // Otherwise, use AniWatch
     const info = await aniwatchRateLimiter.add(() => 
@@ -303,22 +254,11 @@ export const getStreamingSources = async (
       }
     }
     
-    // Check if this is a Shafilm direct video URL
-    if (episodeUrl && (episodeUrl.includes('shafilm.vip') || episodeUrl.includes('.mp4') || episodeUrl.includes('.mkv'))) {
-      console.log('Detected Shafilm direct video URL');
-      
-      // Shafilm provides direct video file URLs
-      return {
-        sources: [{
-          url: episodeUrl,
-          quality: 'Direct',
-          isM3U8: false,
-        }],
-        headers: {
-          Referer: 'https://prime.shafilm.vip/',
-        },
-      };
-    }
+    // Shafilm direct video URLs disabled
+    // if (episodeUrl && (episodeUrl.includes('shafilm.vip') || episodeUrl.includes('.mp4') || episodeUrl.includes('.mkv'))) {
+    //   console.log('Detected Shafilm direct video URL');
+    //   // Disabled
+    // }
     
     // If we have the episode URL directly for AniWatch, use it
     if (episodeUrl) {

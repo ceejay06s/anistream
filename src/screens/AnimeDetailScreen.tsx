@@ -9,6 +9,8 @@ import { fetchAnimeById } from '../services/api';
 import { getAnimeStreamingInfo, Episode, searchAnimeForStreaming } from '../services/streamingApi';
 import { Anime } from '../types';
 import { RootStackParamList } from '../navigation/types';
+// Using Aniwatch scraper for search and episodes (Consumet API is down)
+import { searchAniwatchApi, getAniwatchApiInfo } from '../services/aniwatchApiService';
 
 type AnimeDetailScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AnimeDetail'>;
@@ -90,34 +92,90 @@ const AnimeDetailScreen: React.FC<AnimeDetailScreenProps> = ({ navigation, route
         return;
       }
 
-      console.log('Searching for streaming sources:', anime.title);
-      
-      // Search for anime (tries AniWatch, then Shafilm, then GoGoAnime)
-      const searchResults = await searchAnimeForStreaming(anime.title);
-      
-      if (searchResults.length === 0) {
-        console.warn('No streaming sources found for:', anime.title);
-        setEpisodes([]);
-        setLoadingEpisodes(false);
-        return;
+      console.log('🔍 Searching for episodes with Consumet:', anime.title);
+
+      // Try Consumet first (most reliable)
+      let foundEpisodes: Episode[] = [];
+
+      // Try GoGoAnime provider
+      try {
+        console.log('🔄 Trying Consumet GoGoAnime...');
+        const gogoResults = await searchConsumetAnime(anime.title, ConsumetProvider.GOGOANIME);
+
+        if (gogoResults && gogoResults.length > 0) {
+          const firstResult = gogoResults[0];
+          console.log(`✅ Found on GoGoAnime: ${firstResult.title}`);
+
+          const animeInfo = await getConsumetAnimeInfo(firstResult.id, ConsumetProvider.GOGOANIME);
+
+          if (animeInfo && animeInfo.episodes && animeInfo.episodes.length > 0) {
+            console.log(`✅ Loaded ${animeInfo.episodes.length} episodes from Consumet GoGoAnime`);
+            foundEpisodes = animeInfo.episodes.map((ep: any) => ({
+              id: ep.id,
+              number: ep.number,
+              title: ep.title || `Episode ${ep.number}`,
+              url: ep.url,
+              image: ep.image,
+            }));
+          }
+        }
+      } catch (gogoError) {
+        console.log('⚠️ Consumet GoGoAnime failed, trying Zoro...');
       }
 
-      // Use the first result (best match)
-      const streamingAnime = searchResults[0];
-      console.log('Found on:', streamingAnime.source, 'Title:', streamingAnime.title, 'ID:', streamingAnime.id);
-      
-      // Now fetch episodes using the source-specific ID
-      const streamingInfo = await getAnimeStreamingInfo(streamingAnime.id, streamingAnime.source);
-      
-      if (streamingInfo && streamingInfo.episodes.length > 0) {
-        console.log(`Loaded ${streamingInfo.episodes.length} episodes from ${streamingAnime.source}`);
-        setEpisodes(streamingInfo.episodes);
-      } else {
-        console.warn(`No episodes found on ${streamingAnime.source}`);
-        setEpisodes([]);
+      // Try Zoro if GoGoAnime failed
+      if (foundEpisodes.length === 0) {
+        try {
+          console.log('🔄 Trying Consumet Zoro...');
+          const zoroResults = await searchConsumetAnime(anime.title, ConsumetProvider.ZORO);
+
+          if (zoroResults && zoroResults.length > 0) {
+            const firstResult = zoroResults[0];
+            console.log(`✅ Found on Zoro: ${firstResult.title}`);
+
+            const animeInfo = await getConsumetAnimeInfo(firstResult.id, ConsumetProvider.ZORO);
+
+            if (animeInfo && animeInfo.episodes && animeInfo.episodes.length > 0) {
+              console.log(`✅ Loaded ${animeInfo.episodes.length} episodes from Consumet Zoro`);
+              foundEpisodes = animeInfo.episodes.map((ep: any) => ({
+                id: ep.id,
+                number: ep.number,
+                title: ep.title || `Episode ${ep.number}`,
+                url: ep.url,
+                image: ep.image,
+              }));
+            }
+          }
+        } catch (zoroError) {
+          console.log('⚠️ Consumet Zoro failed, trying old API...');
+        }
       }
+
+      // Fallback to old API if Consumet fails
+      if (foundEpisodes.length === 0) {
+        console.log('🔄 Falling back to old API...');
+        const searchResults = await searchAnimeForStreaming(anime.title);
+
+        if (searchResults.length > 0) {
+          const streamingAnime = searchResults[0];
+          console.log('Found on:', streamingAnime.source, 'Title:', streamingAnime.title);
+
+          const streamingInfo = await getAnimeStreamingInfo(streamingAnime.id, streamingAnime.source);
+
+          if (streamingInfo && streamingInfo.episodes.length > 0) {
+            console.log(`✅ Loaded ${streamingInfo.episodes.length} episodes from ${streamingAnime.source}`);
+            foundEpisodes = streamingInfo.episodes;
+          }
+        }
+      }
+
+      if (foundEpisodes.length === 0) {
+        console.warn('❌ No episodes found from any source for:', anime.title);
+      }
+
+      setEpisodes(foundEpisodes);
     } catch (err) {
-      console.error('Error loading episodes:', err);
+      console.error('❌ Error loading episodes:', err);
       setEpisodes([]);
     } finally {
       setLoadingEpisodes(false);
@@ -276,12 +334,12 @@ const AnimeDetailScreen: React.FC<AnimeDetailScreenProps> = ({ navigation, route
                 <Text style={styles.episodesLoadingText}>Loading episodes...</Text>
               </View>
             ) : episodes.length > 0 ? (
-              episodes.slice(0, 20).map((episode) => (
+              episodes.slice(0, 20).map((episode, index) => (
                 <TouchableOpacity
-                  key={episode.id}
+                  key={`${episode.id}-${episode.number}-${index}`}
                   style={styles.episodeItem}
-                  onPress={() => navigation.navigate('VideoPlayer', { 
-                    animeId: anime.id, 
+                  onPress={() => navigation.navigate('VideoPlayer', {
+                    animeId: anime.id,
                     episodeId: episode.id,
                     animeTitle: anime.title,
                     episodeNumber: episode.number,
