@@ -45,6 +45,54 @@ export interface AniwatchApiSource {
   type?: string;
 }
 
+const normalizeAniwatchEpisode = (ep: any, fallbackNumber: number): AniwatchApiEpisode => ({
+  id: ep?.episodeId || ep?.id || ep?.episode_id || `episode-${fallbackNumber}`,
+  number: ep?.number || ep?.episode || fallbackNumber,
+  title: ep?.title || ep?.name || `Episode ${ep?.number || ep?.episode || fallbackNumber}`,
+  url: ep?.url,
+  image: ep?.image,
+});
+
+const extractEpisodeList = (info: any): any[] => {
+  if (Array.isArray(info?.episodes)) {
+    return info.episodes;
+  }
+
+  if (Array.isArray(info?.anime?.episodes)) {
+    return info.anime.episodes;
+  }
+
+  if (Array.isArray(info?.anime?.info?.episodes)) {
+    return info.anime.info.episodes;
+  }
+
+  return [];
+};
+
+const normalizeServerEntry = (server: any, category?: string) => ({
+  id: server?.id || server?.serverId || server?.server_id || server?.server || server?.name,
+  name: server?.name || server?.serverName || server?.server || server?.id,
+  category,
+});
+
+const extractServerList = (servers: any): Array<{ id?: string; name?: string; category?: string }> => {
+  if (Array.isArray(servers)) {
+    return servers.map((server) => normalizeServerEntry(server));
+  }
+
+  const results: Array<{ id?: string; name?: string; category?: string }> = [];
+  if (servers && typeof servers === 'object') {
+    if (Array.isArray(servers.sub)) {
+      results.push(...servers.sub.map((server: any) => normalizeServerEntry(server, 'sub')));
+    }
+    if (Array.isArray(servers.dub)) {
+      results.push(...servers.dub.map((server: any) => normalizeServerEntry(server, 'dub')));
+    }
+  }
+
+  return results;
+};
+
 /**
  * Search anime using official Aniwatch API
  */
@@ -93,39 +141,41 @@ export const getAniwatchApiInfo = async (animeId: string): Promise<AniwatchApiIn
       return null;
     }
 
-    const animeInfo = info.anime.info;
+    const animeInfo = info.anime?.info || info.anime || info;
     const episodes: AniwatchApiEpisode[] = [];
 
-    // IMPORTANT: Episodes must be fetched separately using getEpisodes()
-    // The getInfo() endpoint doesn't include episodes list
-    try {
-      console.log(`📋 Fetching episodes list for ${animeId}...`);
-      const episodesData = await aniwatch.getEpisodes(animeId);
+    const infoEpisodes = extractEpisodeList(info);
+    if (infoEpisodes.length > 0) {
+      infoEpisodes.forEach((ep: any, index: number) => {
+        episodes.push(normalizeAniwatchEpisode(ep, index + 1));
+      });
+    } else {
+      // Fallback: fetch episodes separately when not provided by getInfo()
+      try {
+        console.log(`📋 Fetching episodes list for ${animeId}...`);
+        const episodesData = await aniwatch.getEpisodes(animeId);
 
-      if (episodesData && episodesData.episodes) {
-        episodesData.episodes.forEach((ep: any) => {
-          episodes.push({
-            id: ep.episodeId || ep.id,
-            number: ep.number || episodes.length + 1,
-            title: ep.title || `Episode ${ep.number || episodes.length + 1}`,
-            url: ep.url,
-            image: ep.image,
-          });
+        const episodesList = Array.isArray(episodesData)
+          ? episodesData
+          : episodesData?.episodes || [];
+
+        episodesList.forEach((ep: any, index: number) => {
+          episodes.push(normalizeAniwatchEpisode(ep, index + 1));
         });
+      } catch (epError: any) {
+        console.error('Error fetching episodes:', epError.message);
       }
-    } catch (epError: any) {
-      console.error('Error fetching episodes:', epError.message);
     }
 
-    const genres = info.anime.moreInfo?.genres;
-    const aired = info.anime.moreInfo?.aired;
-    const status = info.anime.moreInfo?.status;
+    const genres = info.anime?.moreInfo?.genres || info.moreInfo?.genres;
+    const aired = info.anime?.moreInfo?.aired || info.moreInfo?.aired;
+    const status = info.anime?.moreInfo?.status || info.moreInfo?.status;
 
     const result: AniwatchApiInfo = {
       id: animeId,
-      title: animeInfo.name || animeId,
-      image: animeInfo.poster || undefined,
-      description: animeInfo.description || undefined,
+      title: animeInfo?.name || animeInfo?.title || animeId,
+      image: animeInfo?.poster || animeInfo?.image || undefined,
+      description: animeInfo?.description || undefined,
       genres: Array.isArray(genres) ? genres : genres ? [genres] : [],
       releaseDate: Array.isArray(aired) ? aired[0] : aired,
       status: Array.isArray(status) ? status[0] : status,
@@ -149,15 +199,22 @@ export const getAniwatchApiInfo = async (animeId: string): Promise<AniwatchApiIn
  */
 export const getAniwatchApiSources = async (
   episodeId: string,
-  server: string = 'hd-1',
+  server?: string,
   category: 'sub' | 'dub' = 'sub'
 ): Promise<AniwatchApiSource[]> => {
   try {
+    let selectedServer = server;
+    if (!selectedServer) {
+      const availableServers = extractServerList(await aniwatch.getEpisodeServers(episodeId));
+      const preferred = availableServers.find((entry) => entry.category === category) || availableServers[0];
+      selectedServer = preferred?.id || preferred?.name || 'hd-1';
+    }
+
     console.log(`🎬 Fetching sources from Aniwatch API: ${episodeId}`);
-    console.log(`   Server: ${server}, Category: ${category}`);
+    console.log(`   Server: ${selectedServer}, Category: ${category}`);
 
     // Call with correct parameters: episodeId, server, category
-    const data = await aniwatch.getEpisodeSources(episodeId, server, category);
+    const data = await aniwatch.getEpisodeSources(episodeId, selectedServer, category);
 
     if (!data || !data.sources) {
       console.error('No sources found');
@@ -178,10 +235,10 @@ export const getAniwatchApiSources = async (
       });
     }
 
-    console.log(`✓ Found ${sources.length} sources from ${server}`);
+    console.log(`✓ Found ${sources.length} sources from ${selectedServer}`);
     return sources;
   } catch (error: any) {
-    console.error(`Aniwatch API sources error (${server}):`, error.message);
+    console.error(`Aniwatch API sources error (${server || 'auto'}):`, error.message);
     return [];
   }
 };
@@ -195,12 +252,14 @@ export const getAniwatchApiServers = async (episodeId: string): Promise<any[]> =
 
     const servers = await aniwatch.getEpisodeServers(episodeId);
 
-    if (!servers || !Array.isArray(servers)) {
+    const normalized = extractServerList(servers);
+
+    if (normalized.length === 0) {
       return [];
     }
 
-    console.log(`✓ Found ${servers.length} servers`);
-    return servers;
+    console.log(`✓ Found ${normalized.length} servers`);
+    return normalized;
   } catch (error: any) {
     console.error('Aniwatch API servers error:', error.message);
     return [];

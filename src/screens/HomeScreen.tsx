@@ -33,7 +33,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   };
 
   const handleCarouselPlay = (anime: Anime) => {
-    navigation.navigate('VideoPlayer', { animeId: anime.id, episodeId: '1' });
+    // Navigate to detail screen first to load episodes properly
+    navigation.navigate('AnimeDetail', { animeId: anime.id, anime });
   };
 
   const handleCarouselInfo = (anime: Anime) => {

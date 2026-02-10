@@ -5,12 +5,10 @@ import { RouteProp } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { fetchAnimeById } from '../services/api';
-import { getAnimeStreamingInfo, Episode, searchAnimeForStreaming } from '../services/streamingApi';
-import { Anime } from '../types';
+import { fetchAnimeById } from '../services/metadataApi';
+import { getAnimeInfo as getStreamingAnimeInfo, searchAnime as searchStreamingAnime } from '../services/streamingService';
+import { Anime, Episode } from '../types';
 import { RootStackParamList } from '../navigation/types';
-// Using Aniwatch scraper for search and episodes (Consumet API is down)
-import { searchAniwatchApi, getAniwatchApiInfo } from '../services/aniwatchApiService';
 
 type AnimeDetailScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AnimeDetail'>;
@@ -92,60 +90,161 @@ const AnimeDetailScreen: React.FC<AnimeDetailScreenProps> = ({ navigation, route
         return;
       }
 
-      console.log('🔍 Searching for episodes with Aniwatch:', anime.title);
+      console.log('🔍 Loading episodes for:', anime.title, 'animeId:', animeId);
 
-      // Try Aniwatch first (most reliable)
-      let foundEpisodes: Episode[] = [];
+      // First, try to use animeId directly if it looks like a streaming service ID
+      // HiAnime IDs are URL-friendly slugs (not numeric IDs from metadata APIs)
+      // Skip if animeId is purely numeric (likely from Jikan/MyAnimeList)
+      const isNumericId = /^\d+$/.test(animeId);
+      const looksLikeSlug = animeId && !isNumericId && (
+        animeId.includes('watch/') || 
+        animeId.includes('watch-') || 
+        (animeId.match(/^[a-z0-9-]+$/i) && animeId.includes('-'))
+      );
 
-      // Try Aniwatch scraper
-      try {
-        console.log('🔄 Trying Aniwatch scraper...');
-        const aniwatchResults = await searchAniwatchApi(anime.title);
-
-        if (aniwatchResults && aniwatchResults.length > 0) {
-          const firstResult = aniwatchResults[0];
-          console.log(`✅ Found on Aniwatch: ${firstResult.title}`);
-
-          const animeInfo = await getAniwatchApiInfo(firstResult.id);
-
-          if (animeInfo && animeInfo.episodes && animeInfo.episodes.length > 0) {
-            console.log(`✅ Loaded ${animeInfo.episodes.length} episodes from Aniwatch`);
-            foundEpisodes = animeInfo.episodes.map((ep: any) => ({
-              id: ep.id,
-              number: ep.number,
-              title: ep.title || `Episode ${ep.number}`,
-              url: ep.url,
-              image: ep.image,
+      if (looksLikeSlug) {
+        console.log('📌 animeId looks like a streaming service slug, trying direct lookup...');
+        // Try HiAnime first (most common format)
+        try {
+          const hianimeInfo = await getStreamingAnimeInfo(animeId, 'HiAnime');
+          if (hianimeInfo && hianimeInfo.episodes.length > 0) {
+            console.log(`✅ Direct lookup successful: ${hianimeInfo.episodes.length} episodes from HiAnime`);
+            const formattedEpisodes: Episode[] = hianimeInfo.episodes.map((ep: Episode) => ({
+              ...ep,
+              source: 'HiAnime',
             }));
+            setEpisodes(formattedEpisodes);
+            setLoadingEpisodes(false);
+            return;
+          }
+        } catch (err) {
+          console.log('Direct HiAnime lookup failed, trying search...');
+        }
+      } else {
+        console.log('📌 animeId is numeric or not a slug format, skipping direct lookup and using search...');
+      }
+
+      // If direct lookup didn't work, search by title and find best match
+      console.log('🔍 Searching for streaming sources:', anime.title);
+      const searchResults = await searchStreamingAnime(anime.title);
+
+      if (searchResults.length === 0) {
+        console.warn('❌ No streaming sources found for:', anime.title);
+        setEpisodes([]);
+        setLoadingEpisodes(false);
+        return;
+      }
+
+      // Find the best match by comparing titles more carefully
+      const normalizeTitle = (title: string): string => {
+        return title.toLowerCase()
+          .replace(/[^\w\s]/g, '') // Remove special characters
+          .replace(/\s+/g, ' ')     // Normalize whitespace
+          .trim();
+      };
+
+      const normalizedAnimeTitle = normalizeTitle(anime.title);
+      let bestMatch = searchResults[0];
+      let bestScore = 0;
+
+      for (const result of searchResults) {
+        const normalizedResultTitle = normalizeTitle(result.title);
+        
+        // Exact match gets highest score
+        if (normalizedResultTitle === normalizedAnimeTitle) {
+          bestMatch = result;
+          bestScore = 100;
+          break;
+        }
+        
+        // Calculate similarity score
+        const words = normalizedAnimeTitle.split(' ').filter(w => w.length > 2);
+        const matchingWords = words.filter(word => 
+          normalizedResultTitle.includes(word)
+        ).length;
+        const score = words.length > 0 ? (matchingWords / words.length) * 100 : 0;
+        
+        // Bonus points for matching key words (like "season", "part", numbers)
+        const keyWords = ['season', 'part', 'the', 'culling', 'game'];
+        const matchingKeyWords = keyWords.filter(word => 
+          normalizedAnimeTitle.includes(word) && normalizedResultTitle.includes(word)
+        ).length;
+        const bonusScore = matchingKeyWords * 10;
+        const totalScore = score + bonusScore;
+        
+        if (totalScore > bestScore) {
+          bestScore = totalScore;
+          bestMatch = result;
+        }
+      }
+
+      console.log(`✅ Best match (${bestScore.toFixed(0)}% similarity):`, bestMatch.source, 'Title:', bestMatch.title, 'ID:', bestMatch.id);
+      
+      // Validate match quality - require at least 50% similarity to avoid wrong matches
+      if (bestScore < 50) {
+        console.warn(`⚠️ Best match similarity (${bestScore.toFixed(0)}%) is too low. Skipping to avoid wrong episodes.`);
+        console.warn(`   Looking for: "${anime.title}"`);
+        console.warn(`   Best match: "${bestMatch.title}"`);
+        setEpisodes([]);
+        setLoadingEpisodes(false);
+        return;
+      }
+
+      // Fetch episodes using the best match ID
+      console.log(`🔍 Fetching episodes for ID: ${bestMatch.id}`);
+      const streamingInfo = await getStreamingAnimeInfo(bestMatch.id, bestMatch.source);
+      
+      // Validate that we got episodes for the correct anime
+      if (streamingInfo && streamingInfo.episodes.length > 0) {
+        // Check if episode titles seem to match the anime we're looking for
+        // This is a basic sanity check - if all episode titles are completely different, something is wrong
+        // BUT: Skip validation for generic episode titles like "Episode 1", "Episode 2", etc.
+        const sampleEpTitle = streamingInfo.episodes[0]?.title?.toLowerCase() || '';
+        const isGenericTitle = /^(episode\s*\d+|ep\s*\d+|\d+)$/i.test(sampleEpTitle.trim());
+        
+        if (!isGenericTitle) {
+          // Only validate if episode title is not generic
+          const animeTitleWords = normalizeTitle(anime.title).split(' ').filter(w => w.length > 3);
+          const hasMatchingWords = animeTitleWords.some(word => sampleEpTitle.includes(word));
+          
+          if (!hasMatchingWords && sampleEpTitle && animeTitleWords.length > 0) {
+            console.warn(`⚠️ Episode titles don't seem to match the anime. First episode: "${streamingInfo.episodes[0]?.title}"`);
+            console.warn(`   This might be episodes from a different anime. Skipping.`);
+            setEpisodes([]);
+            setLoadingEpisodes(false);
+            return;
+          }
+        } else {
+          // For generic titles, validate by checking episode IDs/URLs instead
+          const sampleEpId = streamingInfo.episodes[0]?.id?.toLowerCase() || '';
+          const sampleEpUrl = streamingInfo.episodes[0]?.url?.toLowerCase() || '';
+          const animeSlug = normalizeTitle(anime.title).replace(/\s+/g, '-').replace(/[^\w-]/g, '');
+          const hasMatchingId = sampleEpId.includes(animeSlug) || sampleEpUrl.includes(animeSlug);
+          
+          if (!hasMatchingId && sampleEpId && animeSlug.length > 3) {
+            console.warn(`⚠️ Episode IDs don't seem to match the anime. First episode ID: "${streamingInfo.episodes[0]?.id}"`);
+            console.warn(`   This might be episodes from a different anime. Skipping.`);
+            setEpisodes([]);
+            setLoadingEpisodes(false);
+            return;
           }
         }
-      } catch (aniwatchError) {
-        console.log('⚠️ Aniwatch failed, trying old API...');
       }
 
-      // Fallback to old API if Consumet fails
-      if (foundEpisodes.length === 0) {
-        console.log('🔄 Falling back to old API...');
-        const searchResults = await searchAnimeForStreaming(anime.title);
-
-        if (searchResults.length > 0) {
-          const streamingAnime = searchResults[0];
-          console.log('Found on:', streamingAnime.source, 'Title:', streamingAnime.title);
-
-          const streamingInfo = await getAnimeStreamingInfo(streamingAnime.id, streamingAnime.source);
-
-          if (streamingInfo && streamingInfo.episodes.length > 0) {
-            console.log(`✅ Loaded ${streamingInfo.episodes.length} episodes from ${streamingAnime.source}`);
-            foundEpisodes = streamingInfo.episodes;
-          }
-        }
+      if (streamingInfo && streamingInfo.episodes.length > 0) {
+        console.log(`✅ Loaded ${streamingInfo.episodes.length} episodes from ${bestMatch.source}`);
+        
+        // Format episodes for the app
+        const formattedEpisodes: Episode[] = streamingInfo.episodes.map((ep: Episode) => ({
+          ...ep,
+          source: bestMatch.source,
+        }));
+        
+        setEpisodes(formattedEpisodes);
+      } else {
+        console.warn(`❌ No episodes found on ${bestMatch.source}`);
+        setEpisodes([]);
       }
-
-      if (foundEpisodes.length === 0) {
-        console.warn('❌ No episodes found from any source for:', anime.title);
-      }
-
-      setEpisodes(foundEpisodes);
     } catch (err) {
       console.error('❌ Error loading episodes:', err);
       setEpisodes([]);
@@ -215,12 +314,19 @@ const AnimeDetailScreen: React.FC<AnimeDetailScreenProps> = ({ navigation, route
   const handlePlayPress = () => {
     const firstEpisode = episodes[0];
     if (firstEpisode) {
+      console.log('▶️ Playing episode:', {
+        episodeId: firstEpisode.id,
+        episodeNumber: firstEpisode.episodeNumber,
+        episodeUrl: firstEpisode.videoUrl,
+        source: firstEpisode.source
+      });
       navigation.navigate('VideoPlayer', { 
         animeId: anime.id, 
         episodeId: firstEpisode.id,
         animeTitle: anime.title,
-        episodeNumber: firstEpisode.number,
-        episodeUrl: firstEpisode.url
+        episodeNumber: firstEpisode.episodeNumber,
+        episodeUrl: firstEpisode.videoUrl,
+        source: firstEpisode.source || 'Unknown'
       });
     } else {
       console.warn('No episodes available');
@@ -308,24 +414,33 @@ const AnimeDetailScreen: React.FC<AnimeDetailScreenProps> = ({ navigation, route
             ) : episodes.length > 0 ? (
               episodes.slice(0, 20).map((episode, index) => (
                 <TouchableOpacity
-                  key={`${episode.id}-${episode.number}-${index}`}
+                  key={`${episode.id}-${episode.episodeNumber}-${index}`}
                   style={styles.episodeItem}
-                  onPress={() => navigation.navigate('VideoPlayer', {
-                    animeId: anime.id,
-                    episodeId: episode.id,
-                    animeTitle: anime.title,
-                    episodeNumber: episode.number,
-                    episodeUrl: episode.url
-                  })}
+                  onPress={() => {
+                    console.log('▶️ Playing episode:', {
+                      episodeId: episode.id,
+                      episodeNumber: episode.episodeNumber,
+                      episodeUrl: episode.videoUrl,
+                      source: episode.source
+                    });
+                    navigation.navigate('VideoPlayer', {
+                      animeId: anime.id,
+                      episodeId: episode.id,
+                      animeTitle: anime.title,
+                      episodeNumber: episode.episodeNumber,
+                      episodeUrl: episode.videoUrl,
+                      source: episode.source || 'Unknown'
+                    });
+                  }}
                 >
                   <Image
-                    source={{ uri: episode.image || anime.coverImage }}
+                    source={{ uri: episode.thumbnail || anime.coverImage }}
                     style={styles.episodeThumbnail}
                     resizeMode="cover"
                   />
                   <View style={styles.episodeInfo}>
-                    <Text style={styles.episodeTitle}>{episode.title || `Episode ${episode.number}`}</Text>
-                    <Text style={styles.episodeDuration}>{episode.description || anime.duration}</Text>
+                    <Text style={styles.episodeTitle}>{episode.title || `Episode ${episode.episodeNumber}`}</Text>
+                    <Text style={styles.episodeDuration}>{episode.duration || anime.duration}</Text>
                   </View>
                   <MaterialIcons name="play-circle-outline" size={32} color="#fff" />
                 </TouchableOpacity>

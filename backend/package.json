@@ -16,9 +16,11 @@
   "author": "AniStream",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
+    "aniwatch": "^2.24.3",
     "axios": "^1.6.0",
-    "cors": "^2.8.5"
+    "cheerio": "^1.1.2",
+    "cors": "^2.8.5",
+    "express": "^4.18.2"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
@@ -27,4 +29,3 @@
     "node": ">=14.0.0"
   }
 }
-

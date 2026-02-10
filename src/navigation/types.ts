@@ -12,7 +12,8 @@ export type RootStackParamList = {
     episodeId: string; 
     animeTitle?: string; 
     episodeNumber?: number;
-    episodeUrl?: string;       // Direct URL to episode page (for Animeflix)
+    episodeUrl?: string;       // Direct URL to episode page or video URL
+    source?: string;           // Source of the episode (HiAnime, etc.)
   };
 };
 

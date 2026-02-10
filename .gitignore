@@ -45,3 +45,5 @@ logs
 .idea/
 *.swp
 *.swo
+
+nul

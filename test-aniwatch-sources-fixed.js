@@ -3,7 +3,7 @@ const { HiAnime } = require('aniwatch');
 const hianime = new HiAnime.Scraper();
 
 async function testFixedSources() {
-  console.log('Testing Aniwatch with correct parameters...\n');
+  console.log('Testing Aniwatch getAnimeEpisodeSources()...\n');
 
   try {
     // Search for anime first
@@ -11,6 +11,10 @@ async function testFixedSources() {
     const searchResults = await hianime.search('One Piece');
 
     const mainSeries = searchResults.animes.find(a => a.id === 'one-piece-100');
+    if (!mainSeries) {
+      console.error('❌ Could not find "One Piece" in search results.');
+      return false;
+    }
     console.log(`✅ Found: ${mainSeries.name} (${mainSeries.id})`);
 
     // Get episodes
@@ -22,16 +26,18 @@ async function testFixedSources() {
     console.log(`   First episode: ${firstEpisode.title}`);
     console.log(`   Episode ID: ${firstEpisode.episodeId}`);
 
-    // Get sources with correct parameters
-    console.log('\n3. Getting video sources with CORRECT parameters...');
+    // Use getAnimeEpisodeSources instead of getEpisodeSources
+    // getAnimeEpisodeSources is included in the aniwatch scraper
+    console.log('\n3. Getting video sources using getAnimeEpisodeSources...');
     console.log(`   Episode ID: ${firstEpisode.episodeId}`);
-    console.log(`   Server: "hd-1"`);
-    console.log(`   Category: "sub"`);
-
-    const sources = await hianime.getEpisodeSources(
+    // Optional: you can provide options, such as { server: "hd-1", category: "sub" }
+    // Many implementations allow both default and explicit parameters
+    const sources = await hianime.getAnimeEpisodeSources(
       firstEpisode.episodeId,
-      'hd-1',  // Server parameter
-      'sub'    // Category parameter
+      {
+        server: "hd-1",  // preferred server (can omit for default behavior)
+        category: "sub", // preferred language ("sub" or "dub")
+      }
     );
 
     if (sources && sources.sources && sources.sources.length > 0) {
@@ -46,13 +52,12 @@ async function testFixedSources() {
         console.log(`\n   📝 Subtitles: ${sources.subtitles.length} available`);
       }
 
-      console.log('\n🎉 Aniwatch video sources are NOW WORKING!');
+      console.log('\n🎉 Aniwatch video sources are NOW WORKING via getAnimeEpisodeSources!');
       return true;
     } else {
       console.log('❌ No sources found');
       return false;
     }
-
   } catch (error) {
     console.error('\n❌ Error:', error.message);
     console.error(error.stack);
@@ -62,7 +67,7 @@ async function testFixedSources() {
 
 testFixedSources().then(success => {
   if (success) {
-    console.log('\n✅ All fixed! Aniwatch sources working with correct parameters.');
+    console.log('\n✅ All fixed! Aniwatch sources working with getAnimeEpisodeSources.');
   } else {
     console.log('\n⚠️ Still having issues with Aniwatch sources.');
   }

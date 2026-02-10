@@ -1,114 +1,97 @@
-# Torrent Streaming Server
+# AniStream Backend Proxy Server
 
-Backend server for streaming torrents to the AniStream mobile app.
+This backend proxy server bypasses CORS restrictions for web browsers by handling all scraping server-side.
 
-## Quick Start
+## 🚀 Quick Start
+
+### 1. Install Dependencies
 
 ```bash
+cd backend
 npm install
+```
+
+### 2. Start the Server
+
+```bash
 npm start
 ```
 
-Server will run on `http://localhost:3001`
+The server will run on `http://localhost:3001`
 
-## Installation
+### 3. Verify It's Running
 
-```bash
-npm install express webtorrent cors
-```
-
-## Usage
-
-```bash
-node torrent-server.js
-```
-
-## API Endpoints
-
-- `GET /` - Health check
-- `POST /api/torrent/add` - Add torrent
-- `GET /api/torrent/stream/:infoHash/:fileIndex` - Stream video
-- `GET /api/torrent/stats/:infoHash` - Get download stats
-- `DELETE /api/torrent/remove/:infoHash` - Remove torrent
-- `GET /api/torrent/list` - List all torrents
-
-## Environment Variables
-
-- `PORT` - Server port (default: 3001)
-
-## Notes
-
-⚠️ **EDUCATIONAL PURPOSE ONLY**
-
-This server is for educational purposes only. Only use for legally distributable content.
-
-## Requirements
-
-- Node.js 14+ 
-- npm or yarn
-
-## Features
-
-- Streaming video from torrents
-- Automatic file detection (MP4, MKV, etc.)
-- Range request support for seeking
-- Automatic cleanup of old torrents
-- CORS enabled for React Native
-
-## Testing
-
-Visit `http://localhost:3001` to check if server is running.
-
-You should see:
+Visit `http://localhost:3001/health` in your browser - you should see:
 ```json
 {
-  "status": "running",
-  "torrents": 0,
-  "downloads": 0,
-  "message": "Torrent streaming server is running"
+  "status": "ok",
+  "service": "AniStream Proxy Server",
+  "version": "1.0.0"
 }
 ```
 
-## Troubleshooting
+## 📡 Available Endpoints
 
-### Port already in use
+### General Proxy
+- `GET /proxy?url=YOUR_URL` - Proxy any URL (bypasses CORS)
 
-Change the port:
+### HiAnime Scraping
+- `GET /scrape/hianime/search?query=naruto&page=1` - Search HiAnime
+- `GET /scrape/hianime/info?animeId=jujutsu-kaisen-100` - Get anime info
+
+### GoGoAnime Scraping
+- `GET /scrape/gogoanime/search?query=naruto` - Search GoGoAnime
+- `GET /scrape/gogoanime/info?animeId=naruto` - Get anime info
+
+### Health Check
+- `GET /health` - Check server status
+
+## 🔧 Configuration
+
+### Change Port
+
+Set the `PORT` environment variable:
 ```bash
-PORT=3002 node torrent-server.js
+PORT=3002 npm start
 ```
 
-### Cannot find module 'webtorrent'
+### Change Proxy URL in App
 
-Install dependencies:
-```bash
-npm install
+In your app, set the environment variable:
+```typescript
+process.env.PROXY_SERVER_URL = 'http://localhost:3001';
 ```
 
-### Network errors
+Or update the default in:
+- `src/services/hianimeService.ts`
+- `src/services/gogoanimeService.ts`
 
-Make sure your firewall allows connections on port 3001.
+## 🌐 How It Works
 
-## Production Deployment
+1. **Web Browser** → Makes request to proxy server (same origin, no CORS)
+2. **Proxy Server** → Fetches from anime sites (server-side, no CORS restrictions)
+3. **Proxy Server** → Parses HTML with Cheerio
+4. **Proxy Server** → Returns JSON to browser
 
-For production, consider:
-- Using PM2 for process management
-- Adding authentication
-- Rate limiting
-- Better error handling
-- Logging
-- Monitoring
+## ⚠️ Important Notes
 
-Example with PM2:
-```bash
-npm install -g pm2
-pm2 start torrent-server.js --name anistream-torrent
-pm2 save
-pm2 startup
-```
+- This server must be running for web browsers to work
+- React Native apps don't need this (they can scrape directly)
+- The server runs on your local machine by default
+- For production, deploy this to a cloud service (Vercel, Railway, etc.)
 
-## License
+## 🐛 Troubleshooting
 
-MIT
+### Server won't start
+- Make sure port 3001 is not in use
+- Check that all dependencies are installed: `npm install`
 
-**Remember**: This is for educational purposes only!
+### CORS errors still happening
+- Make sure the proxy server is running
+- Check that `PROXY_SERVER_URL` matches your server URL
+- Verify the server is accessible: `curl http://localhost:3001/health`
+
+### No results from scraping
+- Check server logs for errors
+- Verify the target websites are accessible
+- Some sites may block automated requests

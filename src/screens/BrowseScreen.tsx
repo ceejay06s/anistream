@@ -4,7 +4,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import AnimeCard from '../components/AnimeCard';
-import { fetchTopAnime, fetchAnimeByGenre, fetchGenres, Genre } from '../services/api';
+import { fetchTopAnime, fetchAnimeByGenre, fetchGenres, Genre } from '../services/metadataApi';
 import { Anime } from '../types';
 import { RootStackParamList } from '../navigation/types';
 

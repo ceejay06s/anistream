@@ -6,7 +6,7 @@ import {
   fetchSeasonalAnime,
   fetchLatestAnime,
   searchAnime as apiSearchAnime,
-} from '../services/api';
+} from '../services/metadataApi';
 
 /**
  * Custom hook to fetch and manage anime data

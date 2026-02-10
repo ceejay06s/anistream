@@ -21,6 +21,7 @@ export interface Episode {
   thumbnail: string;
   duration: string;
   videoUrl: string;
+  source?: string; // Source of the episode (HiAnime, etc.)
 }
 
 export interface WatchHistory {

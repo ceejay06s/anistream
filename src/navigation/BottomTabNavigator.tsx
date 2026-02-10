@@ -21,6 +21,7 @@ const BottomTabNavigator: React.FC = () => {
           paddingBottom: 8,
           paddingTop: 8,
           height: 60,
+          pointerEvents: 'auto',
         },
         tabBarActiveTintColor: '#E50914',
         tabBarInactiveTintColor: '#666',
