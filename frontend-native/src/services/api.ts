@@ -1,14 +1,13 @@
 import axios from 'axios';
 import { Platform } from 'react-native';
 
-// Use different base URL for web vs native
-// Web needs localhost, native can use local network IP
+// Use environment variable for production, fallback to localhost for development
 const getBaseUrl = () => {
-  if (Platform.OS === 'web') {
-    return 'http://localhost:8801';
+  // Check for environment variable (set at build time via EAS or Expo)
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
   }
-  // For native development, use your machine's IP
-  // In production, this would be your API server URL
+  // Fallback to localhost for development
   return 'http://localhost:8801';
 };
 
