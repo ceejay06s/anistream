@@ -1,0 +1,362 @@
+.watch-page {
+  width: 100%;
+  min-height: 100vh;
+  background-color: #000;
+  padding-bottom: 2rem;
+}
+
+.watch-header {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 1.5rem 2rem;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.back-link {
+  color: #fff;
+  text-decoration: none;
+  font-size: 1rem;
+  font-weight: 500;
+  transition: color 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.back-link:hover {
+  color: #e50914;
+}
+
+.episode-title {
+  color: #fff;
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+/* Video Container */
+.video-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 2rem;
+  position: relative;
+}
+
+.video-container [data-vjs-player] {
+  background-color: #000;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+/* Video.js Customization */
+.video-js {
+  width: 100%;
+  height: 0;
+  padding-top: 56.25%; /* 16:9 aspect ratio */
+  background-color: #000;
+}
+
+.video-js .vjs-tech {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.video-js .vjs-big-play-button {
+  background-color: rgba(229, 9, 20, 0.8);
+  border: none;
+  border-radius: 50%;
+  width: 80px;
+  height: 80px;
+  line-height: 80px;
+  font-size: 2.5rem;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  transition: all 0.3s;
+}
+
+.video-js .vjs-big-play-button:hover {
+  background-color: #e50914;
+  transform: translate(-50%, -50%) scale(1.1);
+}
+
+.video-js .vjs-control-bar {
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.9) 0%, transparent 100%);
+  height: 60px;
+  padding: 0 1rem;
+}
+
+.video-js .vjs-play-control {
+  font-size: 1.5rem;
+}
+
+.video-js .vjs-volume-control {
+  margin-left: 1rem;
+}
+
+.video-js .vjs-progress-control {
+  position: absolute;
+  bottom: 60px;
+  left: 0;
+  right: 0;
+  height: 4px;
+}
+
+.video-js .vjs-progress-holder {
+  height: 4px;
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.video-js .vjs-play-progress {
+  background-color: #e50914;
+}
+
+.video-js .vjs-load-progress {
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
+.video-js .vjs-time-control {
+  font-size: 0.875rem;
+  color: #fff;
+}
+
+.video-js .vjs-remaining-time {
+  margin-left: 0.5rem;
+}
+
+/* Quality Selector */
+.quality-selector {
+  max-width: 1400px;
+  margin: 1.5rem auto 0;
+  padding: 0 2rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.quality-selector label {
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.quality-selector select {
+  padding: 0.625rem 1rem;
+  background-color: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 0.9375rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.quality-selector select:hover {
+  border-color: #555;
+}
+
+.quality-selector select:focus {
+  outline: none;
+  border-color: #e50914;
+}
+
+/* Loading States */
+.loading-container,
+.error-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  color: #fff;
+  text-align: center;
+  padding: 2rem;
+}
+
+.loading-spinner {
+  width: 50px;
+  height: 50px;
+  border: 4px solid #333;
+  border-top-color: #e50914;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 1rem;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.error-container h2 {
+  font-size: 1.75rem;
+  margin-bottom: 1rem;
+  color: #e50914;
+}
+
+.error-container p {
+  font-size: 1.125rem;
+  color: #aaa;
+  margin-bottom: 1rem;
+}
+
+.cors-hint {
+  background-color: rgba(229, 9, 20, 0.1);
+  border: 1px solid rgba(229, 9, 20, 0.3);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+  max-width: 600px;
+}
+
+.cors-hint p {
+  font-size: 0.9375rem;
+  color: #fff;
+  margin-bottom: 0.5rem;
+}
+
+.cors-hint p:last-child {
+  margin-bottom: 0;
+}
+
+.back-button {
+  padding: 0.875rem 2rem;
+  background-color: #e50914;
+  color: #fff;
+  text-decoration: none;
+  border-radius: 4px;
+  font-weight: 600;
+  transition: all 0.2s;
+  display: inline-block;
+  margin-top: 1rem;
+}
+
+.back-button:hover {
+  background-color: #f40612;
+  transform: scale(1.05);
+}
+
+.retry-button {
+  padding: 0.875rem 2rem;
+  background-color: #333;
+  color: #fff;
+  border: 1px solid #555;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.retry-button:hover {
+  background-color: #444;
+  border-color: #666;
+}
+
+.buffering-indicator {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  color: #fff;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.buffering-indicator .loading-spinner {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 0;
+}
+
+.buffering-indicator p {
+  font-size: 0.9375rem;
+  color: #aaa;
+  margin: 0;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .watch-header {
+    padding: 1rem 1.5rem;
+  }
+
+  .episode-title {
+    font-size: 1.25rem;
+  }
+
+  .video-container {
+    padding: 0 1rem;
+  }
+
+  .quality-selector {
+    padding: 0 1rem;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .video-js .vjs-big-play-button {
+    width: 60px;
+    height: 60px;
+    line-height: 60px;
+    font-size: 2rem;
+  }
+}
+
+/* Iframe Fallback */
+.iframe-fallback {
+  width: 100%;
+  background-color: #000;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.video-iframe {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: none;
+  background-color: #000;
+}
+
+.iframe-notice {
+  text-align: center;
+  padding: 0.75rem;
+  margin: 0;
+  background-color: rgba(229, 9, 20, 0.15);
+  color: #ffb3b3;
+  font-size: 0.875rem;
+  border-top: 1px solid rgba(229, 9, 20, 0.3);
+}
+
+.skip-to-iframe-btn {
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+  background-color: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  color: #aaa;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  pointer-events: auto;
+}
+
+.skip-to-iframe-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.5);
+  color: #fff;
+}
+
+.trying-source-info {
+  font-size: 0.75rem;
+  color: #666;
+}
