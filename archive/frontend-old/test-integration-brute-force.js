@@ -2,7 +2,7 @@
  * Integration Test: Verify brute-force logic works with streamingApi
  */
 
-const { getStreamingSourcesWithFallback } = require('./src/services/streamingApi.ts');
+const { getStreamingSourcesWithFallback } = require('./src/services/streamingApi.js');
 
 async function testIntegration() {
   console.log('🧪 Testing brute-force integration with streamingApi\n');

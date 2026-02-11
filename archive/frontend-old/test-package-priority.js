@@ -5,8 +5,8 @@
  * before falling back to API scrapers.
  */
 
-const { searchAniwatchImproved, getAniwatchInfoImproved } = require('./src/services/aniwatchImprovedService.ts');
-const { searchAnimeForStreaming } = require('./src/services/streamingApi.ts');
+const { searchAniwatchImproved, getAniwatchInfoImproved } = require('./src/services/aniwatchImprovedService.js');
+const { searchAnimeForStreaming } = require('./src/services/streamingApi.js');
 
 async function testPackagePriority() {
   console.log('╔════════════════════════════════════════════════╗');

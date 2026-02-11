@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(npm install:*)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm ls:*)"
     ],
     "deny": [],
     "ask": []
