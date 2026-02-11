@@ -43,7 +43,10 @@ export const useNavigationAdapter = () => {
         const animeName = slugify(title);
         router.push({
           pathname: `/detail/${animeName}`,
-          params: toQueryParams({ id: animeId, title }),
+          params: toQueryParams({ 
+            id: animeId,
+            title: title, // Pass title for better searching when ID lookup fails
+          }),
         });
         return;
       }

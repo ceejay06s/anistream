@@ -51,6 +51,7 @@ export interface AnimeSearchResult {
   image: string;
   description?: string;
   source: 'HiAnime';
+  url?: string; // URL may contain full ID with numeric suffix
 }
 
 /**
@@ -61,13 +62,39 @@ export const searchAnime = async (query: string): Promise<AnimeSearchResult[]> =
 
   try {
     const hianimeResults = await searchHiAnime(query);
-    const formatted = hianimeResults.map((item: any) => ({
-      id: item.id || item.animeId || '',
-      title: item.title || item.name || '',
-      image: item.image || item.img || item.coverImage || '',
-      description: item.description || '',
-      source: 'HiAnime' as const,
-    })).filter((item: any) => item.id && item.title);
+    const formatted = hianimeResults.map((item: any) => {
+      // Extract full ID from URL if available (includes numeric suffix)
+      // URL format: https://hianimez.to/watch/frieren-beyond-journeys-end-season-2-20409
+      let fullId = item.id || item.animeId || '';
+      
+      // Always try to extract ID from URL if available (URLs often have the full ID with numeric suffix)
+      if (item.url && item.url.includes('/watch/')) {
+        const urlMatch = item.url.match(/\/watch\/([^/?]+)/);
+        if (urlMatch && urlMatch[1]) {
+          const urlId = urlMatch[1];
+          // Prefer URL ID if:
+          // 1. It has numeric suffix and current ID doesn't, OR
+          // 2. URL ID is longer/more complete (likely has suffix)
+          if (urlId.match(/-\d{3,}$/) && !fullId.match(/-\d{3,}$/)) {
+            fullId = urlId;
+            console.log(`📌 Extracted full ID from URL: ${fullId} (original: ${item.id})`);
+          } else if (urlId.length > fullId.length && urlId.startsWith(fullId)) {
+            // URL ID is longer and starts with current ID - likely has suffix
+            fullId = urlId;
+            console.log(`📌 Using longer ID from URL: ${fullId} (original: ${item.id})`);
+          }
+        }
+      }
+      
+      return {
+        id: fullId,
+        title: item.title || item.name || '',
+        image: item.image || item.img || item.coverImage || '',
+        description: item.description || '',
+        source: 'HiAnime' as const,
+        url: item.url || '',
+      };
+    }).filter((item: any) => item.id && item.title);
     
     results.push(...formatted);
   } catch (error) {
@@ -90,30 +117,62 @@ export const getAnimeInfo = async (
 } | null> => {
   try {
     console.log('🔍 Fetching HiAnime info for:', animeId);
-    const info = await getHiAnimeInfo(animeId);
+    
+    // Try with original ID first (may have numeric suffix)
+    let info = await getHiAnimeInfo(animeId);
+    
+    // If that fails and ID doesn't have numeric suffix, try with cleaned ID
+    if (!info && animeId.match(/-\d{3,}$/)) {
+      const cleanedId = animeId.replace(/-\d{3,}$/, '');
+      console.log(`🔄 Info fetch failed with full ID, trying cleaned ID: ${cleanedId}`);
+      info = await getHiAnimeInfo(cleanedId);
+    }
+    
     console.log('✅ HiAnime info fetched:', info ? 'success' : 'empty');
     
-    console.log('🔍 Fetching HiAnime episodes for:', animeId);
-    const episodes = await getHiAnimeEpisodes(animeId);
-    console.log('✅ HiAnime episodes fetched:', episodes?.length || 0, 'episodes');
-    
     if (!info) {
-      console.warn('⚠️ HiAnime info is empty');
-      throw new Error('Anime info not found');
+      console.warn('⚠️ HiAnime info is empty for ID:', animeId);
+      return null;
     }
     
     const anime = convertHiAnimeToAnime(info);
+    
+    console.log('🔍 Fetching HiAnime episodes for:', animeId);
+    
+    // Try episodes with original ID first
+    let episodes = await getHiAnimeEpisodes(animeId);
+    
+    // If no episodes and ID has numeric suffix, try without it
+    if (episodes.length === 0 && animeId.match(/-\d{3,}$/)) {
+      const cleanedId = animeId.replace(/-\d{3,}$/, '');
+      console.log(`🔄 Episodes fetch failed with full ID, trying cleaned ID: ${cleanedId}`);
+      episodes = await getHiAnimeEpisodes(cleanedId);
+    }
+    
+    // If still no episodes, try the other way (add numeric suffix if missing)
+    if (episodes.length === 0 && !animeId.match(/-\d{3,}$/)) {
+      // Try common numeric suffixes (this is a fallback - not ideal but better than nothing)
+      const commonSuffixes = ['-100', '-1', '-2'];
+      for (const suffix of commonSuffixes) {
+        const idWithSuffix = animeId + suffix;
+        console.log(`🔄 Trying ID with suffix: ${idWithSuffix}`);
+        episodes = await getHiAnimeEpisodes(idWithSuffix);
+        if (episodes.length > 0) {
+          console.log(`✅ Found episodes with suffix ${suffix}`);
+          break;
+        }
+      }
+    }
+    
+    console.log('✅ HiAnime episodes fetched:', episodes?.length || 0, 'episodes');
+    
     const formattedEpisodes = episodes && episodes.length > 0 
       ? episodes.map((ep: any) => convertHiAnimeToEpisode(ep, animeId))
       : [];
     
     console.log('✅ Formatted episodes:', formattedEpisodes.length);
 
-    if (formattedEpisodes.length === 0) {
-      console.warn('⚠️ No episodes after formatting');
-      throw new Error('No episodes found');
-    }
-
+    // Return even if episodes are empty - let the caller decide what to do
     return {
       anime,
       episodes: formattedEpisodes,
@@ -167,14 +226,18 @@ export const getStreamingSources = async (
     // Proxy M3U8 URLs through backend on web to avoid 403 errors
     const PROXY_SERVER_URL = 'http://localhost:1000';
     const isWeb = typeof window !== 'undefined';
-    
+
+    // Get referer from headers (case-insensitive)
+    const referer = headers.Referer || headers.referer || 'https://megacloud.blog/';
+
     const formatted = sources.map((src: any) => {
       let url = src.url || src.file || '';
-      
-      // On web, proxy M3U8 URLs through backend to handle headers
-      if (isWeb && url.includes('.m3u8') && headers.Referer) {
-        const proxyUrl = `${PROXY_SERVER_URL}/proxy/m3u8?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(headers.Referer)}`;
+
+      // On web, ALWAYS proxy M3U8 URLs through backend to handle headers and segment rewriting
+      if (isWeb && url.includes('.m3u8')) {
+        const proxyUrl = `${PROXY_SERVER_URL}/proxy/m3u8?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer)}`;
         console.log('🔄 Proxying M3U8 through backend:', url.substring(0, 60) + '...');
+        console.log('   Referer:', referer);
         url = proxyUrl;
       }
       

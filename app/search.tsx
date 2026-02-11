@@ -1,6 +1,6 @@
 import React from 'react';
 import SearchScreen from '../src/screens/SearchScreen';
-import { useNavigationAdapter } from './_nav';
+import { useNavigationAdapter } from '../src/utils/navigation';
 
 const SearchRoute = () => {
   const navigation = useNavigationAdapter();

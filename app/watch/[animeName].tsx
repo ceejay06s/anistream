@@ -1,7 +1,7 @@
 import React from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import VideoPlayerScreen from '../../src/screens/VideoPlayerScreen';
-import { getEpisodeIdFromParams, getStringParam, useNavigationAdapter } from '../_nav';
+import { getEpisodeIdFromParams, getStringParam, useNavigationAdapter } from '../../src/utils/navigation';
 
 const WatchRoute = () => {
   const params = useLocalSearchParams();

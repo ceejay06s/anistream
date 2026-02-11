@@ -85,29 +85,33 @@ const getMegacloudHeaders = (url) => {
 /**
  * Clean anime ID by removing numeric suffixes (e.g., "hoshi-no-umi-no-amuri-8552" -> "hoshi-no-umi-no-amuri")
  * This ensures we use the base slug without the numeric ID suffix
- * 
+ *
  * Handles URLs like:
  * - "watch/jack-of-all-trades-party-of-none-20333" -> "jack-of-all-trades-party-of-none"
  * - "watch/jack-of-all-trades-party-of-none-20333?w=latest&ep=164153" -> "jack-of-all-trades-party-of-none"
  * - "/watch/hoshi-no-umi-no-amuri-8552" -> "hoshi-no-umi-no-amuri"
+ *
+ * IMPORTANT: Only strips suffixes with 3+ digits to avoid stripping "season-2", "part-1", etc.
+ * - "frieren-beyond-journeys-end-season-2-20409" -> "frieren-beyond-journeys-end-season-2" (correct)
+ * - "frieren-beyond-journeys-end-season-2" -> "frieren-beyond-journeys-end-season-2" (preserved)
  */
 const cleanAnimeId = (animeId) => {
   if (!animeId) return animeId;
-  
+
   // Remove leading/trailing slashes and 'watch/' prefix
   let cleaned = String(animeId).trim();
-  
+
   // Remove query parameters if present (e.g., "?w=latest&ep=164153")
   cleaned = cleaned.split('?')[0];
-  
+
   cleaned = cleaned.replace(/^\/+|\/+$/g, '');
   cleaned = cleaned.replace(/^watch\//, '');
-  
-  // Remove numeric suffix at the end (e.g., "-8552", "-12345", "-20333")
-  // Pattern: one or more digits preceded by a hyphen at the end of the string
-  // This handles cases like "jack-of-all-trades-party-of-none-20333" -> "jack-of-all-trades-party-of-none"
-  cleaned = cleaned.replace(/-\d+$/, '');
-  
+
+  // Remove numeric suffix at the end ONLY if it's 3+ digits (HiAnime IDs are typically 3-5 digits)
+  // This preserves "season-2", "part-1", etc. while stripping "-20409", "-8552", etc.
+  // Pattern: 3 or more digits preceded by a hyphen at the end of the string
+  cleaned = cleaned.replace(/-\d{3,}$/, '');
+
   return cleaned;
 };
 
@@ -239,6 +243,13 @@ app.get('/', (req, res) => {
         method: 'GET',
         parameters: { animeId: 'Anime ID (required)' },
         example: '/scrape/hianime/info?animeId=jujutsu-kaisen-100',
+      },
+      'hianime-episodes': {
+        path: '/scrape/hianime/episodes',
+        method: 'GET',
+        parameters: { animeId: 'Anime ID with numeric suffix (required)' },
+        example: '/scrape/hianime/episodes?animeId=jujutsu-kaisen-20401',
+        description: 'Dedicated endpoint for fetching episodes only (uses hi-api)',
       },
       'hianime-episode-servers': {
         path: '/scrape/hianime/episode-servers',
@@ -404,11 +415,14 @@ app.get('/scrape/hianime/info', async (req, res) => {
       const originalAnimeId = req.query.animeId;
       let triedOriginal = false;
       
-      // Try with cleaned ID first, then with original ID if 404
-      const animeIdsToTry = [animeId];
-      if (originalAnimeId !== animeId && !/^\d+$/.test(originalAnimeId)) {
+      // Try ORIGINAL ID first (with numeric suffix), then cleaned as fallback
+      // hi-api requires the full ID with numeric suffix for many anime
+      const animeIdsToTry = [];
+      if (originalAnimeId && originalAnimeId !== animeId && !/^\d+$/.test(originalAnimeId)) {
         animeIdsToTry.push(originalAnimeId);
+        console.log(`📌 Prioritizing original ID with suffix: ${originalAnimeId}`);
       }
+      animeIdsToTry.push(animeId);
       
       for (const tryAnimeId of animeIdsToTry) {
         try {
@@ -517,8 +531,8 @@ app.get('/scrape/hianime/info', async (req, res) => {
                   
                   // Check if episode belongs to the anime we're requesting
                   // Compare against episodeAnimeId (the one we used to fetch), originalAnimeId, and successfulAnimeId
-                  // Normalize both IDs for comparison (remove trailing numbers that might differ)
-                  const normalizeId = (id) => id.toLowerCase().replace(/-\d+$/, '');
+                  // Normalize both IDs for comparison (remove trailing 3+ digit suffixes)
+                  const normalizeId = (id) => id.toLowerCase().replace(/-\d{3,}$/, '');
                   const epAnimeIdNormalized = normalizeId(epAnimeId);
                   const episodeAnimeIdNormalized = normalizeId(episodeAnimeId);
                   const successfulAnimeIdNormalized = normalizeId(successfulAnimeId);
@@ -1042,6 +1056,112 @@ app.get('/scrape/hianime/info', async (req, res) => {
 });
 
 /**
+ * HiAnime Episodes Endpoint (Dedicated)
+ * Usage: GET /scrape/hianime/episodes?animeId=jujutsu-kaisen-20401
+ *
+ * This endpoint ONLY fetches episodes from hi-api, no scraping fallback.
+ * Use the full anime ID with numeric suffix for best results.
+ */
+app.get('/scrape/hianime/episodes', async (req, res) => {
+  try {
+    let { animeId } = req.query;
+
+    if (!animeId) {
+      return res.status(400).json({ error: 'animeId parameter is required' });
+    }
+
+    // Store original ID (may have numeric suffix)
+    const originalAnimeId = String(animeId).trim();
+
+    // Clean the ID (remove suffix)
+    const cleanedAnimeId = cleanAnimeId(animeId);
+
+    // Validate that animeId is not purely numeric
+    if (/^\d+$/.test(cleanedAnimeId)) {
+      return res.status(400).json({
+        error: 'Invalid animeId format',
+        message: 'HiAnime uses URL-friendly slugs (e.g., "jujutsu-kaisen-20401"), not numeric IDs.',
+        received: animeId
+      });
+    }
+
+    console.log(`📺 Fetching episodes for: ${originalAnimeId} (cleaned: ${cleanedAnimeId})`);
+
+    // Try ORIGINAL ID first (with numeric suffix), then cleaned as fallback
+    const animeIdsToTry = [];
+    if (originalAnimeId !== cleanedAnimeId && !/^\d+$/.test(originalAnimeId)) {
+      animeIdsToTry.push(originalAnimeId);
+      console.log(`   📌 Prioritizing original ID: ${originalAnimeId}`);
+    }
+    animeIdsToTry.push(cleanedAnimeId);
+
+    let episodes = [];
+    let successfulId = null;
+
+    for (const tryId of animeIdsToTry) {
+      try {
+        console.log(`   🔍 Trying hi-api episodes for: ${tryId}`);
+        const response = await axios.get(`${HI_API_URL}${HI_API_BASE_PATH}/anime/${tryId}/episodes`, {
+          timeout: 10000,
+          validateStatus: (status) => status < 500,
+        });
+
+        if (response.status === 404) {
+          console.log(`   ❌ 404 for ${tryId}`);
+          continue;
+        }
+
+        if (response.data && response.data.success && response.data.data) {
+          const episodesData = response.data.data;
+          const rawEpisodes = episodesData.episodes || episodesData.sub || [];
+
+          if (rawEpisodes.length > 0) {
+            console.log(`   ✅ Found ${rawEpisodes.length} episodes with ID: ${tryId}`);
+            successfulId = tryId;
+
+            // Format episodes - use the successful ID for episode URLs
+            episodes = rawEpisodes
+              .filter(ep => ep.number || ep.episode || ep.episodeId)
+              .map(ep => {
+                const epNum = ep.number || ep.episode || 0;
+                return {
+                  id: ep.episodeId || `${successfulId}?ep=${epNum}`,
+                  number: epNum,
+                  title: ep.title || `Episode ${epNum}`,
+                  isFiller: ep.isFiller || false,
+                };
+              });
+            break;
+          } else {
+            console.log(`   ⚠️ Empty episodes for ${tryId}`);
+          }
+        }
+      } catch (err) {
+        console.log(`   ❌ Error for ${tryId}: ${err.message}`);
+      }
+    }
+
+    console.log(`📺 Returning ${episodes.length} episodes`);
+
+    return res.json({
+      success: true,
+      data: {
+        animeId: successfulId || originalAnimeId,
+        totalEpisodes: episodes.length,
+        episodes: episodes,
+      }
+    });
+
+  } catch (error) {
+    console.error('HiAnime episodes error:', error);
+    res.status(500).json({
+      error: error.message,
+      details: error.stack
+    });
+  }
+});
+
+/**
  * HiAnime Episode Servers Endpoint
  * Usage: GET /scrape/hianime/episode-servers?episodeId=jujutsu-kaisen-100?ep=1
  */
@@ -1221,13 +1341,121 @@ app.get('/proxy/m3u8', async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET');
     res.setHeader('Access-Control-Allow-Headers', 'Range');
-    
-    // Return the M3U8 content
-    res.send(response.data);
+
+    // Rewrite URLs in m3u8 content to proxy through this server
+    let content = response.data;
+    const baseUrl = videoUrl.substring(0, videoUrl.lastIndexOf('/') + 1);
+
+    console.log(`   M3U8 content length: ${content.length} bytes`);
+    console.log(`   Base URL for relative paths: ${baseUrl}`);
+
+    // Process line by line for more robust URL rewriting
+    // This handles edge cases that regex might miss
+    const lines = content.split(/\r?\n/);
+    let rewrittenM3u8Count = 0;
+    let rewrittenSegmentCount = 0;
+
+    const rewrittenLines = lines.map(line => {
+      const trimmedLine = line.trim();
+
+      // Skip empty lines
+      if (!trimmedLine) {
+        return line;
+      }
+
+      // Handle #EXT-X-KEY lines - these contain encryption key URLs that must be proxied
+      // Format: #EXT-X-KEY:METHOD=AES-128,URI="https://..."
+      if (trimmedLine.startsWith('#EXT-X-KEY')) {
+        const uriMatch = trimmedLine.match(/URI="([^"]+)"/);
+        if (uriMatch && uriMatch[1]) {
+          let keyUrl = uriMatch[1];
+          // Make absolute if relative
+          if (!keyUrl.startsWith('http')) {
+            try {
+              keyUrl = new URL(keyUrl, baseUrl).href;
+            } catch (e) {
+              console.log(`   ⚠️ Failed to parse key URL: ${keyUrl}`);
+              return line;
+            }
+          }
+          console.log(`   Rewriting encryption key URL: ${keyUrl.substring(0, 60)}...`);
+          const proxiedKeyUrl = `/proxy/segment?url=${encodeURIComponent(keyUrl)}&referer=${encodeURIComponent(refererUrl)}`;
+          return trimmedLine.replace(/URI="[^"]+"/, `URI="${proxiedKeyUrl}"`);
+        }
+        return line;
+      }
+
+      // Skip other comment/metadata lines (start with #)
+      if (trimmedLine.startsWith('#')) {
+        return line;
+      }
+
+      // Check if this is a URL line (absolute or relative)
+      const isAbsoluteUrl = trimmedLine.startsWith('http://') || trimmedLine.startsWith('https://');
+
+      // Check if it's an M3U8 file (playlist)
+      const isM3u8 = trimmedLine.includes('.m3u8');
+
+      // Check if it's a segment file (.ts, .jpg, .jpeg, .html, or any other media)
+      // CDNs use various extensions to obfuscate video data
+      const isSegment = /\.(ts|jpg|jpeg|html|png|gif|webp|mp4|aac|m4s)(\?|$)/i.test(trimmedLine) ||
+                        (!isM3u8 && (isAbsoluteUrl || !trimmedLine.startsWith('#')));
+
+      if (isM3u8) {
+        // Rewrite M3U8 URLs
+        let absoluteUrl;
+        if (isAbsoluteUrl) {
+          absoluteUrl = trimmedLine;
+        } else {
+          try {
+            absoluteUrl = new URL(trimmedLine, baseUrl).href;
+          } catch (e) {
+            console.log(`   ⚠️ Failed to parse URL: ${trimmedLine}`);
+            return line;
+          }
+        }
+        rewrittenM3u8Count++;
+        console.log(`   Rewriting M3U8: ${trimmedLine.substring(0, 60)}...`);
+        return `/proxy/m3u8?url=${encodeURIComponent(absoluteUrl)}&referer=${encodeURIComponent(refererUrl)}`;
+      } else if (isSegment && !trimmedLine.startsWith('/proxy/')) {
+        // Rewrite segment URLs (but not already-proxied URLs)
+        let absoluteUrl;
+        if (isAbsoluteUrl) {
+          absoluteUrl = trimmedLine;
+        } else {
+          try {
+            absoluteUrl = new URL(trimmedLine, baseUrl).href;
+          } catch (e) {
+            console.log(`   ⚠️ Failed to parse URL: ${trimmedLine}`);
+            return line;
+          }
+        }
+        rewrittenSegmentCount++;
+        return `/proxy/segment?url=${encodeURIComponent(absoluteUrl)}&referer=${encodeURIComponent(refererUrl)}`;
+      }
+
+      return line;
+    });
+
+    content = rewrittenLines.join('\n');
+
+    console.log(`   Rewrote ${rewrittenM3u8Count} M3U8 URLs, ${rewrittenSegmentCount} segment URLs`);
+
+    // Final check - log any remaining absolute URLs
+    const remainingAbsolute = content.match(/^https?:\/\//gm) || [];
+    if (remainingAbsolute.length > 0) {
+      console.log(`   ⚠️ ${remainingAbsolute.length} absolute URLs still in content`);
+      // Log first few for debugging
+      const firstFew = content.split('\n').filter(l => l.startsWith('http')).slice(0, 3);
+      firstFew.forEach(u => console.log(`      ${u.substring(0, 80)}...`));
+    }
+
+    // Return the modified M3U8 content
+    res.send(content);
   } catch (error) {
     console.error('M3U8 proxy error:', error.message);
     if (error.response) {
-      res.status(error.response.status).json({ 
+      res.status(error.response.status).json({
         error: 'Failed to proxy M3U8',
         message: error.message,
         status: error.response.status,
@@ -1238,17 +1466,121 @@ app.get('/proxy/m3u8', async (req, res) => {
   }
 });
 
+/**
+ * Proxy video segments (.ts, .jpg, encrypted segments)
+ * Usage: GET /proxy/segment?url=SEGMENT_URL&referer=REFERER_URL
+ */
+app.get('/proxy/segment', async (req, res) => {
+  try {
+    const { url } = req.query;
+
+    if (!url) {
+      return res.status(400).json({ error: 'url parameter is required' });
+    }
+
+    const segmentUrl = decodeURIComponent(url);
+
+    // Extract host from segment URL for proper Host header
+    let segmentHost;
+    try {
+      segmentHost = new URL(segmentUrl).host;
+    } catch (e) {
+      segmentHost = 'megacloud.blog';
+    }
+
+    // Build headers - megacloud CDNs need specific headers that match browser requests
+    // These headers are critical - missing or incorrect headers result in 403
+    const requestHeaders = {
+      'Accept': '*/*',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Host': segmentHost,
+      'Origin': 'https://megacloud.blog',  // Always use megacloud.blog as origin
+      'Referer': 'https://megacloud.blog/', // Always use megacloud.blog as referer
+      'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+      'Sec-Ch-Ua-Mobile': '?0',
+      'Sec-Ch-Ua-Platform': '"Windows"',
+      'Sec-Fetch-Dest': 'empty',
+      'Sec-Fetch-Mode': 'cors',
+      'Sec-Fetch-Site': 'cross-site',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    };
+
+    console.log(`📦 Proxying segment: ${segmentUrl.substring(0, 60)}...`);
+
+    // Forward Range header if present (video players use byte-range requests)
+    if (req.headers.range) {
+      requestHeaders['Range'] = req.headers.range;
+    }
+
+    // Fetch the segment with proper headers
+    const response = await axios.get(segmentUrl, {
+      headers: requestHeaders,
+      responseType: 'arraybuffer',
+      timeout: 30000,
+      // Don't throw on 206 Partial Content
+      validateStatus: (status) => status >= 200 && status < 300,
+    });
+
+    // Detect content type from response or URL
+    // CDNs use many obfuscated extensions (.jpg, .html, .js, .css, .txt, .png, .ico, etc.)
+    // ALL of these are actually encrypted video segment data
+    let contentType = response.headers['content-type'] || 'video/mp2t';
+    // Force octet-stream for ALL obfuscated extensions - these are encrypted video data
+    if (/\.(jpg|jpeg|html|png|gif|webp|js|css|txt|ico|svg|woff|woff2|ttf|eot)(\?|$)/i.test(segmentUrl)) {
+      contentType = 'application/octet-stream';
+    }
+
+    // Set appropriate headers
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type');
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+
+    // Forward content length
+    if (response.headers['content-length']) {
+      res.setHeader('Content-Length', response.headers['content-length']);
+    }
+
+    // Forward content range for partial content
+    if (response.headers['content-range']) {
+      res.setHeader('Content-Range', response.headers['content-range']);
+      res.status(206);
+    }
+
+    res.send(Buffer.from(response.data));
+  } catch (error) {
+    console.error('Segment proxy error:', error.message, error.response?.status);
+    res.status(error.response?.status || 500).json({
+      error: 'Failed to proxy segment',
+      message: error.message
+    });
+  }
+});
+
 app.get('/scrape/hianime/episode-sources', async (req, res) => {
   try {
-    const { episodeId, server = 'hd-1', category = 'sub' } = req.query;
-    
+    let { episodeId, server = 'hd-1', category = 'sub' } = req.query;
+
     if (!episodeId) {
       return res.status(400).json({ error: 'episodeId parameter is required' });
     }
-    
+
+    // URL decode the episodeId in case it was double-encoded
+    // (axios encodes params, and sometimes the value itself is already encoded)
+    if (episodeId.includes('%3F') || episodeId.includes('%3D')) {
+      episodeId = decodeURIComponent(episodeId);
+      console.log('🔄 Decoded episodeId:', episodeId);
+    }
+
     // Validate episode ID format: should be "anime-id?ep=number"
     if (!episodeId.includes('?ep=')) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Invalid episodeId format',
         message: 'Episode ID must be in format: anime-id?ep=number (e.g., "naruto?ep=1")',
         received: episodeId

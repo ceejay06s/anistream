@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Image, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, Image, StyleSheet, TouchableOpacity, Dimensions, Platform } from 'react-native';
 import { Anime } from '../types';
 import { MaterialIcons } from '@expo/vector-icons';
 
@@ -25,7 +25,17 @@ const AnimeCard: React.FC<AnimeCardProps> = ({
       <View style={styles.imageContainer}>
         <Image
           source={{ uri: anime.coverImage }}
-          style={[styles.image, { width, height: width * 1.5 }]}
+          style={[
+            styles.image,
+            { width, height: width * 1.5 },
+            Platform.OS === 'web' ? {
+              // Remove auto-applied left: 0px and top: 0px from React Native Web
+              // Setting to undefined removes the property in React Native Web
+              left: undefined as any,
+              top: undefined as any,
+              position: 'static' as any,
+            } : {},
+          ]}
           resizeMode="cover"
         />
         <View style={styles.ratingContainer}>

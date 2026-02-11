@@ -40,29 +40,33 @@ let aniwatchModule: any = null;
 /**
  * Clean anime ID by removing numeric suffixes (e.g., "hoshi-no-umi-no-amuri-8552" -> "hoshi-no-umi-no-amuri")
  * This ensures we use the base slug without the numeric ID suffix
- * 
+ *
  * Handles URLs like:
  * - "watch/jack-of-all-trades-party-of-none-20333" -> "jack-of-all-trades-party-of-none"
  * - "watch/jack-of-all-trades-party-of-none-20333?w=latest&ep=164153" -> "jack-of-all-trades-party-of-none"
  * - "/watch/hoshi-no-umi-no-amuri-8552" -> "hoshi-no-umi-no-amuri"
+ *
+ * IMPORTANT: Only strips suffixes with 3+ digits to avoid stripping "season-2", "part-1", etc.
+ * - "frieren-beyond-journeys-end-season-2-20409" -> "frieren-beyond-journeys-end-season-2" (correct)
+ * - "frieren-beyond-journeys-end-season-2" -> "frieren-beyond-journeys-end-season-2" (preserved)
  */
 const cleanAnimeId = (animeId: string): string => {
   if (!animeId) return animeId;
-  
+
   // Remove leading/trailing slashes and 'watch/' prefix
   let cleaned = animeId.toString().trim();
-  
+
   // Remove query parameters if present (e.g., "?w=latest&ep=164153")
   cleaned = cleaned.split('?')[0];
-  
+
   cleaned = cleaned.replace(/^\/+|\/+$/g, '');
   cleaned = cleaned.replace(/^watch\//, '');
-  
-  // Remove numeric suffix at the end (e.g., "-8552", "-12345", "-20333")
-  // Pattern: one or more digits preceded by a hyphen at the end of the string
-  // This handles cases like "jack-of-all-trades-party-of-none-20333" -> "jack-of-all-trades-party-of-none"
-  cleaned = cleaned.replace(/-\d+$/, '');
-  
+
+  // Remove numeric suffix at the end ONLY if it's 3+ digits (HiAnime IDs are typically 3-5 digits)
+  // This preserves "season-2", "part-1", etc. while stripping "-20409", "-8552", etc.
+  // Pattern: 3 or more digits preceded by a hyphen at the end of the string
+  cleaned = cleaned.replace(/-\d{3,}$/, '');
+
   return cleaned;
 };
 
@@ -216,20 +220,24 @@ const searchHiAnimeWeb = async (query: string, page: number = 1): Promise<any[]>
 
           if (link && title) {
             // Extract anime ID from URL (e.g., /watch/jujutsu-kaisen-100 -> jujutsu-kaisen-100)
-            // Clean to remove numeric suffixes (e.g., "hoshi-no-umi-no-amuri-8552" -> "hoshi-no-umi-no-amuri")
-            const animeId = cleanAnimeId(link);
+            // Preserve full ID with numeric suffix if available (e.g., "frieren-beyond-journeys-end-season-2-20409")
+            let animeId = link.replace(/^.*\/watch\//, '').split('?')[0].replace(/^\/+|\/+$/g, '');
+            // Keep the full ID with numeric suffix - don't clean it here
+            // The getHiAnimeInfo function will handle both formats
             const fullImageUrl = image 
               ? (image.startsWith('http') ? image : `${baseUrl}${image.startsWith('/') ? '' : '/'}${image}`)
               : '';
             
+            const fullUrl = link.startsWith('http') ? link : `${baseUrl}${link.startsWith('/') ? '' : '/'}${link}`;
+            
             results.push({
-              id: animeId,
+              id: animeId, // Keep full ID with numeric suffix if present
               title: title,
               image: fullImageUrl,
               type: type,
               rating: rating,
               released: released,
-              url: link.startsWith('http') ? link : `${baseUrl}${link.startsWith('/') ? '' : '/'}${link}`,
+              url: fullUrl,
             });
           }
         });
@@ -274,14 +282,23 @@ const searchHiAnimeHiAPI = async (query: string, page: number = 1): Promise<any[
     if (response.data && response.data.success && response.data.data) {
       const animes = response.data.data.animes || response.data.data.results || [];
       if (animes.length > 0) {
-        const results = animes.map((item: any) => ({
-          id: cleanAnimeId(item.id),
-          title: item.name || item.title,
-          image: item.poster || item.image || '',
-          type: item.type || '',
-          rating: item.rating || 0,
-          url: item.url || `https://hianime.to/watch/${cleanAnimeId(item.id)}`,
-        }));
+        const results = animes.map((item: any) => {
+          // Keep original ID from hi-api (may include numeric suffix)
+          // Only clean if it's from HTML scraping
+          const originalId = item.id || '';
+          const cleanedId = cleanAnimeId(originalId);
+          // Use original ID if it has numeric suffix, otherwise use cleaned
+          const idToUse = originalId.match(/-\d{3,}$/) ? originalId : cleanedId;
+          
+          return {
+            id: idToUse,
+            title: item.name || item.title,
+            image: item.poster || item.image || '',
+            type: item.type || '',
+            rating: item.rating || 0,
+            url: item.url || `https://hianime.to/watch/${idToUse}`,
+          };
+        });
 
         console.log(`✅ hi-api search: Found ${results.length} results`);
         return results;
@@ -355,11 +372,17 @@ const getHiAnimeInfoHiAPI = async (animeId: string, originalAnimeId?: string): P
     return null;
   }
 
-  // Try cleaned ID first, then original ID if 404
-  const animeIdsToTry = [animeId];
+  // Try ORIGINAL ID first (with numeric suffix), then cleaned ID as fallback
+  const animeIdsToTry: string[] = [];
+
+  // Add original ID first if it has numeric suffix and is different from cleaned
   if (originalAnimeId && originalAnimeId !== animeId && !/^\d+$/.test(originalAnimeId)) {
     animeIdsToTry.push(originalAnimeId);
+    console.log(`📌 Prioritizing original ID for info: ${originalAnimeId}`);
   }
+
+  // Add cleaned ID as fallback
+  animeIdsToTry.push(animeId);
 
   for (const tryAnimeId of animeIdsToTry) {
     try {
@@ -737,11 +760,17 @@ const getHiAnimeEpisodesHiAPI = async (animeId: string, originalAnimeId?: string
     return [];
   }
 
-  // Try cleaned ID first, then original ID if 404
-  const animeIdsToTry = [animeId];
+  // Try ORIGINAL ID first (with numeric suffix), then cleaned ID as fallback
+  const animeIdsToTry: string[] = [];
+
+  // Add original ID first if it has numeric suffix and is different from cleaned
   if (originalAnimeId && originalAnimeId !== animeId && !/^\d+$/.test(originalAnimeId)) {
     animeIdsToTry.push(originalAnimeId);
+    console.log(`📌 Prioritizing original ID for episodes: ${originalAnimeId}`);
   }
+
+  // Add cleaned ID as fallback
+  animeIdsToTry.push(animeId);
 
   for (const tryAnimeId of animeIdsToTry) {
     try {
@@ -758,7 +787,8 @@ const getHiAnimeEpisodesHiAPI = async (animeId: string, originalAnimeId?: string
         const epData = epResponse.data.data;
         const rawEpisodes = epData.episodes || epData.sub || [];
 
-        console.log(`✅ hi-api episodes: Found ${rawEpisodes.length} episodes`);
+        console.log(`✅ hi-api episodes: Found ${rawEpisodes.length} episodes with ID: ${tryAnimeId}`);
+        console.log(`   Was original ID: ${tryAnimeId === originalAnimeId}`);
 
         // Format episodes - Use tryAnimeId (full ID with numeric suffix) for episode IDs
         const episodes = rawEpisodes
@@ -787,29 +817,90 @@ const getHiAnimeEpisodesHiAPI = async (animeId: string, originalAnimeId?: string
 };
 
 /**
- * Get episodes for an anime using the scraper
- * Priority: hi-api > npm package scraper > web scraping
+ * Get episodes for an anime using hi-api
+ * Priority: hi-api direct > proxy endpoint > npm scraper > web scraping
  */
 export const getHiAnimeEpisodes = async (animeId: string): Promise<any[]> => {
   // Store original animeId before cleaning
   const originalAnimeId = animeId;
-  
+
   // Clean the animeId first (remove watch/ prefix and numeric suffixes)
   animeId = cleanAnimeId(animeId);
-  
+
+  // Log the ID transformation for debugging
+  if (originalAnimeId !== animeId) {
+    console.log(`🔄 Episode fetch: "${originalAnimeId}" -> "${animeId}"`);
+    console.log(`   Original has numeric suffix: ${/-\d{3,}$/.test(originalAnimeId)}`);
+  }
+
   // Validate that animeId is not purely numeric (HiAnime uses slugs, not numeric IDs)
   if (/^\d+$/.test(animeId)) {
     console.warn('HiAnime getEpisodes: animeId is purely numeric, skipping (HiAnime uses slugs, not numeric IDs)');
     return [];
   }
 
-  // In web environments, use proxy server to avoid CORS
+  // Prioritize original ID (with numeric suffix) for hi-api compatibility
+  const idToUse = originalAnimeId && originalAnimeId !== animeId && /-\d{3,}$/.test(originalAnimeId)
+    ? originalAnimeId
+    : animeId;
+
+  // Try hi-api directly first (works if CORS is enabled or same-origin)
+  if (HI_API_ENABLED) {
+    try {
+      console.log(`🔍 Fetching episodes from hi-api for: ${idToUse}`);
+      const response = await axios.get(`${HI_API_URL}${HI_API_BASE_PATH}/anime/${idToUse}/episodes`, {
+        timeout: 10000,
+      });
+
+      if (response.data && response.data.success && response.data.data) {
+        const episodesData = response.data.data;
+        const rawEpisodes = episodesData.episodes || episodesData.sub || [];
+
+        if (rawEpisodes.length > 0) {
+          console.log(`✅ hi-api episodes result: ${rawEpisodes.length} episodes`);
+          // Format episodes
+          return rawEpisodes.map((ep: any) => ({
+            id: ep.episodeId || `${idToUse}?ep=${ep.number || ep.episode || 0}`,
+            number: ep.number || ep.episode || 0,
+            title: ep.title || `Episode ${ep.number || ep.episode || 0}`,
+            isFiller: ep.isFiller || false,
+          }));
+        }
+      }
+
+      // Try with cleaned ID if original failed
+      if (idToUse !== animeId) {
+        console.log(`🔄 Trying cleaned ID: ${animeId}`);
+        const response2 = await axios.get(`${HI_API_URL}${HI_API_BASE_PATH}/anime/${animeId}/episodes`, {
+          timeout: 10000,
+        });
+
+        if (response2.data && response2.data.success && response2.data.data) {
+          const episodesData = response2.data.data;
+          const rawEpisodes = episodesData.episodes || episodesData.sub || [];
+
+          if (rawEpisodes.length > 0) {
+            console.log(`✅ hi-api episodes result (cleaned ID): ${rawEpisodes.length} episodes`);
+            return rawEpisodes.map((ep: any) => ({
+              id: ep.episodeId || `${animeId}?ep=${ep.number || ep.episode || 0}`,
+              number: ep.number || ep.episode || 0,
+              title: ep.title || `Episode ${ep.number || ep.episode || 0}`,
+              isFiller: ep.isFiller || false,
+            }));
+          }
+        }
+      }
+    } catch (hiApiError: any) {
+      console.warn('⚠️ hi-api direct call failed:', hiApiError?.message);
+      // Fall through to proxy
+    }
+  }
+
+  // Fallback to proxy server (for CORS issues)
   if (isWeb) {
     try {
-      // Use original ID (with numeric suffix) for better hi-api compatibility
-      const idToUse = originalAnimeId && originalAnimeId !== animeId ? originalAnimeId : animeId;
-      console.log(`🔍 Fetching episodes via proxy for: ${idToUse}${originalAnimeId && originalAnimeId !== animeId ? ` (original: ${originalAnimeId}, cleaned: ${animeId})` : ''}`);
-      const response = await axios.get(`${PROXY_SERVER_URL}/scrape/hianime/info`, {
+      console.log(`🔍 Fetching episodes via proxy for: ${idToUse}`);
+      const response = await axios.get(`${PROXY_SERVER_URL}/scrape/hianime/episodes`, {
         params: { animeId: idToUse },
         timeout: 15000,
       });
@@ -823,15 +914,6 @@ export const getHiAnimeEpisodes = async (animeId: string): Promise<any[]> => {
       }
     } catch (proxyError: any) {
       console.warn('⚠️ Proxy episodes failed:', proxyError?.message);
-      console.warn('   Falling back to other methods...');
-    }
-  }
-
-  // Try hi-api first (if enabled)
-  if (HI_API_ENABLED) {
-    const hiApiEpisodes = await getHiAnimeEpisodesHiAPI(animeId, originalAnimeId);
-    if (hiApiEpisodes.length > 0) {
-      return hiApiEpisodes;
     }
   }
 

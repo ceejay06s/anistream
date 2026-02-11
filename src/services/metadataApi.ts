@@ -11,42 +11,139 @@ const JIKAN_BASE_URL = 'https://api.jikan.moe/v4';
 const ANILIST_API_URL = 'https://graphql.anilist.co';
 
 /**
- * Fetch anime by ID from Jikan API
+ * Fetch anime by AniList ID
  */
-export const fetchAnimeById = async (id: string): Promise<Anime | null> => {
+const fetchAnimeByAniListId = async (anilistId: number): Promise<Anime | null> => {
   try {
-    // Jikan uses MAL IDs, try parsing if it's a number
-    const malId = parseInt(id);
-    if (isNaN(malId)) {
-      // If not a number, try searching first
-      return await searchAnimeById(id);
-    }
+    const query = `
+      query ($id: Int) {
+        Media(id: $id, type: ANIME) {
+          id
+          idMal
+          title {
+            romaji
+            english
+          }
+          coverImage {
+            large
+            extraLarge
+          }
+          bannerImage
+          description
+          episodes
+          averageScore
+          startDate {
+            year
+          }
+          genres
+          status
+          duration
+          studios(isMain: true) {
+            nodes {
+              name
+            }
+          }
+        }
+      }
+    `;
 
-    const response = await fetch(`${JIKAN_BASE_URL}/anime/${malId}`);
+    const response = await fetch(ANILIST_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query,
+        variables: { id: anilistId },
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      return null;
     }
 
     const data = await response.json();
-    const animeData = data.data;
+    const media = data.data?.Media;
+    if (!media) {
+      return null;
+    }
+
+    // If we have a MAL ID, prefer using that for consistency
+    const finalId = media.idMal ? String(media.idMal) : String(media.id);
 
     return {
-      id: String(animeData.mal_id),
-      title: animeData.title || animeData.title_english || '',
-      coverImage: animeData.images?.jpg?.image_url || '',
-      bannerImage: animeData.images?.jpg?.large_image_url || '',
-      description: animeData.synopsis || '',
-      episodes: animeData.episodes || 0,
-      rating: animeData.score || 0,
-      year: animeData.year || 0,
-      genres: animeData.genres?.map((g: any) => g.name) || [],
-      status: animeData.status === 'Finished Airing' ? 'Completed' : 'Ongoing',
-      duration: animeData.duration || '24 min',
-      studio: animeData.studios?.[0]?.name || '',
+      id: finalId,
+      title: media.title.english || media.title.romaji || '',
+      coverImage: media.coverImage?.extraLarge || media.coverImage?.large || '',
+      bannerImage: media.bannerImage || '',
+      description: media.description || '',
+      episodes: media.episodes || 0,
+      rating: (media.averageScore || 0) / 10,
+      year: media.startDate?.year || 0,
+      genres: media.genres || [],
+      status: media.status === 'FINISHED' ? 'Completed' : 'Ongoing',
+      duration: media.duration ? `${media.duration} min` : '24 min',
+      studio: media.studios?.nodes?.[0]?.name || '',
     };
   } catch (error: any) {
-    console.error('Error fetching anime by ID:', error);
+    console.error('Error fetching anime from AniList:', error);
     return null;
+  }
+};
+
+/**
+ * Fetch anime by ID from Jikan API (MAL) or AniList API
+ */
+export const fetchAnimeById = async (id: string, searchTitle?: string): Promise<Anime | null> => {
+  try {
+    // Jikan uses MAL IDs, try parsing if it's a number
+    const numericId = parseInt(id);
+    const isNumeric = !isNaN(numericId);
+
+    if (isNumeric) {
+      // Try Jikan (MAL) first
+      const response = await fetch(`${JIKAN_BASE_URL}/anime/${numericId}`);
+      if (response.ok) {
+        const data = await response.json();
+        const animeData = data.data;
+
+        return {
+          id: String(animeData.mal_id),
+          title: animeData.title || animeData.title_english || '',
+          coverImage: animeData.images?.jpg?.image_url || '',
+          bannerImage: animeData.images?.jpg?.large_image_url || '',
+          description: animeData.synopsis || '',
+          episodes: animeData.episodes || 0,
+          rating: animeData.score || 0,
+          year: animeData.year || 0,
+          genres: animeData.genres?.map((g: any) => g.name) || [],
+          status: animeData.status === 'Finished Airing' ? 'Completed' : 'Ongoing',
+          duration: animeData.duration || '24 min',
+          studio: animeData.studios?.[0]?.name || '',
+        };
+      }
+
+      // If 404, try AniList API (might be an AniList ID)
+      if (response.status === 404) {
+        console.log(`MAL ID ${numericId} not found, trying AniList API...`);
+        const anilistResult = await fetchAnimeByAniListId(numericId);
+        if (anilistResult) {
+          return anilistResult;
+        }
+      }
+    }
+
+    // If not numeric or both APIs failed, try searching by title or ID
+    const searchQuery = searchTitle || id;
+    console.log(`Trying search fallback with query: "${searchQuery}"`);
+    return await searchAnimeById(searchQuery);
+  } catch (error: any) {
+    console.error('Error fetching anime by ID:', error);
+    // Last resort: try searching by title or ID
+    const searchQuery = searchTitle || id;
+    console.log('Trying search fallback after error with query:', searchQuery);
+    return await searchAnimeById(searchQuery);
   }
 };
 

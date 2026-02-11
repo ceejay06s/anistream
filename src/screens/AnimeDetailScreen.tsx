@@ -19,7 +19,7 @@ const { width } = Dimensions.get('window');
 
 const AnimeDetailScreen: React.FC<AnimeDetailScreenProps> = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
-  const { animeId, anime: passedAnime } = route.params;
+  const { animeId, anime: passedAnime, searchTitle } = route.params as any;
   const [anime, setAnime] = useState<Anime | null>(passedAnime || null);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [loading, setLoading] = useState(!passedAnime);
@@ -55,8 +55,8 @@ const AnimeDetailScreen: React.FC<AnimeDetailScreenProps> = ({ navigation, route
     setLoading(true);
     setError(null);
     try {
-      console.log('Fetching anime details for ID:', animeId);
-      const data = await fetchAnimeById(animeId);
+      console.log('Fetching anime details for ID:', animeId, 'with search title:', searchTitle);
+      const data = await fetchAnimeById(animeId, searchTitle);
       if (data) {
         console.log('Anime data loaded:', data.title);
         setAnime(data);
@@ -128,6 +128,36 @@ const AnimeDetailScreen: React.FC<AnimeDetailScreenProps> = ({ navigation, route
         }
       } else {
         console.log('📌 animeId is numeric or not a slug format, skipping direct lookup and using search...');
+        
+        // Try converting title to slug format and attempt direct lookup
+        // This handles cases where we have "One Piece" and should try "one-piece" or "one-piece-100"
+        if (anime.title) {
+          const titleSlug = anime.title
+            .toLowerCase()
+            .replace(/[^\w\s]/g, '')
+            .replace(/\s+/g, '-')
+            .replace(/-+/g, '-')
+            .replace(/^-+|-+$/g, '');
+          
+          if (titleSlug && titleSlug !== animeId && /^[a-z0-9-]+$/i.test(titleSlug) && titleSlug.includes('-')) {
+            console.log(`📌 Trying direct lookup with slugified title: ${titleSlug}`);
+            try {
+              const hianimeInfo = await getStreamingAnimeInfo(titleSlug, 'HiAnime');
+              if (hianimeInfo && hianimeInfo.episodes.length > 0) {
+                console.log(`✅ Direct lookup with slug successful: ${hianimeInfo.episodes.length} episodes from HiAnime`);
+                const formattedEpisodes: Episode[] = hianimeInfo.episodes.map((ep: Episode) => ({
+                  ...ep,
+                  source: 'HiAnime',
+                }));
+                setEpisodes(formattedEpisodes);
+                setLoadingEpisodes(false);
+                return;
+              }
+            } catch (err) {
+              console.log('Direct lookup with slug failed, continuing with search...');
+            }
+          }
+        }
       }
 
       const normalizeTitle = (title: string): string => {
@@ -151,11 +181,69 @@ const AnimeDetailScreen: React.FC<AnimeDetailScreenProps> = ({ navigation, route
           .trim();
       };
 
-      const hasSeasonIndicator = /\b(season|s)\s*\d+\b|\b(\d+)(st|nd|rd|th)\s*season\b|\bpart\s*\d+\b|\bcour\s*\d+\b|\bii\b|\biii\b|\biv\b/i.test(anime.title);
+      // Detect season indicators - improved to handle "second season", "2nd season", etc.
+      const hasSeasonIndicator = /\b(season|s)\s*\d+\b|\b(\d+)(st|nd|rd|th)\s*season\b|\b(second|third|fourth|fifth)\s+season\b|\bpart\s*\d+\b|\bcour\s*\d+\b|\bii\b|\biii\b|\biv\b/i.test(anime.title);
+      
+      // Extract season number if present (for better matching)
+      const seasonMatch = anime.title.match(/\b(season|s)\s*(\d+)\b|\b(\d+)(st|nd|rd|th)\s*season\b|\b(second|third|fourth|fifth)\s+season\b/i);
+      const seasonNumber = seasonMatch 
+        ? (seasonMatch[2] || seasonMatch[3] || (seasonMatch[5] === 'second' ? '2' : seasonMatch[5] === 'third' ? '3' : seasonMatch[5] === 'fourth' ? '4' : seasonMatch[5] === 'fifth' ? '5' : null))
+        : null;
 
       // If direct lookup didn't work, search by title and find best match
-      console.log('🔍 Searching for streaming sources:', anime.title);
-      let searchResults = await searchStreamingAnime(anime.title);
+      // Use searchTitle if available (might be better formatted for search)
+      let searchQuery = searchTitle && searchTitle.trim() ? searchTitle.trim() : anime.title;
+      console.log('🔍 Searching for streaming sources:', searchQuery);
+      if (searchTitle && searchTitle !== anime.title) {
+        console.log(`   Using searchTitle from params: "${searchTitle}" (anime title: "${anime.title}")`);
+      }
+      
+      // Extract base title for better searching (remove "The second season of" etc.)
+      // "The second season of *Sousou no Frieren*" -> "Sousou no Frieren" or "Frieren"
+      // But only if we're not already using searchTitle
+      if (!searchTitle || searchTitle === anime.title) {
+        const seasonPrefixPattern = /^(the\s+)?(second|third|fourth|fifth|2nd|3rd|4th|5th)\s+season\s+of\s+/i;
+        if (seasonPrefixPattern.test(anime.title)) {
+          const baseTitle = anime.title.replace(seasonPrefixPattern, '').replace(/^\*|\*$/g, '').trim();
+          if (baseTitle) {
+            searchQuery = baseTitle;
+            console.log('🔍 Extracted base title for search:', searchQuery);
+          }
+        }
+      }
+      
+      // Remove common prefixes like "The second season of", "The third season of", etc.
+      const seasonPrefixPattern = /^(the\s+)?(second|third|fourth|fifth|2nd|3rd|4th|5th)\s+season\s+of\s+/i;
+      if (seasonPrefixPattern.test(anime.title)) {
+        const baseTitle = anime.title.replace(seasonPrefixPattern, '').replace(/^\*|\*$/g, '').trim();
+        if (baseTitle) {
+          searchQuery = baseTitle;
+          console.log('🔍 Extracted base title for search:', searchQuery);
+        }
+      }
+      
+      // Also try searching with a slugified version of the title (e.g., "One Piece" -> "one-piece")
+      // This can help find matches when the title format differs
+      const titleSlug = searchQuery
+        .toLowerCase()
+        .replace(/[^\w\s]/g, '')
+        .replace(/\s+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-+|-+$/g, '');
+      
+      let searchResults = await searchStreamingAnime(searchQuery);
+      
+      // If no results with base title, try slug format
+      if (searchResults.length === 0 && titleSlug && titleSlug !== searchQuery.toLowerCase()) {
+        console.log('🔍 No results with base title, trying slug format:', titleSlug);
+        searchResults = await searchStreamingAnime(titleSlug);
+      }
+      
+      // If still no results, try original title
+      if (searchResults.length === 0 && searchQuery !== anime.title) {
+        console.log('🔍 No results with base title, trying original title:', anime.title);
+        searchResults = await searchStreamingAnime(anime.title);
+      }
 
       if (searchResults.length === 0) {
         const baseTitle = stripSeasonMarkers(anime.title);
@@ -165,40 +253,106 @@ const AnimeDetailScreen: React.FC<AnimeDetailScreenProps> = ({ navigation, route
         }
       }
 
+      // If still no results, try searching with just the first few words of the title
+      if (searchResults.length === 0) {
+        const titleWords = anime.title.split(' ').filter(w => w.length > 2);
+        if (titleWords.length > 3) {
+          const shortTitle = titleWords.slice(0, 3).join(' ');
+          console.log('🔍 No results. Retrying with shortened title:', shortTitle);
+          searchResults = await searchStreamingAnime(shortTitle);
+        }
+      }
+
       if (searchResults.length === 0) {
         console.warn('❌ No streaming sources found for:', anime.title);
+        console.warn('   Tried searches with:', [
+          anime.title,
+          stripSeasonMarkers(anime.title),
+          anime.title.split(' ').filter(w => w.length > 2).slice(0, 3).join(' ')
+        ].filter(Boolean));
         setEpisodes([]);
         setLoadingEpisodes(false);
         return;
       }
 
+      console.log(`📊 Found ${searchResults.length} search results for "${anime.title}":`);
+      // Log all search results for debugging
+      searchResults.slice(0, 10).forEach((r, i) => {
+        console.log(`   ${i + 1}. "${r.title}" (ID: ${r.id})`);
+      });
+
       // Find the best match by comparing titles more carefully
       const normalizedAnimeTitle = normalizeTitle(stripSeasonMarkers(anime.title));
-      let bestMatch = searchResults[0];
+      let bestMatch: typeof searchResults[0] | null = null;
       let bestScore = 0;
       let foundSeasonMatch = false;
 
       for (const result of searchResults) {
         const normalizedResultTitle = normalizeTitle(result.title);
         
-        // Exact match gets highest score
+        // Check if result has matching season number
+        const resultSeasonMatch = result.title.match(/\b(season|s)\s*(\d+)\b|\b(\d+)(st|nd|rd|th)\s*season\b|\b(second|third|fourth|fifth)\s+season\b/i);
+        const resultSeasonNumber = resultSeasonMatch 
+          ? (resultSeasonMatch[2] || resultSeasonMatch[3] || (resultSeasonMatch[5] === 'second' ? '2' : resultSeasonMatch[5] === 'third' ? '3' : resultSeasonMatch[5] === 'fourth' ? '4' : resultSeasonMatch[5] === 'fifth' ? '5' : null))
+          : null;
+        
+        // If we have a specific season number we're looking for
+        if (seasonNumber) {
+          if (resultSeasonNumber) {
+            if (seasonNumber === resultSeasonNumber) {
+              // Exact season match - give very high score
+              const normalizedResultTitleStripped = normalizeTitle(stripSeasonMarkers(result.title));
+              const baseScore = normalizedResultTitleStripped === normalizedAnimeTitle ? 100 : 80;
+              if (baseScore > bestScore) {
+                bestMatch = result;
+                bestScore = baseScore;
+                foundSeasonMatch = true;
+                console.log(`   📌 Found season ${seasonNumber} match: "${result.title}" (score: ${baseScore})`);
+              }
+              continue; // Don't break, keep checking for better matches
+            } else {
+              // Different season - skip this result
+              console.log(`   ⏭️ Skipping wrong season: "${result.title}" (has season ${resultSeasonNumber}, need ${seasonNumber})`);
+              continue;
+            }
+          } else {
+            // Result has no season indicator but we need a specific season
+            // This is likely Season 1 - skip it when looking for Season 2+
+            console.log(`   ⏭️ Skipping result without season indicator: "${result.title}" (need season ${seasonNumber})`);
+            continue;
+          }
+        }
+
+        // Exact match gets highest score (only when not looking for specific season)
         if (normalizedResultTitle === normalizedAnimeTitle) {
           bestMatch = result;
           bestScore = 100;
           if (hasSeasonIndicator) {
-            foundSeasonMatch = /\b(season|s)\s*\d+\b|\b(\d+)(st|nd|rd|th)\s*season\b|\bpart\s*\d+\b|\bcour\s*\d+\b|\bii\b|\biii\b|\biv\b/i.test(result.title);
+            foundSeasonMatch = /\b(season|s)\s*\d+\b|\b(\d+)(st|nd|rd|th)\s*season\b|\b(second|third|fourth|fifth)\s+season\b|\bpart\s*\d+\b|\bcour\s*\d+\b|\bii\b|\biii\b|\biv\b/i.test(result.title);
           }
           break;
         }
         
-        // Calculate similarity score
+        // Calculate similarity score - improved algorithm
         const words = normalizedAnimeTitle.split(' ').filter(w => w.length > 2);
-        const matchingWords = words.filter(word => 
-          normalizedResultTitle.includes(word)
-        ).length;
-        const score = words.length > 0 ? (matchingWords / words.length) * 100 : 0;
+        const resultWords = normalizedResultTitle.split(' ').filter(w => w.length > 2);
         
-        // Bonus points for matching key words (like "season", "part", numbers)
+        // Count matching words (case-insensitive)
+        const matchingWords = words.filter(word => 
+          resultWords.some(rw => rw === word || rw.includes(word) || word.includes(rw))
+        ).length;
+        
+        // Also check if result title contains significant words from anime title
+        const significantMatches = words.filter(word => 
+          word.length > 3 && normalizedResultTitle.includes(word)
+        ).length;
+        
+        // Use the better of the two matching methods
+        const wordMatchScore = words.length > 0 ? (matchingWords / words.length) * 100 : 0;
+        const significantMatchScore = words.length > 0 ? (significantMatches / words.length) * 100 : 0;
+        const score = Math.max(wordMatchScore, significantMatchScore);
+        
+        // Bonus points for matching key words
         const keyWords = ['season', 'part', 'the', 'culling', 'game'];
         const matchingKeyWords = keyWords.filter(word => 
           normalizedAnimeTitle.includes(word) && normalizedResultTitle.includes(word)
@@ -207,10 +361,19 @@ const AnimeDetailScreen: React.FC<AnimeDetailScreenProps> = ({ navigation, route
         let totalScore = score + bonusScore;
 
         if (hasSeasonIndicator) {
-          const resultHasSeason = /\b(season|s)\s*\d+\b|\b(\d+)(st|nd|rd|th)\s*season\b|\bpart\s*\d+\b|\bcour\s*\d+\b|\bii\b|\biii\b|\biv\b/i.test(result.title);
+          const resultHasSeason = /\b(season|s)\s*\d+\b|\b(\d+)(st|nd|rd|th)\s*season\b|\b(second|third|fourth|fifth)\s+season\b|\bpart\s*\d+\b|\bcour\s*\d+\b|\bii\b|\biii\b|\biv\b/i.test(result.title);
           if (resultHasSeason) {
             foundSeasonMatch = true;
-            totalScore += 15;
+            // If we have specific season numbers, check if they match
+            if (seasonNumber && resultSeasonNumber) {
+              if (seasonNumber === resultSeasonNumber) {
+                totalScore += 30; // Big bonus for exact season match
+              } else {
+                totalScore -= 50; // Big penalty for wrong season
+              }
+            } else {
+              totalScore += 15; // General bonus for having season indicator
+            }
           } else {
             totalScore -= 10;
           }
@@ -222,9 +385,34 @@ const AnimeDetailScreen: React.FC<AnimeDetailScreenProps> = ({ navigation, route
         }
       }
 
-      console.log(`✅ Best match (${bestScore.toFixed(0)}% similarity):`, bestMatch.source, 'Title:', bestMatch.title, 'ID:', bestMatch.id);
+      // If no match found, use first result as fallback but with low score
+      if (!bestMatch && searchResults.length > 0) {
+        bestMatch = searchResults[0];
+        console.warn(`⚠️ No good match found, falling back to first result: "${bestMatch.title}"`);
+      }
 
-      if (hasSeasonIndicator && foundSeasonMatch) {
+      if (!bestMatch) {
+        console.warn('❌ No matches found at all');
+        setEpisodes([]);
+        setLoadingEpisodes(false);
+        return;
+      }
+
+      console.log(`✅ Best match (${bestScore.toFixed(0)}% similarity):`, bestMatch.source, 'Title:', bestMatch.title, 'ID:', bestMatch.id);
+      console.log(`   Original title: "${anime.title}"`);
+      console.log(`   Match title: "${bestMatch.title}"`);
+
+      // Check if we were looking for a specific season but couldn't find it
+      if (seasonNumber && bestScore === 0) {
+        console.warn(`⚠️ Could not find Season ${seasonNumber} in search results. Available results:`);
+        searchResults.slice(0, 5).forEach((r, i) => console.warn(`   ${i + 1}. ${r.title}`));
+        setEpisodes([]);
+        setLoadingEpisodes(false);
+        return;
+      }
+
+      // Additional check: ensure best match has season indicator when looking for specific season
+      if (seasonNumber && foundSeasonMatch) {
         const bestMatchHasSeason = /\b(season|s)\s*\d+\b|\b(\d+)(st|nd|rd|th)\s*season\b|\bpart\s*\d+\b|\bcour\s*\d+\b|\bii\b|\biii\b|\biv\b/i.test(bestMatch.title);
         if (!bestMatchHasSeason) {
           console.warn('⚠️ Found season-specific results, but best match lacks season indicator. Skipping to avoid wrong episodes.');
@@ -234,61 +422,53 @@ const AnimeDetailScreen: React.FC<AnimeDetailScreenProps> = ({ navigation, route
         }
       }
       
-      // Validate match quality - require at least 50% similarity to avoid wrong matches
-      if (bestScore < 50) {
-        console.warn(`⚠️ Best match similarity (${bestScore.toFixed(0)}%) is too low. Skipping to avoid wrong episodes.`);
+      // Validate match quality - require at least 30% similarity (lowered from 50% to be more lenient)
+      // If we only have one result, be more lenient (accept 20% similarity)
+      const minSimilarity = searchResults.length === 1 ? 20 : 30;
+      if (bestScore < minSimilarity) {
+        console.warn(`⚠️ Best match similarity (${bestScore.toFixed(0)}%) is too low (minimum: ${minSimilarity}%). Skipping to avoid wrong episodes.`);
         console.warn(`   Looking for: "${anime.title}"`);
         console.warn(`   Best match: "${bestMatch.title}"`);
+        console.warn(`   Total search results: ${searchResults.length}`);
         setEpisodes([]);
         setLoadingEpisodes(false);
         return;
       }
 
       // Fetch episodes using the best match ID
-      console.log(`🔍 Fetching episodes for ID: ${bestMatch.id}`);
-      const streamingInfo = await getStreamingAnimeInfo(bestMatch.id, bestMatch.source);
+      // Use the ID directly from search results (it's already in the correct format like "one-piece-100")
+      const animeIdToUse = bestMatch.id;
+      console.log(`🔍 Fetching episodes for ID: ${animeIdToUse} (from search result)`);
+      console.log(`   Search result title: "${bestMatch.title}"`);
+      console.log(`   Search result source: ${bestMatch.source}`);
+      console.log(`   Search result URL: "${bestMatch.url || 'N/A'}"`);
       
-      // Validate that we got episodes for the correct anime
-      if (streamingInfo && streamingInfo.episodes.length > 0) {
-        // Check if episode titles seem to match the anime we're looking for
-        // This is a basic sanity check - if all episode titles are completely different, something is wrong
-        // BUT: Skip validation for generic episode titles like "Episode 1", "Episode 2", etc.
-        const sampleEpTitle = streamingInfo.episodes[0]?.title?.toLowerCase() || '';
-        const isGenericTitle = /^(episode\s*\d+|ep\s*\d+|\d+)$/i.test(sampleEpTitle.trim());
-        
-        if (!isGenericTitle) {
-          // Only validate if episode title is not generic
-        const animeTitleWords = normalizeTitle(stripSeasonMarkers(anime.title)).split(' ').filter(w => w.length > 3);
-          const hasMatchingWords = animeTitleWords.some(word => sampleEpTitle.includes(word));
-          
-          if (!hasMatchingWords && sampleEpTitle && animeTitleWords.length > 0) {
-            console.warn(`⚠️ Episode titles don't seem to match the anime. First episode: "${streamingInfo.episodes[0]?.title}"`);
-            console.warn(`   This might be episodes from a different anime. Skipping.`);
-            setEpisodes([]);
-            setLoadingEpisodes(false);
-            return;
-          }
-        } else {
-          // For generic titles, validate by checking episode IDs/URLs instead
-          const sampleEpId = streamingInfo.episodes[0]?.id?.toLowerCase() || '';
-          const sampleEpUrl = streamingInfo.episodes[0]?.url?.toLowerCase() || '';
-          const animeSlug = normalizeTitle(stripSeasonMarkers(anime.title)).replace(/\s+/g, '-').replace(/[^\w-]/g, '');
-          const hasMatchingId = sampleEpId.includes(animeSlug) || sampleEpUrl.includes(animeSlug);
-          
-          if (!hasMatchingId && sampleEpId && animeSlug.length > 3) {
-            console.warn(`⚠️ Episode IDs don't seem to match the anime. First episode ID: "${streamingInfo.episodes[0]?.id}"`);
-            console.warn(`   This might be episodes from a different anime. Skipping.`);
-            setEpisodes([]);
-            setLoadingEpisodes(false);
-            return;
+      // Try to extract full ID from URL if available (with numeric suffix)
+      let finalAnimeId = animeIdToUse;
+      if (bestMatch.url && bestMatch.url.includes('/watch/')) {
+        const urlMatch = bestMatch.url.match(/\/watch\/([^/?]+)/);
+        if (urlMatch && urlMatch[1]) {
+          const urlId = urlMatch[1];
+          // Use URL ID if it's longer (has numeric suffix) or has numeric suffix and current ID doesn't
+          if ((urlId.length > animeIdToUse.length && urlId.startsWith(animeIdToUse)) || 
+              (urlId.match(/-\d{3,}$/) && !animeIdToUse.match(/-\d{3,}$/))) {
+            finalAnimeId = urlId;
+            console.log(`📌 Using full ID from URL: ${finalAnimeId} (was: ${animeIdToUse})`);
           }
         }
       }
-
+      
+      const streamingInfo = await getStreamingAnimeInfo(finalAnimeId, bestMatch.source);
+      
+      // Validate that we got episodes for the correct anime
+      // Simplified validation - be more lenient since we already matched the anime via search
       if (streamingInfo && streamingInfo.episodes.length > 0) {
         console.log(`✅ Loaded ${streamingInfo.episodes.length} episodes from ${bestMatch.source}`);
+        console.log(`   Using anime ID: ${animeIdToUse}`);
+        console.log(`   First episode: ${streamingInfo.episodes[0]?.title || streamingInfo.episodes[0]?.id || 'N/A'}`);
         
         // Format episodes for the app
+        // Since we already matched via search, trust the episodes are correct
         const formattedEpisodes: Episode[] = streamingInfo.episodes.map((ep: Episode) => ({
           ...ep,
           source: bestMatch.source,
@@ -296,7 +476,50 @@ const AnimeDetailScreen: React.FC<AnimeDetailScreenProps> = ({ navigation, route
         
         setEpisodes(formattedEpisodes);
       } else {
-        console.warn(`❌ No episodes found on ${bestMatch.source}`);
+        console.warn(`❌ No episodes found on ${bestMatch.source} for ID: ${finalAnimeId}`);
+        console.warn(`   Original ID from search: ${animeIdToUse}`);
+        console.warn(`   Search result URL: ${bestMatch.url || 'N/A'}`);
+        
+        // Fallback: try other search results
+        if (searchResults.length > 1) {
+          console.log(`🔄 Trying other search results (${searchResults.length} total)...`);
+          for (let i = 0; i < Math.min(3, searchResults.length); i++) {
+            if (searchResults[i].id === bestMatch.id) continue;
+            
+            const fallbackId = searchResults[i].id;
+            console.log(`   Trying result ${i + 1}: ${fallbackId} - "${searchResults[i].title}"`);
+            
+            try {
+              // Extract full ID from URL if available
+              let fallbackFinalId = fallbackId;
+              const fallbackUrl = searchResults[i].url;
+              if (fallbackUrl && fallbackUrl.includes('/watch/')) {
+                const urlMatch = fallbackUrl.match(/\/watch\/([^/?]+)/);
+                if (urlMatch && urlMatch[1]) {
+                  fallbackFinalId = urlMatch[1];
+                }
+              }
+              
+              const fallbackInfo = await getStreamingAnimeInfo(fallbackFinalId, searchResults[i].source);
+              if (fallbackInfo && fallbackInfo.episodes.length > 0) {
+                console.log(`✅ Fallback successful with result ${i + 1}: ${fallbackInfo.episodes.length} episodes`);
+                const formattedEpisodes: Episode[] = fallbackInfo.episodes.map((ep: Episode) => ({
+                  ...ep,
+                  source: searchResults[i].source,
+                }));
+                setEpisodes(formattedEpisodes);
+                setLoadingEpisodes(false);
+                return;
+              }
+            } catch (fallbackErr: any) {
+              console.warn(`   Fallback ${i + 1} failed:`, fallbackErr?.message || fallbackErr);
+            }
+          }
+        }
+        
+        console.error(`❌ All episode fetch attempts failed for: "${anime.title}"`);
+        console.error(`   Tried ID: ${finalAnimeId}`);
+        console.error(`   Search found ${searchResults.length} results`);
         setEpisodes([]);
       }
     } catch (err) {

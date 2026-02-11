@@ -1,6 +1,6 @@
 import React from 'react';
 import BrowseScreen from '../src/screens/BrowseScreen';
-import { useNavigationAdapter } from './_nav';
+import { useNavigationAdapter } from '../src/utils/navigation';
 
 const BrowseRoute = () => {
   const navigation = useNavigationAdapter();

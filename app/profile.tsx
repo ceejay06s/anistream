@@ -1,6 +1,6 @@
 import React from 'react';
 import ProfileScreen from '../src/screens/ProfileScreen';
-import { useNavigationAdapter } from './_nav';
+import { useNavigationAdapter } from '../src/utils/navigation';
 
 const ProfileRoute = () => {
   const navigation = useNavigationAdapter();
