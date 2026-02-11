@@ -41,9 +41,15 @@ const AnimeDetailScreen: React.FC<AnimeDetailScreenProps> = ({ navigation, route
       console.log('Using passed anime data - no API call needed!');
     }
     
-    // Always fetch episodes from Animeflix
-    loadEpisodes();
   }, [animeId, passedAnime]);
+
+  useEffect(() => {
+    if (!anime) {
+      return;
+    }
+
+    loadEpisodes();
+  }, [animeId, anime?.title]);
 
   const loadAnimeDetails = async () => {
     setLoading(true);
@@ -124,9 +130,40 @@ const AnimeDetailScreen: React.FC<AnimeDetailScreenProps> = ({ navigation, route
         console.log('📌 animeId is numeric or not a slug format, skipping direct lookup and using search...');
       }
 
+      const normalizeTitle = (title: string): string => {
+        return title.toLowerCase()
+          .replace(/[^\w\s]/g, '') // Remove special characters
+          .replace(/\s+/g, ' ')     // Normalize whitespace
+          .trim();
+      };
+
+      const stripSeasonMarkers = (title: string): string => {
+        return title
+          .replace(/\b(season|s)\s*\d+\b/gi, '')
+          .replace(/\b(\d+)(st|nd|rd|th)\s*season\b/gi, '')
+          .replace(/\bpart\s*\d+\b/gi, '')
+          .replace(/\bcour\s*\d+\b/gi, '')
+          .replace(/\bseason\s*two\b/gi, '')
+          .replace(/\bseason\s*three\b/gi, '')
+          .replace(/\bseason\s*four\b/gi, '')
+          .replace(/\bii\b|\biii\b|\biv\b/gi, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+      };
+
+      const hasSeasonIndicator = /\b(season|s)\s*\d+\b|\b(\d+)(st|nd|rd|th)\s*season\b|\bpart\s*\d+\b|\bcour\s*\d+\b|\bii\b|\biii\b|\biv\b/i.test(anime.title);
+
       // If direct lookup didn't work, search by title and find best match
       console.log('🔍 Searching for streaming sources:', anime.title);
-      const searchResults = await searchStreamingAnime(anime.title);
+      let searchResults = await searchStreamingAnime(anime.title);
+
+      if (searchResults.length === 0) {
+        const baseTitle = stripSeasonMarkers(anime.title);
+        if (baseTitle && baseTitle.toLowerCase() !== anime.title.toLowerCase()) {
+          console.log('🔍 No results for full title. Retrying with base title:', baseTitle);
+          searchResults = await searchStreamingAnime(baseTitle);
+        }
+      }
 
       if (searchResults.length === 0) {
         console.warn('❌ No streaming sources found for:', anime.title);
@@ -136,16 +173,10 @@ const AnimeDetailScreen: React.FC<AnimeDetailScreenProps> = ({ navigation, route
       }
 
       // Find the best match by comparing titles more carefully
-      const normalizeTitle = (title: string): string => {
-        return title.toLowerCase()
-          .replace(/[^\w\s]/g, '') // Remove special characters
-          .replace(/\s+/g, ' ')     // Normalize whitespace
-          .trim();
-      };
-
-      const normalizedAnimeTitle = normalizeTitle(anime.title);
+      const normalizedAnimeTitle = normalizeTitle(stripSeasonMarkers(anime.title));
       let bestMatch = searchResults[0];
       let bestScore = 0;
+      let foundSeasonMatch = false;
 
       for (const result of searchResults) {
         const normalizedResultTitle = normalizeTitle(result.title);
@@ -154,6 +185,9 @@ const AnimeDetailScreen: React.FC<AnimeDetailScreenProps> = ({ navigation, route
         if (normalizedResultTitle === normalizedAnimeTitle) {
           bestMatch = result;
           bestScore = 100;
+          if (hasSeasonIndicator) {
+            foundSeasonMatch = /\b(season|s)\s*\d+\b|\b(\d+)(st|nd|rd|th)\s*season\b|\bpart\s*\d+\b|\bcour\s*\d+\b|\bii\b|\biii\b|\biv\b/i.test(result.title);
+          }
           break;
         }
         
@@ -170,7 +204,17 @@ const AnimeDetailScreen: React.FC<AnimeDetailScreenProps> = ({ navigation, route
           normalizedAnimeTitle.includes(word) && normalizedResultTitle.includes(word)
         ).length;
         const bonusScore = matchingKeyWords * 10;
-        const totalScore = score + bonusScore;
+        let totalScore = score + bonusScore;
+
+        if (hasSeasonIndicator) {
+          const resultHasSeason = /\b(season|s)\s*\d+\b|\b(\d+)(st|nd|rd|th)\s*season\b|\bpart\s*\d+\b|\bcour\s*\d+\b|\bii\b|\biii\b|\biv\b/i.test(result.title);
+          if (resultHasSeason) {
+            foundSeasonMatch = true;
+            totalScore += 15;
+          } else {
+            totalScore -= 10;
+          }
+        }
         
         if (totalScore > bestScore) {
           bestScore = totalScore;
@@ -179,6 +223,16 @@ const AnimeDetailScreen: React.FC<AnimeDetailScreenProps> = ({ navigation, route
       }
 
       console.log(`✅ Best match (${bestScore.toFixed(0)}% similarity):`, bestMatch.source, 'Title:', bestMatch.title, 'ID:', bestMatch.id);
+
+      if (hasSeasonIndicator && foundSeasonMatch) {
+        const bestMatchHasSeason = /\b(season|s)\s*\d+\b|\b(\d+)(st|nd|rd|th)\s*season\b|\bpart\s*\d+\b|\bcour\s*\d+\b|\bii\b|\biii\b|\biv\b/i.test(bestMatch.title);
+        if (!bestMatchHasSeason) {
+          console.warn('⚠️ Found season-specific results, but best match lacks season indicator. Skipping to avoid wrong episodes.');
+          setEpisodes([]);
+          setLoadingEpisodes(false);
+          return;
+        }
+      }
       
       // Validate match quality - require at least 50% similarity to avoid wrong matches
       if (bestScore < 50) {
@@ -204,7 +258,7 @@ const AnimeDetailScreen: React.FC<AnimeDetailScreenProps> = ({ navigation, route
         
         if (!isGenericTitle) {
           // Only validate if episode title is not generic
-          const animeTitleWords = normalizeTitle(anime.title).split(' ').filter(w => w.length > 3);
+        const animeTitleWords = normalizeTitle(stripSeasonMarkers(anime.title)).split(' ').filter(w => w.length > 3);
           const hasMatchingWords = animeTitleWords.some(word => sampleEpTitle.includes(word));
           
           if (!hasMatchingWords && sampleEpTitle && animeTitleWords.length > 0) {
@@ -218,7 +272,7 @@ const AnimeDetailScreen: React.FC<AnimeDetailScreenProps> = ({ navigation, route
           // For generic titles, validate by checking episode IDs/URLs instead
           const sampleEpId = streamingInfo.episodes[0]?.id?.toLowerCase() || '';
           const sampleEpUrl = streamingInfo.episodes[0]?.url?.toLowerCase() || '';
-          const animeSlug = normalizeTitle(anime.title).replace(/\s+/g, '-').replace(/[^\w-]/g, '');
+          const animeSlug = normalizeTitle(stripSeasonMarkers(anime.title)).replace(/\s+/g, '-').replace(/[^\w-]/g, '');
           const hasMatchingId = sampleEpId.includes(animeSlug) || sampleEpUrl.includes(animeSlug);
           
           if (!hasMatchingId && sampleEpId && animeSlug.length > 3) {
