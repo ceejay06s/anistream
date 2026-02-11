@@ -12,8 +12,8 @@ env:
   NODE_VERSION: '20'
 
 jobs:
-  build-and-deploy:
-    name: Build & Deploy to Railway
+  deploy:
+    name: Deploy to Railway
     runs-on: ubuntu-latest
     defaults:
       run:

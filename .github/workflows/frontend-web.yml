@@ -90,6 +90,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: production
+      url: https://anistream-pink.vercel.app
 
     steps:
       - uses: actions/download-artifact@v4

@@ -10,18 +10,28 @@ const app = new Hono();
 // Middleware
 app.use('*', logger());
 app.use('*', cors({
-  origin: ['http://localhost:8800', 'http://localhost:5173', 'http://localhost:8081', 'http://localhost:19006'],
+  origin: [
+    'http://localhost:8800',
+    'http://localhost:5173',
+    'http://localhost:8081',
+    'http://localhost:19006',
+    'https://anistream-pink.vercel.app',
+  ],
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
 }));
 
 // Health check
 app.get('/', (c) => {
-  return c.json({ 
+  return c.json({
     message: 'AniStream API',
     version: '1.0.0',
     status: 'ok'
   });
+});
+
+app.get('/api', (c) => {
+  return c.json({ status: 'ok' });
 });
 
 // Routes
