@@ -1,0 +1,125 @@
+name: Android Build
+
+on:
+  push:
+    branches: [v2, master]
+    tags:
+      - 'v*'
+    paths:
+      - 'frontend-native/**'
+      - '.github/workflows/android-build.yml'
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: 'Build profile'
+        required: true
+        default: 'preview'
+        type: choice
+        options:
+          - preview
+          - production
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  determine-profile:
+    name: Determine Build Profile
+    runs-on: ubuntu-latest
+    outputs:
+      profile: ${{ steps.set-profile.outputs.profile }}
+    steps:
+      - name: Set build profile
+        id: set-profile
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "profile=${{ inputs.profile }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "profile=production" >> $GITHUB_OUTPUT
+          else
+            echo "profile=preview" >> $GITHUB_OUTPUT
+          fi
+
+  build-android:
+    name: Build Android (${{ needs.determine-profile.outputs.profile }})
+    needs: determine-profile
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend-native
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'frontend-native/package-lock.json'
+
+      - run: npm ci
+
+      - uses: expo/expo-github-action@v8
+        with:
+          expo-version: latest
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build Android
+        run: |
+          eas build \
+            --platform android \
+            --profile ${{ needs.determine-profile.outputs.profile }} \
+            --non-interactive \
+            --wait
+        env:
+          EXPO_PUBLIC_API_URL: ${{ vars.API_URL }}
+
+      - name: Get build URL
+        id: build-url
+        run: |
+          BUILD_URL=$(eas build:list --platform android --limit 1 --json --non-interactive | jq -r '.[0].artifacts.buildUrl')
+          echo "url=$BUILD_URL" >> $GITHUB_OUTPUT
+
+      - name: Download APK
+        if: needs.determine-profile.outputs.profile == 'preview'
+        run: curl -L -o AniStream.apk "${{ steps.build-url.outputs.url }}"
+
+      - uses: actions/upload-artifact@v4
+        if: needs.determine-profile.outputs.profile == 'preview'
+        with:
+          name: android-apk-${{ github.sha }}
+          path: frontend-native/AniStream.apk
+          retention-days: 30
+
+  create-release:
+    name: Create Release
+    needs: [determine-profile, build-android]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: expo/expo-github-action@v8
+        with:
+          expo-version: latest
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Get build URL
+        id: build-url
+        working-directory: ./frontend-native
+        run: |
+          BUILD_URL=$(eas build:list --platform android --limit 1 --json --non-interactive | jq -r '.[0].artifacts.buildUrl')
+          echo "url=$BUILD_URL" >> $GITHUB_OUTPUT
+
+      - name: Download AAB
+        run: curl -L -o AniStream-${{ github.ref_name }}.aab "${{ steps.build-url.outputs.url }}"
+
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: AniStream-${{ github.ref_name }}.aab
+          generate_release_notes: true
