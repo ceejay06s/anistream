@@ -103,11 +103,14 @@ export async function getEpisodeSources(
       headers: data.headers || { Referer: 'https://hianime.to/' },
     };
 
-    if (data.subtitles && Array.isArray(data.subtitles)) {
-      result.tracks = data.subtitles.map((sub: any) => ({
-        url: sub.url || '',
-        lang: sub.lang || 'Unknown',
+    // Check for subtitles/tracks - aniwatch may return them under different property names
+    const subtitleData = data.subtitles || (data as any).tracks || (data as any).captions || [];
+    if (Array.isArray(subtitleData) && subtitleData.length > 0) {
+      result.tracks = subtitleData.map((sub: any) => ({
+        url: sub.url || sub.file || '',
+        lang: sub.lang || sub.label || sub.language || 'Unknown',
       })).filter((track: any) => track.url);
+      console.log('Found subtitles/tracks:', result.tracks?.length || 0);
     }
 
     if ((data as any).intro) {
