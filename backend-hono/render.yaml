@@ -3,7 +3,7 @@ services:
     name: anistream-backend
     runtime: node
     rootDir: backend-hono
-    buildCommand: yarn && yarn build
+    buildCommand: yarn install --production=false && yarn build
     startCommand: yarn start
     plan: free
     healthCheckPath: /api
