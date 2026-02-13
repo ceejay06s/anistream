@@ -81,8 +81,10 @@ function parseVtt(content: string): SubtitleCue[] {
     // Look for timestamp line
     if (line.includes('-->')) {
       const [startStr, endStr] = line.split('-->');
-      const startTime = parseVttTime(startStr);
-      const endTime = parseVttTime(endStr.split(' ')[0]); // Remove position info
+      const startTime = parseVttTime(startStr.trim());
+      // Trim first, then split to remove position info like "align:center"
+      const endTimePart = endStr.trim().split(' ')[0];
+      const endTime = parseVttTime(endTimePart);
 
       // Collect text lines
       const textLines: string[] = [];
@@ -177,9 +179,23 @@ function parseAss(content: string): SubtitleCue[] {
 
 // Detect format and parse
 function parseSubtitles(content: string, url: string): SubtitleCue[] {
-  const isAss = url.toLowerCase().endsWith('.ass') ||
-                url.toLowerCase().endsWith('.ssa') ||
-                content.includes('[Script Info]');
+  // Extract original URL from proxy query param to check extension
+  let originalUrl = url;
+  const urlMatch = url.match(/[?&]url=([^&]+)/);
+  if (urlMatch) {
+    try {
+      originalUrl = decodeURIComponent(urlMatch[1]);
+    } catch (e) {
+      // Keep original if decode fails
+    }
+  }
+
+  const isAss = originalUrl.toLowerCase().endsWith('.ass') ||
+                originalUrl.toLowerCase().endsWith('.ssa') ||
+                content.includes('[Script Info]') ||
+                content.includes('[V4+ Styles]');
+
+  console.log('[Subtitles] Detected format:', isAss ? 'ASS' : 'VTT', 'Original URL:', originalUrl.substring(originalUrl.length - 30));
 
   if (isAss) {
     return parseAss(content);
@@ -242,6 +258,19 @@ export function SubtitleRenderer({ currentTime, subtitleUrl, settings = defaultS
 
         const content = await response.text();
         console.log('[Subtitles] Received content length:', content.length, 'First 100 chars:', content.substring(0, 100));
+
+        // Validate content is actually a subtitle file, not an error response
+        if (content.startsWith('{') && content.includes('"error"')) {
+          throw new Error('Proxy returned error: ' + content.substring(0, 200));
+        }
+
+        // Check if content looks like a valid subtitle format
+        const isValidVtt = content.includes('WEBVTT') || content.includes('-->');
+        const isValidAss = content.includes('[Script Info]') || content.includes('Dialogue:');
+        if (!isValidVtt && !isValidAss) {
+          console.warn('[Subtitles] Content does not appear to be a valid subtitle format. First 200 chars:', content.substring(0, 200));
+          throw new Error('Invalid subtitle format');
+        }
 
         const parsedCues = parseSubtitles(content, subtitleUrl);
 
@@ -357,15 +386,14 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '500',
     textAlign: 'center',
-    ...Platform.select({
-      web: {
-        textShadow: '2px 2px 4px rgba(0, 0, 0, 0.9), -1px -1px 2px rgba(0, 0, 0, 0.9)',
-      },
-      default: {
-        textShadowColor: 'rgba(0, 0, 0, 0.9)',
-        textShadowOffset: { width: 2, height: 2 },
-        textShadowRadius: 4,
-      },
-    }),
+    // Use textShadow for web (CSS string), native shadow props for mobile
+    ...(Platform.OS === 'web'
+      ? { textShadow: '2px 2px 4px rgba(0, 0, 0, 0.9), -1px -1px 2px rgba(0, 0, 0, 0.9)' }
+      : {
+          textShadowColor: 'rgba(0, 0, 0, 0.9)',
+          textShadowOffset: { width: 2, height: 2 },
+          textShadowRadius: 4,
+        }
+    ),
   },
 });
