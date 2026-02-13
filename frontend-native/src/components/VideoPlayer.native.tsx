@@ -233,6 +233,7 @@ export function VideoPlayer({
           <View style={styles.subtitleMenuContainer}>
             <Text style={styles.subtitleMenuTitle}>Subtitles</Text>
             <ScrollView style={styles.subtitleList}>
+              {/* Always show "Off" option first */}
               <TouchableOpacity
                 style={[
                   styles.subtitleOption,
@@ -248,26 +249,33 @@ export function VideoPlayer({
                   <Ionicons name="checkmark" size={18} color="#e50914" />
                 )}
               </TouchableOpacity>
-              {subtitleTracks.map((track, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={[
-                    styles.subtitleOption,
-                    currentSubtitle === track.url && styles.subtitleOptionActive,
-                  ]}
-                  onPress={() => {
-                    setCurrentSubtitle(track.url);
-                    setShowSubtitleMenu(false);
-                  }}
-                >
-                  <Text style={styles.subtitleOptionText}>
-                    {track.label || track.lang || `Track ${index + 1}`}
-                  </Text>
-                  {currentSubtitle === track.url && (
-                    <Ionicons name="checkmark" size={18} color="#e50914" />
-                  )}
-                </TouchableOpacity>
-              ))}
+              {/* Show subtitle tracks if available */}
+              {subtitleTracks.length > 0 ? (
+                subtitleTracks.map((track, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={[
+                      styles.subtitleOption,
+                      currentSubtitle === track.url && styles.subtitleOptionActive,
+                    ]}
+                    onPress={() => {
+                      setCurrentSubtitle(track.url);
+                      setShowSubtitleMenu(false);
+                    }}
+                  >
+                    <Text style={styles.subtitleOptionText}>
+                      {track.label || track.lang || `Track ${index + 1}`}
+                    </Text>
+                    {currentSubtitle === track.url && (
+                      <Ionicons name="checkmark" size={18} color="#e50914" />
+                    )}
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <View style={styles.subtitleOption}>
+                  <Text style={styles.noSubtitlesText}>No subtitles available</Text>
+                </View>
+              )}
             </ScrollView>
           </View>
         </TouchableOpacity>
@@ -405,5 +413,10 @@ const styles = StyleSheet.create({
   subtitleOptionText: {
     color: '#fff',
     fontSize: 16,
+  },
+  noSubtitlesText: {
+    color: '#888',
+    fontSize: 14,
+    fontStyle: 'italic',
   },
 });

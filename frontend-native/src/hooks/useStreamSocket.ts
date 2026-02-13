@@ -126,9 +126,21 @@ export function useStreamSocket(): UseStreamSocketResult {
                   });
                 }
 
+                // Proxy subtitle track URLs for web to avoid CORS issues
+                let tracks = message.data.tracks || [];
+                if (Platform.OS === 'web' && tracks.length > 0) {
+                  tracks = tracks.map((track: { url: string; lang: string }) => {
+                    if (track.url) {
+                      const proxyUrl = `${API_BASE_URL}/api/streaming/proxy?url=${encodeURIComponent(track.url)}`;
+                      return { ...track, url: proxyUrl };
+                    }
+                    return track;
+                  });
+                }
+
                 const data: StreamingData = {
                   sources,
-                  tracks: message.data.tracks,
+                  tracks,
                   intro: message.data.intro,
                   outro: message.data.outro,
                 };

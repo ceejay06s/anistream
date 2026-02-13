@@ -191,6 +191,7 @@ export function VideoControls({
       {showSubtitleMenu && !showSubtitleSettings && (
         <View style={styles.subtitleMenu}>
           <Text style={styles.subtitleMenuTitle}>Subtitles</Text>
+          {/* Always show "Off" option first */}
           <TouchableOpacity
             style={[
               styles.subtitleOption,
@@ -202,32 +203,45 @@ export function VideoControls({
             }}
           >
             <Text style={styles.subtitleOptionText}>Off</Text>
+            {!currentSubtitle && (
+              <Ionicons name="checkmark" size={16} color="#e50914" style={{ marginLeft: 8 }} />
+            )}
           </TouchableOpacity>
-          {subtitleTracks.map((track, index) => (
-            <TouchableOpacity
-              key={index}
-              style={[
-                styles.subtitleOption,
-                currentSubtitle === track.url && styles.subtitleOptionActive,
-              ]}
-              onPress={() => {
-                onSubtitleChange(track.url);
-                setShowSubtitleMenu(false);
-              }}
-            >
-              <Text style={styles.subtitleOptionText}>
-                {track.label || track.lang || `Track ${index + 1}`}
-              </Text>
-            </TouchableOpacity>
-          ))}
-          <View style={styles.subtitleDivider} />
-          <TouchableOpacity
-            style={styles.subtitleOption}
-            onPress={() => setShowSubtitleSettings(true)}
-          >
-            <Ionicons name="settings-outline" size={16} color="#fff" style={{ marginRight: 8 }} />
-            <Text style={styles.subtitleOptionText}>CC Settings</Text>
-          </TouchableOpacity>
+          {/* Show subtitle tracks if available */}
+          {subtitleTracks.length > 0 ? (
+            <>
+              {subtitleTracks.map((track, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.subtitleOption,
+                    currentSubtitle === track.url && styles.subtitleOptionActive,
+                  ]}
+                  onPress={() => {
+                    onSubtitleChange(track.url);
+                    setShowSubtitleMenu(false);
+                  }}
+                >
+                  <Text style={styles.subtitleOptionText}>
+                    {track.label || track.lang || `Track ${index + 1}`}
+                  </Text>
+                  {currentSubtitle === track.url && (
+                    <Ionicons name="checkmark" size={16} color="#e50914" style={{ marginLeft: 8 }} />
+                  )}
+                </TouchableOpacity>
+              ))}
+              <View style={styles.subtitleDivider} />
+              <TouchableOpacity
+                style={styles.subtitleOption}
+                onPress={() => setShowSubtitleSettings(true)}
+              >
+                <Ionicons name="settings-outline" size={16} color="#fff" style={{ marginRight: 8 }} />
+                <Text style={styles.subtitleOptionText}>CC Settings</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <Text style={styles.noSubtitlesText}>No subtitles available</Text>
+          )}
         </View>
       )}
 
@@ -472,6 +486,13 @@ const styles = StyleSheet.create({
   subtitleOptionText: {
     color: '#fff',
     fontSize: 14,
+  },
+  noSubtitlesText: {
+    color: '#888',
+    fontSize: 12,
+    fontStyle: 'italic',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
   subtitleDivider: {
     height: 1,
