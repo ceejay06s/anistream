@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { searchAnime, getAnimeInfo, getAnimeEpisodes, getTrendingAnime, getCategoryAnime, getGenreAnime, getAZAnime, filterAnime } from '../services/animeService';
+import { searchAnime, getAnimeInfo, getAnimeEpisodes, getTrendingAnime, getCategoryAnime, getGenreAnime, getAZAnime, filterAnime } from '../services/animeService.js';
 
 export const animeRoutes = new Hono();
 

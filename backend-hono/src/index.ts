@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
-import { animeRoutes } from './routes/anime';
-import { streamingRoutes } from './routes/streaming';
-import { createWebSocketServer } from './routes/websocket';
+import { animeRoutes } from './routes/anime.js';
+import { streamingRoutes } from './routes/streaming.js';
+import { createWebSocketServer } from './routes/websocket.js';
 
 const app = new Hono();
 

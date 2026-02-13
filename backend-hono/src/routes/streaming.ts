@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { getEpisodeSources, getEpisodeServers } from '../services/streamingService';
+import { getEpisodeSources, getEpisodeServers } from '../services/streamingService.js';
 import { gotScraping } from 'got-scraping';
 
 export const streamingRoutes = new Hono();

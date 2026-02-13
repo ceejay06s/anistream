@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { upgradeWebSocket } from 'hono/cloudflare-workers';
-import { getEpisodeSources, getEpisodeServers } from '../services/streamingService';
+import { getEpisodeSources, getEpisodeServers } from '../services/streamingService.js';
 import { WebSocketServer, WebSocket as WS } from 'ws';
 
 // Store active connections

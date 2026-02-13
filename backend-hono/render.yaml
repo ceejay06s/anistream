@@ -1,8 +1,10 @@
 services:
   - type: web
     name: anistream-backend
-    runtime: docker
-    dockerfilePath: ./Dockerfile
+    runtime: node
+    rootDir: backend-hono
+    buildCommand: yarn install --production=false && yarn build
+    startCommand: yarn start
     plan: free
     healthCheckPath: /api
     envVars:
