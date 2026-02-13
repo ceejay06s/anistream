@@ -2,6 +2,7 @@ services:
   - type: web
     name: anistream-backend
     runtime: node
+    rootDir: backend-hono
     buildCommand: yarn && yarn build
     startCommand: yarn start
     plan: free
