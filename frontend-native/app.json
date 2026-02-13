@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anistream.native",
+      "bundleIdentifier": "com.anistream.app",
       "infoPlist": {
         "UIBackgroundModes": [
           "audio"
@@ -27,7 +27,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#000000"
       },
-      "package": "com.anistream.native"
+      "package": "com.anistream.app"
     },
     "web": {
       "bundler": "metro",
