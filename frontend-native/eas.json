@@ -17,7 +17,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://anistream-backend-blme.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://anistream-backend-blme.onrender.com",
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
       }
     },
     "production": {
@@ -26,7 +27,8 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://anistream-backend-blme.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://anistream-backend-blme.onrender.com",
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
       }
     }
   },
