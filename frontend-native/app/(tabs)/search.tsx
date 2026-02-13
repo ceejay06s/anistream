@@ -95,7 +95,10 @@ export default function SearchScreen() {
   };
 
   const handleAnimePress = (anime: Anime) => {
-    router.push(`/detail/${anime.id}`);
+    router.push({
+      pathname: '/detail/[id]',
+      params: { id: anime.id },
+    });
   };
 
   const clearFilters = () => {

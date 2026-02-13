@@ -12,7 +12,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { VideoPlayer } from '@/components/VideoPlayer';
-import { streamingApi, StreamingData, StreamingSource } from '@/services/api';
+import { streamingApi, StreamingData, StreamingSource, animeApi, Episode } from '@/services/api';
 import { useStreamSocket } from '@/hooks/useStreamSocket';
 
 export default function WatchScreen() {
@@ -23,6 +23,25 @@ export default function WatchScreen() {
 
   const [category, setCategory] = useState<'sub' | 'dub'>('sub');
   const [useWebSocket, setUseWebSocket] = useState(true);
+  const [episodes, setEpisodes] = useState<Episode[]>([]);
+  const [episodesLoading, setEpisodesLoading] = useState(true);
+
+  // Clean up Expo Router internal params from URL on web
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const cleanUrl = () => {
+        const url = new URL(window.location.href);
+        if (url.searchParams.has('__EXPO_ROUTER_key')) {
+          url.searchParams.delete('__EXPO_ROUTER_key');
+          window.history.replaceState({}, '', url.toString());
+        }
+      };
+      // Run immediately and after a delay to catch Expo Router's additions
+      cleanUrl();
+      const timeout = setTimeout(cleanUrl, 100);
+      return () => clearTimeout(timeout);
+    }
+  }, [id, ep]);
 
   // WebSocket-based streaming (primary)
   const {
@@ -61,6 +80,26 @@ export default function WatchScreen() {
       setUseIframe(true);
     }
   }, [iframeFallback, selectedSource, loading]);
+
+  // Load episodes list for navigation
+  useEffect(() => {
+    if (id) {
+      loadEpisodes();
+    }
+  }, [id]);
+
+  const loadEpisodes = async () => {
+    if (!id) return;
+    try {
+      setEpisodesLoading(true);
+      const episodeList = await animeApi.getEpisodes(id);
+      setEpisodes(episodeList);
+    } catch (err) {
+      console.error('Failed to load episodes:', err);
+    } finally {
+      setEpisodesLoading(false);
+    }
+  };
 
   // Load sources when episode/category changes
   useEffect(() => {
@@ -140,7 +179,39 @@ export default function WatchScreen() {
     if (router.canGoBack()) {
       router.back();
     } else {
-      router.push(`/detail/${id}`);
+      router.push({
+        pathname: '/detail/[id]',
+        params: { id: id as string },
+      });
+    }
+  };
+
+  // Episode navigation
+  const currentEpNumber = parseInt(episodeNumber, 10);
+  const currentEpisodeIndex = episodes.findIndex(ep => ep.number === currentEpNumber);
+  const hasPreviousEpisode = currentEpisodeIndex > 0;
+  const hasNextEpisode = currentEpisodeIndex < episodes.length - 1 && currentEpisodeIndex !== -1;
+
+  const navigateToEpisode = (episode: Episode) => {
+    router.replace({
+      pathname: '/watch/[id]',
+      params: {
+        id: id as string,
+        ep: String(episode.number),
+        episodeId: episode.episodeId,
+      },
+    });
+  };
+
+  const handlePreviousEpisode = () => {
+    if (hasPreviousEpisode) {
+      navigateToEpisode(episodes[currentEpisodeIndex - 1]);
+    }
+  };
+
+  const handleNextEpisode = () => {
+    if (hasNextEpisode) {
+      navigateToEpisode(episodes[currentEpisodeIndex + 1]);
     }
   };
 
@@ -262,6 +333,47 @@ export default function WatchScreen() {
             </View>
           ) : null}
         </View>
+
+        {/* Episode Navigation */}
+        {episodes.length > 1 && (
+          <View style={styles.episodeNavSection}>
+            <TouchableOpacity
+              style={[styles.episodeNavButton, !hasPreviousEpisode && styles.episodeNavButtonDisabled]}
+              onPress={handlePreviousEpisode}
+              disabled={!hasPreviousEpisode}
+            >
+              <Ionicons
+                name="play-skip-back"
+                size={20}
+                color={hasPreviousEpisode ? '#fff' : '#444'}
+              />
+              <Text style={[styles.episodeNavText, !hasPreviousEpisode && styles.episodeNavTextDisabled]}>
+                Previous
+              </Text>
+            </TouchableOpacity>
+
+            <View style={styles.episodeIndicator}>
+              <Text style={styles.episodeIndicatorText}>
+                EP {currentEpNumber} / {episodes.length}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.episodeNavButton, !hasNextEpisode && styles.episodeNavButtonDisabled]}
+              onPress={handleNextEpisode}
+              disabled={!hasNextEpisode}
+            >
+              <Text style={[styles.episodeNavText, !hasNextEpisode && styles.episodeNavTextDisabled]}>
+                Next
+              </Text>
+              <Ionicons
+                name="play-skip-forward"
+                size={20}
+                color={hasNextEpisode ? '#fff' : '#444'}
+              />
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Sub/Dub Toggle */}
         <View style={styles.categorySection}>
@@ -568,5 +680,46 @@ const styles = StyleSheet.create({
   useIframeText: {
     color: '#fff',
     fontWeight: '600',
+  },
+  episodeNavSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    paddingHorizontal: Platform.OS === 'web' ? 32 : 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1a1a1a',
+  },
+  episodeNavButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: '#222',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  episodeNavButtonDisabled: {
+    backgroundColor: '#111',
+    borderColor: '#222',
+  },
+  episodeNavText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  episodeNavTextDisabled: {
+    color: '#444',
+  },
+  episodeIndicator: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  episodeIndicatorText: {
+    color: '#888',
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
