@@ -24,6 +24,9 @@ export interface VideoPlayerProps {
   subtitleTracks?: SubtitleTrack[];
   // Callback to request new source when current one fails
   onRequestNewSource?: () => void;
+  // Title bar props (web only, native has OS navigation)
+  title?: string;
+  onBack?: () => void;
 }
 
 export function VideoPlayer({

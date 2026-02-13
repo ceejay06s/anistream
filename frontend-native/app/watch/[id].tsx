@@ -254,14 +254,16 @@ export default function WatchScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView style={styles.scrollView}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#fff" />
-            <Text style={styles.backText}>Back</Text>
-          </TouchableOpacity>
-          <Text style={styles.episodeTitle}>Episode {episodeNumber}</Text>
-        </View>
+        {/* Header - only show on native (web has controls embedded in player) */}
+        {Platform.OS !== 'web' && (
+          <View style={styles.header}>
+            <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+              <Ionicons name="arrow-back" size={24} color="#fff" />
+              <Text style={styles.backText}>Back</Text>
+            </TouchableOpacity>
+            <Text style={styles.episodeTitle}>Episode {episodeNumber}</Text>
+          </View>
+        )}
 
         {/* Video Player */}
         <View style={styles.playerContainer}>
@@ -320,6 +322,8 @@ export default function WatchScreen() {
                 label: t.lang,
               })) || []}
               onRequestNewSource={handleRequestNewSource}
+              title={id?.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+              onBack={handleBack}
             />
           ) : iframeFallback ? (
             // Show button to switch to iframe
