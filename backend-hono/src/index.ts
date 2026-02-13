@@ -16,6 +16,7 @@ app.use('*', cors({
     'http://localhost:8081',
     'http://localhost:19006',
     'https://anistream-pink.vercel.app',
+    'https://anistream.expo.app',
   ],
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
