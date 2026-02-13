@@ -167,14 +167,10 @@ export function VideoControls({
         <View style={styles.topBarRight}>
           {/* Subtitle button */}
           <TouchableOpacity
-            style={styles.controlButton}
+            style={[styles.controlButton, styles.ccButton]}
             onPress={() => setShowSubtitleMenu(!showSubtitleMenu)}
           >
-            <Ionicons
-              name="text"
-              size={20}
-              color={currentSubtitle ? '#e50914' : '#fff'}
-            />
+            <Text style={[styles.ccText, currentSubtitle && styles.ccTextActive]}>CC</Text>
           </TouchableOpacity>
 
           {/* Orientation lock */}
@@ -455,6 +451,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  ccButton: {
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  ccText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  ccTextActive: {
+    color: '#e50914',
   },
   subtitleMenu: {
     position: 'absolute',

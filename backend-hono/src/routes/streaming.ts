@@ -173,6 +173,11 @@ const isVideoSegment = (url: string): boolean => {
          (url.includes('/seg-') || url.includes('/segment') || url.includes('/chunk'));
 };
 
+// Check if URL is a subtitle file
+const isSubtitleFile = (url: string): boolean => {
+  return /\.(vtt|srt|ass|ssa|sub)(\?|$)/i.test(url);
+};
+
 // Proxy video stream to handle CORS
 streamingRoutes.get('/proxy', async (c) => {
   const url = c.req.query('url');
@@ -185,14 +190,15 @@ streamingRoutes.get('/proxy', async (c) => {
     const decodedUrl = decodeURIComponent(url);
     const isM3U8 = decodedUrl.includes('.m3u8');
     const isSegment = isVideoSegment(decodedUrl);
+    const isSubtitle = isSubtitleFile(decodedUrl);
 
-    console.log(`Proxying ${isM3U8 ? 'M3U8' : isSegment ? 'segment' : 'video'}: ${decodedUrl.substring(0, 100)}...`);
+    console.log(`Proxying ${isM3U8 ? 'M3U8' : isSubtitle ? 'subtitle' : isSegment ? 'segment' : 'video'}: ${decodedUrl.substring(0, 100)}...`);
 
     // Use got-scraping for browser-like TLS fingerprint
     // The TLS fingerprint is the key to bypassing CDN anti-bot
     const response = await gotScraping({
       url: decodedUrl,
-      responseType: isM3U8 ? 'text' : 'buffer',
+      responseType: (isM3U8 || isSubtitle) ? 'text' : 'buffer',
       timeout: { request: 30000 },
       followRedirect: true,
       maxRedirects: 5,
@@ -225,11 +231,30 @@ streamingRoutes.get('/proxy', async (c) => {
       throw error;
     }
 
-    let content: string | Buffer = isM3U8
+    let content: string | Buffer = (isM3U8 || isSubtitle)
       ? (response.body as Buffer).toString()
       : (response.rawBody as Buffer);
-    let contentType = (response.headers['content-type'] as string) ||
-      (isM3U8 ? 'application/vnd.apple.mpegurl' : 'video/mp2t');
+
+    // Determine content type
+    let contentType = response.headers['content-type'] as string;
+    if (!contentType) {
+      if (isM3U8) {
+        contentType = 'application/vnd.apple.mpegurl';
+      } else if (isSubtitle) {
+        // Set correct content-type for subtitles
+        if (decodedUrl.includes('.vtt')) {
+          contentType = 'text/vtt; charset=utf-8';
+        } else if (decodedUrl.includes('.ass') || decodedUrl.includes('.ssa')) {
+          contentType = 'text/plain; charset=utf-8';
+        } else if (decodedUrl.includes('.srt')) {
+          contentType = 'text/plain; charset=utf-8';
+        } else {
+          contentType = 'text/plain; charset=utf-8';
+        }
+      } else {
+        contentType = 'video/mp2t';
+      }
+    }
 
     // Force octet-stream for obfuscated segment extensions
     if (isSegment && /\.(jpg|jpeg|html|png|gif|webp|js|css|txt)(\?|$)/i.test(decodedUrl)) {

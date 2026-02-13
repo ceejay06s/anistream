@@ -55,6 +55,22 @@ export default function HomeScreen() {
     }))
   );
 
+  // Clean up Expo Router internal params from URL on web
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const cleanUrl = () => {
+        const url = new URL(window.location.href);
+        if (url.searchParams.has('__EXPO_ROUTER_key')) {
+          url.searchParams.delete('__EXPO_ROUTER_key');
+          window.history.replaceState({}, '', url.toString());
+        }
+      };
+      cleanUrl();
+      const timeout = setTimeout(cleanUrl, 100);
+      return () => clearTimeout(timeout);
+    }
+  }, []);
+
   useEffect(() => {
     loadAllCategories();
   }, []);
@@ -114,11 +130,17 @@ export default function HomeScreen() {
   };
 
   const handleAnimePress = (anime: Anime) => {
-    router.push(`/detail/${anime.id}`);
+    router.push({
+      pathname: '/detail/[id]',
+      params: { id: anime.id },
+    });
   };
 
   const handleSeeAll = (route: ExploreRoute) => {
-    router.push(`/(tabs)/browse?category=${route}`);
+    router.push({
+      pathname: '/(tabs)/browse',
+      params: { category: route },
+    });
   };
 
   const onBannerScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {

@@ -81,8 +81,10 @@ function parseVtt(content: string): SubtitleCue[] {
     // Look for timestamp line
     if (line.includes('-->')) {
       const [startStr, endStr] = line.split('-->');
-      const startTime = parseVttTime(startStr);
-      const endTime = parseVttTime(endStr.split(' ')[0]); // Remove position info
+      const startTime = parseVttTime(startStr.trim());
+      // Trim first, then split to remove position info like "align:center"
+      const endTimePart = endStr.trim().split(' ')[0];
+      const endTime = parseVttTime(endTimePart);
 
       // Collect text lines
       const textLines: string[] = [];
@@ -177,9 +179,23 @@ function parseAss(content: string): SubtitleCue[] {
 
 // Detect format and parse
 function parseSubtitles(content: string, url: string): SubtitleCue[] {
-  const isAss = url.toLowerCase().endsWith('.ass') ||
-                url.toLowerCase().endsWith('.ssa') ||
-                content.includes('[Script Info]');
+  // Extract original URL from proxy query param to check extension
+  let originalUrl = url;
+  const urlMatch = url.match(/[?&]url=([^&]+)/);
+  if (urlMatch) {
+    try {
+      originalUrl = decodeURIComponent(urlMatch[1]);
+    } catch (e) {
+      // Keep original if decode fails
+    }
+  }
+
+  const isAss = originalUrl.toLowerCase().endsWith('.ass') ||
+                originalUrl.toLowerCase().endsWith('.ssa') ||
+                content.includes('[Script Info]') ||
+                content.includes('[V4+ Styles]');
+
+  console.log('[Subtitles] Detected format:', isAss ? 'ASS' : 'VTT', 'Original URL:', originalUrl.substring(originalUrl.length - 30));
 
   if (isAss) {
     return parseAss(content);
@@ -200,11 +216,11 @@ export function SubtitleRenderer({ currentTime, subtitleUrl, settings = defaultS
   const [error, setError] = useState<string | null>(null);
   const cacheRef = useRef<Map<string, SubtitleCue[]>>(new Map());
 
-  // Font size mapping
+  // Font size mapping - smaller sizes for better readability in video player
   const fontSizeMap = {
-    small: Platform.OS === 'web' ? 14 : 12,
-    medium: Platform.OS === 'web' ? 18 : 16,
-    large: Platform.OS === 'web' ? 24 : 20,
+    small: Platform.OS === 'web' ? 12 : 10,
+    medium: Platform.OS === 'web' ? 14 : 12,
+    large: Platform.OS === 'web' ? 18 : 16,
   };
 
   // Background opacity mapping
@@ -234,12 +250,28 @@ export function SubtitleRenderer({ currentTime, subtitleUrl, settings = defaultS
         setLoading(true);
         setError(null);
 
+        console.log('[Subtitles] Fetching from:', subtitleUrl.substring(0, 100));
         const response = await fetch(subtitleUrl);
         if (!response.ok) {
           throw new Error(`Failed to fetch subtitles: ${response.status}`);
         }
 
         const content = await response.text();
+        console.log('[Subtitles] Received content length:', content.length, 'First 100 chars:', content.substring(0, 100));
+
+        // Validate content is actually a subtitle file, not an error response
+        if (content.startsWith('{') && content.includes('"error"')) {
+          throw new Error('Proxy returned error: ' + content.substring(0, 200));
+        }
+
+        // Check if content looks like a valid subtitle format
+        const isValidVtt = content.includes('WEBVTT') || content.includes('-->');
+        const isValidAss = content.includes('[Script Info]') || content.includes('Dialogue:');
+        if (!isValidVtt && !isValidAss) {
+          console.warn('[Subtitles] Content does not appear to be a valid subtitle format. First 200 chars:', content.substring(0, 200));
+          throw new Error('Invalid subtitle format');
+        }
+
         const parsedCues = parseSubtitles(content, subtitleUrl);
 
         // Sort by start time
@@ -249,9 +281,9 @@ export function SubtitleRenderer({ currentTime, subtitleUrl, settings = defaultS
         cacheRef.current.set(subtitleUrl, parsedCues);
 
         setCues(parsedCues);
-        console.log(`Parsed ${parsedCues.length} subtitle cues`);
+        console.log(`[Subtitles] Parsed ${parsedCues.length} cues. First cue:`, parsedCues[0]);
       } catch (err: any) {
-        console.error('Error loading subtitles:', err);
+        console.error('[Subtitles] Error loading:', err);
         setError(err.message);
         setCues([]);
       } finally {
@@ -310,7 +342,7 @@ export function SubtitleRenderer({ currentTime, subtitleUrl, settings = defaultS
 
   const fontSize = fontSizeMap[settings.fontSize];
   const backgroundColor = backgroundMap[settings.backgroundColor];
-  const lineHeight = fontSize * 1.4;
+  const lineHeight = fontSize * 1.3;
 
   return (
     <View style={[styles.container, { pointerEvents: 'none' }, style]}>
@@ -335,15 +367,16 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: Platform.OS === 'web' ? 60 : 80,
+    bottom: Platform.OS === 'web' ? 50 : 70,
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
+    zIndex: 5, // Ensure subtitles appear above video but below controls
   },
   textContainer: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-    maxWidth: '90%',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 3,
+    maxWidth: '80%',
   },
   textContainerTransparent: {
     paddingHorizontal: 0,
@@ -353,15 +386,14 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '500',
     textAlign: 'center',
-    ...Platform.select({
-      web: {
-        textShadow: '2px 2px 4px rgba(0, 0, 0, 0.9), -1px -1px 2px rgba(0, 0, 0, 0.9)',
-      },
-      default: {
-        textShadowColor: 'rgba(0, 0, 0, 0.9)',
-        textShadowOffset: { width: 2, height: 2 },
-        textShadowRadius: 4,
-      },
-    }),
+    // Use textShadow for web (CSS string), native shadow props for mobile
+    ...(Platform.OS === 'web'
+      ? { textShadow: '1px 1px 2px rgba(0, 0, 0, 0.8), -1px -1px 1px rgba(0, 0, 0, 0.8)' }
+      : {
+          textShadowColor: 'rgba(0, 0, 0, 0.8)',
+          textShadowOffset: { width: 1, height: 1 },
+          textShadowRadius: 2,
+        }
+    ),
   },
 });

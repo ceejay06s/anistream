@@ -29,6 +29,23 @@ export default function DetailScreen() {
   const [currentPage, setCurrentPage] = useState(0);
   const [activeTab, setActiveTab] = useState<TabType>('synopsis');
 
+  // Clean up Expo Router internal params from URL on web
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const cleanUrl = () => {
+        const url = new URL(window.location.href);
+        if (url.searchParams.has('__EXPO_ROUTER_key')) {
+          url.searchParams.delete('__EXPO_ROUTER_key');
+          window.history.replaceState({}, '', url.toString());
+        }
+      };
+      // Run immediately and after a delay to catch Expo Router's additions
+      cleanUrl();
+      const timeout = setTimeout(cleanUrl, 100);
+      return () => clearTimeout(timeout);
+    }
+  }, [id]);
+
   useEffect(() => {
     if (id) {
       loadAnimeData();
@@ -61,16 +78,26 @@ export default function DetailScreen() {
     if (router.canGoBack()) {
       router.back();
     } else {
-      router.push('/(tabs)/home');
+      router.push({ pathname: '/(tabs)/home' });
     }
   };
 
   const handleEpisodePress = (episode: Episode) => {
-    router.push(`/watch/${id}?ep=${episode.number}&episodeId=${encodeURIComponent(episode.episodeId)}`);
+    router.push({
+      pathname: '/watch/[id]',
+      params: {
+        id: id as string,
+        ep: String(episode.number),
+        episodeId: episode.episodeId,
+      },
+    });
   };
 
   const handleAnimePress = (anime: RelatedAnime) => {
-    router.push(`/detail/${anime.id}`);
+    router.push({
+      pathname: '/detail/[id]',
+      params: { id: anime.id },
+    });
   };
 
   // Pagination logic

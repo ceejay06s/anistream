@@ -11,6 +11,7 @@ export interface StreamStatus {
   totalServers: number;
   error: string | null;
   iframeFallback: string | null;
+  fromCache: boolean;
 }
 
 export interface UseStreamSocketResult {
@@ -29,6 +30,7 @@ interface WSMessage {
   server?: string;
   serverIndex?: number;
   totalServers?: number;
+  fromCache?: boolean;
 }
 
 export function useStreamSocket(): UseStreamSocketResult {
@@ -45,6 +47,7 @@ export function useStreamSocket(): UseStreamSocketResult {
     totalServers: 0,
     error: null,
     iframeFallback: null,
+    fromCache: false,
   });
 
   const [streamingData, setStreamingData] = useState<StreamingData | null>(null);
@@ -151,12 +154,15 @@ export function useStreamSocket(): UseStreamSocketResult {
                 setStatus(prev => ({
                   ...prev,
                   isLoading: false,
-                  message: sources.length === 0 && iframeFallback ? 'Using iframe fallback' : null,
+                  message: sources.length === 0 && iframeFallback
+                    ? 'Using iframe fallback'
+                    : message.fromCache ? 'Loaded from cache' : null,
                   currentServer: message.server || null,
                   serverIndex: message.serverIndex ?? 0,
                   totalServers: message.totalServers ?? 0,
                   iframeFallback,
                   error: sources.length === 0 && !iframeFallback ? 'No sources available' : null,
+                  fromCache: message.fromCache || false,
                 }));
 
                 setStreamingData(data);
@@ -257,6 +263,7 @@ export function useStreamSocket(): UseStreamSocketResult {
       totalServers: 0,
       error: null,
       iframeFallback: null,
+      fromCache: false,
     });
   }, []);
 
