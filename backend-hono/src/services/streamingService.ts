@@ -106,10 +106,25 @@ export async function getEpisodeSources(
     // Check for subtitles/tracks - aniwatch may return them under different property names
     const subtitleData = data.subtitles || (data as any).tracks || (data as any).captions || [];
     if (Array.isArray(subtitleData) && subtitleData.length > 0) {
-      result.tracks = subtitleData.map((sub: any) => ({
-        url: sub.url || sub.file || '',
-        lang: sub.lang || sub.label || sub.language || 'Unknown',
-      })).filter((track: any) => track.url);
+      result.tracks = subtitleData
+        .filter((sub: any) => {
+          // Filter out thumbnail tracks (keep only actual subtitles)
+          const kind = (sub.kind || '').toLowerCase();
+          const label = (sub.label || '').toLowerCase();
+          const lang = (sub.lang || '').toLowerCase();
+
+          // Check all possible fields for "thumbnail" indicator
+          if (kind === 'thumbnails' || kind === 'thumbnail') return false;
+          if (label === 'thumbnails' || label === 'thumbnail') return false;
+          if (lang === 'thumbnails' || lang === 'thumbnail') return false;
+
+          return true;
+        })
+        .map((sub: any) => ({
+          url: sub.url || sub.file || '',
+          lang: sub.lang || sub.label || sub.language || 'Unknown',
+        }))
+        .filter((track: any) => track.url);
       console.log('Found subtitles/tracks:', result.tracks?.length || 0);
     }
 

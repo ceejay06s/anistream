@@ -216,11 +216,11 @@ export function SubtitleRenderer({ currentTime, subtitleUrl, settings = defaultS
   const [error, setError] = useState<string | null>(null);
   const cacheRef = useRef<Map<string, SubtitleCue[]>>(new Map());
 
-  // Font size mapping
+  // Font size mapping - smaller sizes for better readability in video player
   const fontSizeMap = {
-    small: Platform.OS === 'web' ? 14 : 12,
-    medium: Platform.OS === 'web' ? 18 : 16,
-    large: Platform.OS === 'web' ? 24 : 20,
+    small: Platform.OS === 'web' ? 12 : 10,
+    medium: Platform.OS === 'web' ? 14 : 12,
+    large: Platform.OS === 'web' ? 18 : 16,
   };
 
   // Background opacity mapping
@@ -342,7 +342,7 @@ export function SubtitleRenderer({ currentTime, subtitleUrl, settings = defaultS
 
   const fontSize = fontSizeMap[settings.fontSize];
   const backgroundColor = backgroundMap[settings.backgroundColor];
-  const lineHeight = fontSize * 1.4;
+  const lineHeight = fontSize * 1.3;
 
   return (
     <View style={[styles.container, { pointerEvents: 'none' }, style]}>
@@ -367,16 +367,16 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: Platform.OS === 'web' ? 60 : 80,
+    bottom: Platform.OS === 'web' ? 50 : 70,
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     zIndex: 5, // Ensure subtitles appear above video but below controls
   },
   textContainer: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-    maxWidth: '90%',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 3,
+    maxWidth: '80%',
   },
   textContainerTransparent: {
     paddingHorizontal: 0,
@@ -388,11 +388,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     // Use textShadow for web (CSS string), native shadow props for mobile
     ...(Platform.OS === 'web'
-      ? { textShadow: '2px 2px 4px rgba(0, 0, 0, 0.9), -1px -1px 2px rgba(0, 0, 0, 0.9)' }
+      ? { textShadow: '1px 1px 2px rgba(0, 0, 0, 0.8), -1px -1px 1px rgba(0, 0, 0, 0.8)' }
       : {
-          textShadowColor: 'rgba(0, 0, 0, 0.9)',
-          textShadowOffset: { width: 2, height: 2 },
-          textShadowRadius: 4,
+          textShadowColor: 'rgba(0, 0, 0, 0.8)',
+          textShadowOffset: { width: 1, height: 1 },
+          textShadowRadius: 2,
         }
     ),
   },
