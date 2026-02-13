@@ -7,6 +7,10 @@ const getBaseUrl = () => {
   if (process.env.EXPO_PUBLIC_API_URL) {
     return process.env.EXPO_PUBLIC_API_URL;
   }
+  // Production detection for web builds (Vercel, etc.)
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+    return 'https://anistream-backend-blme.onrender.com';
+  }
   // Fallback to localhost for development
   return 'http://localhost:8801';
 };
