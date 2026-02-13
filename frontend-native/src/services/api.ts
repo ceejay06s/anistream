@@ -172,15 +172,28 @@ export const streamingApi = {
     });
     const data = response.data.data || { sources: [] };
 
-    // On web, proxy M3U8 URLs through backend to handle CORS
-    if (Platform.OS === 'web' && data.sources) {
-      data.sources = data.sources.map((source: StreamingSource) => {
-        if (source.isM3U8 && source.url) {
-          const proxyUrl = `${API_BASE_URL}/api/streaming/proxy?url=${encodeURIComponent(source.url)}`;
-          return { ...source, url: proxyUrl };
-        }
-        return source;
-      });
+    // On web, proxy URLs through backend to handle CORS
+    if (Platform.OS === 'web') {
+      // Proxy video sources
+      if (data.sources) {
+        data.sources = data.sources.map((source: StreamingSource) => {
+          if (source.isM3U8 && source.url) {
+            const proxyUrl = `${API_BASE_URL}/api/streaming/proxy?url=${encodeURIComponent(source.url)}`;
+            return { ...source, url: proxyUrl };
+          }
+          return source;
+        });
+      }
+      // Proxy subtitle tracks
+      if (data.tracks) {
+        data.tracks = data.tracks.map((track: { url: string; lang: string }) => {
+          if (track.url) {
+            const proxyUrl = `${API_BASE_URL}/api/streaming/proxy?url=${encodeURIComponent(track.url)}`;
+            return { ...track, url: proxyUrl };
+          }
+          return track;
+        });
+      }
     }
 
     return data;
