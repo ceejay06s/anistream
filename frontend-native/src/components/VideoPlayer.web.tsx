@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { View, StyleSheet, ActivityIndicator, Text, TouchableOpacity } from 'react-native';
 import Hls from 'hls.js';
-import { VideoControls, SubtitleTrack } from './VideoControls';
+import { VideoControls, SubtitleTrack, SubtitleSettings } from './VideoControls';
 import { SubtitleRenderer } from './SubtitleRenderer';
 
 export interface VideoPlayerProps {
@@ -51,6 +51,10 @@ export function VideoPlayer({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const [currentSubtitle, setCurrentSubtitle] = useState<string | null>(null);
+  const [subtitleSettings, setSubtitleSettings] = useState<SubtitleSettings>({
+    fontSize: 'medium',
+    backgroundColor: 'semi',
+  });
   const [useCustomControls, setUseCustomControls] = useState(true);
 
   const showStreamError = (message: string) => {
@@ -146,6 +150,10 @@ export function VideoPlayer({
     // Use our custom SubtitleRenderer instead of native <track> elements
     // This supports both VTT and ASS subtitle formats
     setCurrentSubtitle(url);
+  }, []);
+
+  const handleSubtitleSettingsChange = useCallback((newSettings: SubtitleSettings) => {
+    setSubtitleSettings(newSettings);
   }, []);
 
   const handleOrientationLock = useCallback((landscape: boolean) => {
@@ -386,6 +394,7 @@ export function VideoPlayer({
         <SubtitleRenderer
           currentTime={currentTime}
           subtitleUrl={currentSubtitle}
+          settings={subtitleSettings}
         />
         {useCustomControls && !isLoading && (
           <VideoControls
@@ -399,12 +408,14 @@ export function VideoPlayer({
             isLocked={isLocked}
             subtitleTracks={subtitleTracks}
             currentSubtitle={currentSubtitle}
+            subtitleSettings={subtitleSettings}
             onPlayPause={handlePlayPause}
             onSeek={handleSeek}
             onVolumeChange={handleVolumeChange}
             onToggleFullscreen={handleToggleFullscreen}
             onToggleLock={handleToggleLock}
             onSubtitleChange={handleSubtitleChange}
+            onSubtitleSettingsChange={handleSubtitleSettingsChange}
             onOrientationLock={handleOrientationLock}
           />
         )}
