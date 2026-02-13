@@ -452,7 +452,7 @@ const videoStyles: React.CSSProperties = {
   width: '100%',
   height: '100%',
   backgroundColor: '#000',
-  objectFit: 'contain',
+  objectFit: 'initial',
 };
 
 const styles = StyleSheet.create({
