@@ -173,6 +173,11 @@ const isVideoSegment = (url: string): boolean => {
          (url.includes('/seg-') || url.includes('/segment') || url.includes('/chunk'));
 };
 
+// Check if URL is a subtitle file
+const isSubtitleFile = (url: string): boolean => {
+  return /\.(vtt|srt|ass|ssa|sub)(\?|$)/i.test(url);
+};
+
 // Proxy video stream to handle CORS
 streamingRoutes.get('/proxy', async (c) => {
   const url = c.req.query('url');
