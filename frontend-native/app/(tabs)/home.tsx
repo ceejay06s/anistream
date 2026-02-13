@@ -294,6 +294,15 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      {/* App Header with Logo */}
+      <View style={styles.appHeader}>
+        <Image
+          source={require('../../assets/icon.png')}
+          style={styles.appLogo}
+          resizeMode="contain"
+        />
+        <Text style={styles.appTitle}>AniStream</Text>
+      </View>
       <ScrollView style={styles.scrollView} stickyHeaderIndices={[]}>
         {/* Hero Carousel Banner */}
         {spotlightAnime.length > 0 && (
@@ -337,6 +346,25 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+  },
+  appHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#000',
+  },
+  appLogo: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+  },
+  appTitle: {
+    color: '#e50914',
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginLeft: 10,
+    letterSpacing: 0.5,
   },
   centered: {
     flex: 1,
