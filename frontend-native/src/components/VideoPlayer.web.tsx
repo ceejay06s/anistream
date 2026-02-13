@@ -18,6 +18,9 @@ export interface VideoPlayerProps {
   subtitleTracks?: SubtitleTrack[];
   // Callback to request new source when current one fails
   onRequestNewSource?: () => void;
+  // Title bar props
+  title?: string;
+  onBack?: () => void;
 }
 
 export function VideoPlayer({
@@ -31,6 +34,8 @@ export function VideoPlayer({
   fullEpisodeId,
   subtitleTracks = [],
   onRequestNewSource,
+  title,
+  onBack,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -417,6 +422,9 @@ export function VideoPlayer({
             onSubtitleChange={handleSubtitleChange}
             onSubtitleSettingsChange={handleSubtitleSettingsChange}
             onOrientationLock={handleOrientationLock}
+            title={title}
+            episodeInfo={episodeNumber ? `Episode ${episodeNumber}` : undefined}
+            onBack={onBack}
           />
         )}
         {isLoading && (

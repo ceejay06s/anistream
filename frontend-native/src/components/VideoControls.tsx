@@ -40,6 +40,10 @@ export interface VideoControlsProps {
   onSubtitleChange: (url: string | null) => void;
   onSubtitleSettingsChange: (settings: SubtitleSettings) => void;
   onOrientationLock: (landscape: boolean) => void;
+  // Title bar props
+  title?: string;
+  episodeInfo?: string;
+  onBack?: () => void;
 }
 
 export function VideoControls({
@@ -62,6 +66,9 @@ export function VideoControls({
   onSubtitleChange,
   onSubtitleSettingsChange,
   onOrientationLock,
+  title,
+  episodeInfo,
+  onBack,
 }: VideoControlsProps) {
   const [showControls, setShowControls] = useState(true);
   const [showSubtitleMenu, setShowSubtitleMenu] = useState(false);
@@ -157,14 +164,34 @@ export function VideoControls({
     >
       {/* Top bar */}
       <View style={styles.topBar}>
-        <TouchableOpacity
-          style={styles.controlButton}
-          onPress={onToggleLock}
-        >
-          <Ionicons name="lock-open" size={20} color="#fff" />
-        </TouchableOpacity>
+        <View style={styles.topBarLeft}>
+          {onBack && (
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={onBack}
+            >
+              <Ionicons name="arrow-back" size={24} color="#fff" />
+            </TouchableOpacity>
+          )}
+          {(title || episodeInfo) && (
+            <View style={styles.titleContainer}>
+              {title && (
+                <Text style={styles.videoTitle} numberOfLines={1}>{title}</Text>
+              )}
+              {episodeInfo && (
+                <Text style={styles.episodeInfo} numberOfLines={1}>{episodeInfo}</Text>
+              )}
+            </View>
+          )}
+        </View>
 
         <View style={styles.topBarRight}>
+          <TouchableOpacity
+            style={styles.controlButton}
+            onPress={onToggleLock}
+          >
+            <Ionicons name="lock-open" size={20} color="#fff" />
+          </TouchableOpacity>
           {/* Subtitle button */}
           <TouchableOpacity
             style={[styles.controlButton, styles.ccButton]}
@@ -440,9 +467,43 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 12,
   },
+  topBarLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
   topBarRight: {
     flexDirection: 'row',
     gap: 8,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  titleContainer: {
+    flex: 1,
+    marginRight: 8,
+  },
+  videoTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+  },
+  episodeInfo: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 13,
+    marginTop: 2,
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
   controlButton: {
     width: 40,
