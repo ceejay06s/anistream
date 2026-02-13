@@ -69,6 +69,7 @@ export default function WatchScreen() {
   const serverIndex = wsStatus.serverIndex;
   const totalServers = wsStatus.totalServers;
   const iframeFallback = wsStatus.iframeFallback;
+  const fromCache = wsStatus.fromCache;
 
   // State for iframe mode
   const [useIframe, setUseIframe] = useState(false);
@@ -449,7 +450,7 @@ export default function WatchScreen() {
           <Text style={styles.streamType}>
             {useWebSocket ? 'WebSocket' : 'REST'} • Server: {currentServer?.toUpperCase() || 'HD-1'}
             {selectedSource?.isM3U8 ? ' • HLS' : ''}
-            {totalServers > 0 ? ` (${serverIndex + 1}/${totalServers})` : ''}
+            {fromCache ? ' • Cached' : totalServers > 0 ? ` (${serverIndex + 1}/${totalServers})` : ''}
           </Text>
           {retryMessage && (
             <Text style={styles.retryingText}>{retryMessage}</Text>

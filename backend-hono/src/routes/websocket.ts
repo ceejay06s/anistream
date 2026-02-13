@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { upgradeWebSocket } from 'hono/cloudflare-workers';
 import { getEpisodeSources, getEpisodeServers } from '../services/streamingService.js';
 import { WebSocketServer, WebSocket as WS } from 'ws';
+import { getCachedServer, setCachedServer, markServerFailed, isCacheEnabled } from '../services/streamCache.js';
 
 // Store active connections
 const connections = new Map<string, WebSocket>();
@@ -20,6 +21,7 @@ export interface StreamResponse {
   server?: string;
   serverIndex?: number;
   totalServers?: number;
+  fromCache?: boolean;
 }
 
 // Server priority for streaming
@@ -31,7 +33,45 @@ async function findWorkingSources(
   category: 'sub' | 'dub',
   sendMessage: (msg: StreamResponse) => void
 ): Promise<any> {
-  // First, get available servers for this episode
+  const failedServersThisRequest: string[] = [];
+
+  // Check cache for known-good server
+  const cached = await getCachedServer(episodeId, category);
+
+  if (cached && cached.server) {
+    sendMessage({
+      type: 'status',
+      message: `Trying cached server: ${cached.server.toUpperCase()}`,
+    });
+
+    try {
+      console.log(`[WS] Trying cached server: ${cached.server} (${cached.successCount} previous successes)`);
+      const sources = await getEpisodeSources(episodeId, cached.server, category);
+
+      if (sources && sources.sources && sources.sources.length > 0) {
+        console.log(`[WS] Cache HIT! Server ${cached.server} worked`);
+        // Update cache with new success
+        await setCachedServer(episodeId, category, cached.server, failedServersThisRequest);
+        return {
+          ...sources,
+          usedServer: cached.server,
+          serverIndex: 0,
+          totalServers: 1,
+          fromCache: true,
+        };
+      }
+
+      console.log(`[WS] Cached server ${cached.server} returned no sources, cycling...`);
+      failedServersThisRequest.push(cached.server);
+      await markServerFailed(episodeId, category, cached.server);
+    } catch (err: any) {
+      console.log(`[WS] Cached server ${cached.server} failed: ${err.message}`);
+      failedServersThisRequest.push(cached.server);
+      await markServerFailed(episodeId, category, cached.server);
+    }
+  }
+
+  // Get available servers for this episode
   let servers = SERVER_PRIORITY;
 
   try {
@@ -53,66 +93,84 @@ async function findWorkingSources(
     console.log('Error getting servers, using defaults:', err);
   }
 
+  // Filter out servers we know failed (from cache + this request)
+  const knownFailedServers = [...(cached?.failedServers || []), ...failedServersThisRequest];
+  const serversToTry = servers.filter(s => !knownFailedServers.includes(s));
+
+  const totalServers = serversToTry.length;
+  const skippedCount = servers.length - totalServers;
+
+  if (skippedCount > 0) {
+    console.log(`[WS] Skipping ${skippedCount} known-failed servers: ${knownFailedServers.join(', ')}`);
+  }
+
   sendMessage({
     type: 'status',
-    message: `Found ${servers.length} servers`,
-    totalServers: servers.length,
+    message: `Found ${totalServers} servers${skippedCount > 0 ? ` (skipped ${skippedCount} failed)` : ''}`,
+    totalServers,
   });
 
   // Try each server until one works
-  for (let i = 0; i < servers.length; i++) {
-    const server = servers[i];
+  for (let i = 0; i < serversToTry.length; i++) {
+    const server = serversToTry[i];
 
     sendMessage({
       type: 'retry',
       message: `Trying server: ${server.toUpperCase()}`,
       server,
       serverIndex: i,
-      totalServers: servers.length,
+      totalServers,
     });
 
     try {
-      console.log(`[WS] Trying server ${i + 1}/${servers.length}: ${server}`);
+      console.log(`[WS] Trying server ${i + 1}/${totalServers}: ${server}`);
       const sources = await getEpisodeSources(episodeId, server, category);
 
       if (sources && sources.sources && sources.sources.length > 0) {
         console.log(`[WS] Success with server: ${server}`);
+        // Cache the working server
+        await setCachedServer(episodeId, category, server, failedServersThisRequest);
         return {
           ...sources,
           usedServer: server,
           serverIndex: i,
-          totalServers: servers.length,
+          totalServers,
         };
       }
 
       console.log(`[WS] No sources from ${server}, trying next...`);
+      failedServersThisRequest.push(server);
     } catch (err: any) {
       console.log(`[WS] Error from ${server}: ${err.message}`);
+      failedServersThisRequest.push(server);
     }
 
     // Small delay between retries
     await new Promise(resolve => setTimeout(resolve, 300));
   }
 
-  // All servers failed - return iframe fallback info
+  // All servers failed - mark all as failed in cache
+  for (const server of failedServersThisRequest) {
+    await markServerFailed(episodeId, category, server);
+  }
+
+  // Return iframe fallback info
   sendMessage({
     type: 'status',
     message: 'All servers failed. Use iframe fallback.',
   });
 
-  // Return iframe URL as fallback (using megaplay.buzz like Kitsune)
   const animeId = episodeId.split('?')[0];
   const epMatch = episodeId.match(/\?ep=(\d+)/);
   const epNum = epMatch ? epMatch[1] : '1';
 
   return {
     sources: [],
-    // megaplay.buzz format: /stream/s-2/{episodeNumber}/{category}
     iframeFallback: `https://megaplay.buzz/embed/s-2/${epNum}/${category}`,
     iframeFallbackAlt: `https://hianime.to/watch/${animeId}?ep=${epNum}`,
     usedServer: 'iframe',
-    serverIndex: servers.length,
-    totalServers: servers.length,
+    serverIndex: totalServers,
+    totalServers,
   };
 }
 
@@ -156,6 +214,7 @@ export function createWebSocketServer(server: any) {
               server: sources.usedServer,
               serverIndex: sources.serverIndex,
               totalServers: sources.totalServers,
+              fromCache: sources.fromCache || false,
             });
           } else {
             sendMessage({
@@ -185,7 +244,7 @@ export function createWebSocketServer(server: any) {
     // Send welcome message
     sendMessage({
       type: 'status',
-      message: 'Connected to stream control',
+      message: `Connected to stream control${isCacheEnabled() ? ' (cache enabled)' : ''}`,
     });
   });
 
