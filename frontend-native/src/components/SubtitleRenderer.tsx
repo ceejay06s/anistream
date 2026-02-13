@@ -13,9 +13,15 @@ export interface SubtitleTrack {
   label?: string;
 }
 
+export interface SubtitleSettings {
+  fontSize: 'small' | 'medium' | 'large';
+  backgroundColor: 'transparent' | 'semi' | 'solid';
+}
+
 interface SubtitleRendererProps {
   currentTime: number;
   subtitleUrl: string | null;
+  settings?: SubtitleSettings;
   style?: any;
 }
 
@@ -182,12 +188,31 @@ function parseSubtitles(content: string, url: string): SubtitleCue[] {
   return parseVtt(content);
 }
 
-export function SubtitleRenderer({ currentTime, subtitleUrl, style }: SubtitleRendererProps) {
+const defaultSettings: SubtitleSettings = {
+  fontSize: 'medium',
+  backgroundColor: 'semi',
+};
+
+export function SubtitleRenderer({ currentTime, subtitleUrl, settings = defaultSettings, style }: SubtitleRendererProps) {
   const [cues, setCues] = useState<SubtitleCue[]>([]);
   const [currentText, setCurrentText] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const cacheRef = useRef<Map<string, SubtitleCue[]>>(new Map());
+
+  // Font size mapping
+  const fontSizeMap = {
+    small: Platform.OS === 'web' ? 14 : 12,
+    medium: Platform.OS === 'web' ? 18 : 16,
+    large: Platform.OS === 'web' ? 24 : 20,
+  };
+
+  // Background opacity mapping
+  const backgroundMap = {
+    transparent: 'transparent',
+    semi: 'rgba(0, 0, 0, 0.75)',
+    solid: 'rgba(0, 0, 0, 0.95)',
+  };
 
   // Fetch and parse subtitles
   useEffect(() => {
@@ -283,10 +308,23 @@ export function SubtitleRenderer({ currentTime, subtitleUrl, style }: SubtitleRe
     return null;
   }
 
+  const fontSize = fontSizeMap[settings.fontSize];
+  const backgroundColor = backgroundMap[settings.backgroundColor];
+  const lineHeight = fontSize * 1.4;
+
   return (
     <View style={[styles.container, { pointerEvents: 'none' }, style]}>
-      <View style={styles.textContainer}>
-        <Text style={styles.subtitleText}>{currentText}</Text>
+      <View style={[
+        styles.textContainer,
+        { backgroundColor },
+        settings.backgroundColor === 'transparent' && styles.textContainerTransparent,
+      ]}>
+        <Text style={[
+          styles.subtitleText,
+          { fontSize, lineHeight },
+        ]}>
+          {currentText}
+        </Text>
       </View>
     </View>
   );
@@ -302,26 +340,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   textContainer: {
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 4,
     maxWidth: '90%',
   },
+  textContainerTransparent: {
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
   subtitleText: {
     color: '#fff',
-    fontSize: Platform.OS === 'web' ? 18 : 16,
     fontWeight: '500',
     textAlign: 'center',
-    lineHeight: Platform.OS === 'web' ? 26 : 22,
     ...Platform.select({
       web: {
-        textShadow: '1px 1px 2px rgba(0, 0, 0, 0.8)',
+        textShadow: '2px 2px 4px rgba(0, 0, 0, 0.9), -1px -1px 2px rgba(0, 0, 0, 0.9)',
       },
       default: {
-        textShadowColor: 'rgba(0, 0, 0, 0.8)',
-        textShadowOffset: { width: 1, height: 1 },
-        textShadowRadius: 2,
+        textShadowColor: 'rgba(0, 0, 0, 0.9)',
+        textShadowOffset: { width: 2, height: 2 },
+        textShadowRadius: 4,
       },
     }),
   },

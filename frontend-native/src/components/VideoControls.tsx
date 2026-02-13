@@ -15,6 +15,11 @@ export interface SubtitleTrack {
   label?: string;
 }
 
+export interface SubtitleSettings {
+  fontSize: 'small' | 'medium' | 'large';
+  backgroundColor: 'transparent' | 'semi' | 'solid';
+}
+
 export interface VideoControlsProps {
   videoRef: React.RefObject<HTMLVideoElement>;
   isPlaying: boolean;
@@ -26,12 +31,14 @@ export interface VideoControlsProps {
   isLocked: boolean;
   subtitleTracks: SubtitleTrack[];
   currentSubtitle: string | null;
+  subtitleSettings: SubtitleSettings;
   onPlayPause: () => void;
   onSeek: (time: number) => void;
   onVolumeChange: (volume: number) => void;
   onToggleFullscreen: () => void;
   onToggleLock: () => void;
   onSubtitleChange: (url: string | null) => void;
+  onSubtitleSettingsChange: (settings: SubtitleSettings) => void;
   onOrientationLock: (landscape: boolean) => void;
 }
 
@@ -46,16 +53,19 @@ export function VideoControls({
   isLocked,
   subtitleTracks,
   currentSubtitle,
+  subtitleSettings,
   onPlayPause,
   onSeek,
   onVolumeChange,
   onToggleFullscreen,
   onToggleLock,
   onSubtitleChange,
+  onSubtitleSettingsChange,
   onOrientationLock,
 }: VideoControlsProps) {
   const [showControls, setShowControls] = useState(true);
   const [showSubtitleMenu, setShowSubtitleMenu] = useState(false);
+  const [showSubtitleSettings, setShowSubtitleSettings] = useState(false);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -178,8 +188,9 @@ export function VideoControls({
       </View>
 
       {/* Subtitle menu dropdown */}
-      {showSubtitleMenu && (
+      {showSubtitleMenu && !showSubtitleSettings && (
         <View style={styles.subtitleMenu}>
+          <Text style={styles.subtitleMenuTitle}>Subtitles</Text>
           <TouchableOpacity
             style={[
               styles.subtitleOption,
@@ -209,6 +220,73 @@ export function VideoControls({
               </Text>
             </TouchableOpacity>
           ))}
+          <View style={styles.subtitleDivider} />
+          <TouchableOpacity
+            style={styles.subtitleOption}
+            onPress={() => setShowSubtitleSettings(true)}
+          >
+            <Ionicons name="settings-outline" size={16} color="#fff" style={{ marginRight: 8 }} />
+            <Text style={styles.subtitleOptionText}>CC Settings</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Subtitle settings submenu */}
+      {showSubtitleSettings && (
+        <View style={styles.subtitleMenu}>
+          <TouchableOpacity
+            style={styles.settingsBackButton}
+            onPress={() => setShowSubtitleSettings(false)}
+          >
+            <Ionicons name="arrow-back" size={16} color="#fff" />
+            <Text style={styles.subtitleMenuTitle}>CC Settings</Text>
+          </TouchableOpacity>
+
+          <Text style={styles.settingsLabel}>Font Size</Text>
+          <View style={styles.settingsRow}>
+            {(['small', 'medium', 'large'] as const).map((size) => (
+              <TouchableOpacity
+                key={size}
+                style={[
+                  styles.settingsButton,
+                  subtitleSettings.fontSize === size && styles.settingsButtonActive,
+                ]}
+                onPress={() => onSubtitleSettingsChange({ ...subtitleSettings, fontSize: size })}
+              >
+                <Text style={[
+                  styles.settingsButtonText,
+                  subtitleSettings.fontSize === size && styles.settingsButtonTextActive,
+                ]}>
+                  {size.charAt(0).toUpperCase() + size.slice(1)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={styles.settingsLabel}>Background</Text>
+          <View style={styles.settingsRow}>
+            {([
+              { value: 'transparent', label: 'None' },
+              { value: 'semi', label: 'Semi' },
+              { value: 'solid', label: 'Solid' },
+            ] as const).map((bg) => (
+              <TouchableOpacity
+                key={bg.value}
+                style={[
+                  styles.settingsButton,
+                  subtitleSettings.backgroundColor === bg.value && styles.settingsButtonActive,
+                ]}
+                onPress={() => onSubtitleSettingsChange({ ...subtitleSettings, backgroundColor: bg.value })}
+              >
+                <Text style={[
+                  styles.settingsButtonText,
+                  subtitleSettings.backgroundColor === bg.value && styles.settingsButtonTextActive,
+                ]}>
+                  {bg.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
       )}
 
@@ -368,15 +446,24 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 60,
     right: 12,
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
     borderRadius: 8,
-    padding: 8,
-    minWidth: 120,
+    padding: 12,
+    minWidth: 160,
     zIndex: 10,
   },
+  subtitleMenuTitle: {
+    color: '#888',
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
   subtitleOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     borderRadius: 4,
   },
   subtitleOptionActive: {
@@ -385,6 +472,48 @@ const styles = StyleSheet.create({
   subtitleOptionText: {
     color: '#fff',
     fontSize: 14,
+  },
+  subtitleDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    marginVertical: 8,
+  },
+  settingsBackButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  settingsLabel: {
+    color: '#888',
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 8,
+    marginBottom: 6,
+    textTransform: 'uppercase',
+  },
+  settingsRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  settingsButton: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
+  },
+  settingsButtonActive: {
+    backgroundColor: '#e50914',
+  },
+  settingsButtonText: {
+    color: '#aaa',
+    fontSize: 12,
+  },
+  settingsButtonTextActive: {
+    color: '#fff',
+    fontWeight: '600',
   },
   centerControls: {
     flexDirection: 'row',
