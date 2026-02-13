@@ -234,12 +234,15 @@ export function SubtitleRenderer({ currentTime, subtitleUrl, settings = defaultS
         setLoading(true);
         setError(null);
 
+        console.log('[Subtitles] Fetching from:', subtitleUrl.substring(0, 100));
         const response = await fetch(subtitleUrl);
         if (!response.ok) {
           throw new Error(`Failed to fetch subtitles: ${response.status}`);
         }
 
         const content = await response.text();
+        console.log('[Subtitles] Received content length:', content.length, 'First 100 chars:', content.substring(0, 100));
+
         const parsedCues = parseSubtitles(content, subtitleUrl);
 
         // Sort by start time
@@ -249,9 +252,9 @@ export function SubtitleRenderer({ currentTime, subtitleUrl, settings = defaultS
         cacheRef.current.set(subtitleUrl, parsedCues);
 
         setCues(parsedCues);
-        console.log(`Parsed ${parsedCues.length} subtitle cues`);
+        console.log(`[Subtitles] Parsed ${parsedCues.length} cues. First cue:`, parsedCues[0]);
       } catch (err: any) {
-        console.error('Error loading subtitles:', err);
+        console.error('[Subtitles] Error loading:', err);
         setError(err.message);
         setCues([]);
       } finally {
@@ -338,6 +341,7 @@ const styles = StyleSheet.create({
     bottom: Platform.OS === 'web' ? 60 : 80,
     alignItems: 'center',
     paddingHorizontal: 16,
+    zIndex: 5, // Ensure subtitles appear above video but below controls
   },
   textContainer: {
     paddingHorizontal: 12,
