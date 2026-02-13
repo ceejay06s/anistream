@@ -13,17 +13,18 @@ export default function TabLayout() {
           borderTopWidth: 1,
           paddingBottom: Platform.OS === 'ios' ? 20 : 8,
           paddingTop: 8,
-          height: Platform.OS === 'ios' ? 88 : 64,
+          height: Platform.OS === 'ios' ? 88 : Platform.OS === 'web' ? 56 : 64,
         },
         tabBarActiveTintColor: '#e50914',
         tabBarInactiveTintColor: '#888',
+        tabBarShowLabel: Platform.OS !== 'web',
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '500',
           marginTop: 2,
         },
         tabBarIconStyle: {
-          marginTop: 4,
+          marginTop: Platform.OS === 'web' ? 0 : 4,
         },
       }}
     >

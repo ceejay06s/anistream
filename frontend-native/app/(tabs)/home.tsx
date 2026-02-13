@@ -293,16 +293,7 @@ export default function HomeScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* App Header with Logo */}
-      <View style={styles.appHeader}>
-        <Image
-          source={require('../../assets/icon.png')}
-          style={styles.appLogo}
-          resizeMode="contain"
-        />
-        <Text style={styles.appTitle}>AniStream</Text>
-      </View>
+    <View style={styles.container}>
       <ScrollView style={styles.scrollView} stickyHeaderIndices={[]}>
         {/* Hero Carousel Banner */}
         {spotlightAnime.length > 0 && (
@@ -335,7 +326,23 @@ export default function HomeScreen() {
         {/* Footer spacer */}
         <View style={{ height: 100 }} />
       </ScrollView>
-    </SafeAreaView>
+
+      {/* Floating Header with Gradient */}
+      <LinearGradient
+        colors={['rgba(0,0,0,0.9)', 'rgba(0,0,0,0.6)', 'transparent']}
+        style={styles.floatingHeader}
+      >
+        <SafeAreaView edges={['top']} style={styles.headerSafeArea}>
+          <View style={styles.appHeader}>
+            <Image
+              source={require('../../assets/logo-w-text.png')}
+              style={styles.appLogo}
+              resizeMode="contain"
+            />
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
+    </View>
   );
 }
 
@@ -347,24 +354,25 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
+  floatingHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+  },
+  headerSafeArea: {
+    width: '100%',
+  },
   appHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#000',
+    paddingHorizontal: Platform.OS === 'web' ? 48 : 12,
+    paddingVertical: Platform.OS === 'web' ? 16 : 8,
   },
   appLogo: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-  },
-  appTitle: {
-    color: '#e50914',
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginLeft: 10,
-    letterSpacing: 0.5,
+    width: Platform.OS === 'web' ? 160 : 140,
+    height: Platform.OS === 'web' ? 48 : 40,
   },
   centered: {
     flex: 1,
@@ -401,8 +409,8 @@ const styles = StyleSheet.create({
   },
   bannerContent: {
     position: 'absolute',
-    left: Platform.OS === 'web' ? 48 : 16,
-    right: Platform.OS === 'web' ? 48 : 16,
+    left: Platform.OS === 'web' ? 48 : 12,
+    right: Platform.OS === 'web' ? 48 : 12,
     bottom: Platform.OS === 'web' ? 100 : 60,
   },
   bannerBadge: {
@@ -536,8 +544,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Platform.OS === 'web' ? 48 : 16,
-    marginBottom: Platform.OS === 'web' ? 16 : 12,
+    paddingHorizontal: Platform.OS === 'web' ? 48 : 12,
+    marginBottom: Platform.OS === 'web' ? 16 : 10,
   },
   sectionTitle: {
     fontSize: Platform.OS === 'web' ? 24 : 18,
@@ -555,7 +563,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   animeList: {
-    paddingHorizontal: Platform.OS === 'web' ? 42 : 10,
+    paddingHorizontal: Platform.OS === 'web' ? 42 : 6,
   },
   horizontalList: {
     flexGrow: 0,
