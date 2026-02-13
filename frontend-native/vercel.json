@@ -1,8 +1,7 @@
 {
-  "framework": "expo",
   "buildCommand": "npx expo export -p web",
   "outputDirectory": "dist",
-  "env": {
-    "EXPO_PUBLIC_API_URL": "https://anistream-backend-blme.onrender.com"
-  }
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }
