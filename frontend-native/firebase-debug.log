@@ -1,0 +1,16 @@
+[debug] [2026-02-16T05:30:33.949Z] ----------------------------------------------------------------------
+[debug] [2026-02-16T05:30:33.957Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\chris\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js deploy
+[debug] [2026-02-16T05:30:33.958Z] CLI Version:   15.6.0
+[debug] [2026-02-16T05:30:33.958Z] Platform:      win32
+[debug] [2026-02-16T05:30:33.958Z] Node Version:  v24.12.0
+[debug] [2026-02-16T05:30:33.958Z] Time:          Mon Feb 16 2026 13:30:33 GMT+0800 (Philippine Standard Time)
+[debug] [2026-02-16T05:30:33.958Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-02-16T05:30:37.907Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-02-16T05:30:37.908Z] > authorizing via signed-in user (christianbalais06@gmail.com)
+[debug] [2026-02-16T05:30:37.909Z] [iam] checking project aniwatch-76fd3 for permissions ["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get","firebasehosting.sites.update"]
+[debug] [2026-02-16T05:30:37.910Z] Checked if tokens are valid: true, expires at: 1771222750214
+[debug] [2026-02-16T05:30:37.911Z] Checked if tokens are valid: true, expires at: 1771222750214
+[debug] [2026-02-16T05:30:37.912Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/aniwatch-76fd3:testIamPermissions [none]
+[debug] [2026-02-16T05:30:37.912Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/aniwatch-76fd3:testIamPermissions  x-goog-user-project=aniwatch-76fd3
+[debug] [2026-02-16T05:30:37.912Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/aniwatch-76fd3:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get","firebasehosting.sites.update"]}
