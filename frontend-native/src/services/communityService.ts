@@ -35,20 +35,41 @@ async function uploadMediaFile(
   }
 
   const { ref, uploadBytes, getDownloadURL } = require('firebase/storage');
+  const { getAuth } = require('firebase/auth');
+  const { app } = require('@/config/firebase');
+
+  // Ensure user is authenticated
+  const auth = getAuth(app);
+  if (!auth.currentUser) {
+    throw new Error('User must be authenticated to upload files');
+  }
 
   const isVideo = file.type.startsWith('video/');
   const fileExtension = file.name.split('.').pop() || (isVideo ? 'mp4' : 'jpg');
   const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExtension}`;
   const filePath = `posts/${userId}/${fileName}`;
 
-  const storageRef = ref(storage, filePath);
-  await uploadBytes(storageRef, file);
-  const url = await getDownloadURL(storageRef);
+  try {
+    const storageRef = ref(storage, filePath);
+    await uploadBytes(storageRef, file);
+    const url = await getDownloadURL(storageRef);
 
-  return {
-    url,
-    type: isVideo ? 'video' : 'image',
-  };
+    return {
+      url,
+      type: isVideo ? 'video' : 'image',
+    };
+  } catch (error: any) {
+    // Provide more helpful error messages
+    if (error.code === 'storage/unauthorized') {
+      throw new Error('You do not have permission to upload files. Please ensure you are logged in.');
+    } else if (error.code === 'storage/canceled') {
+      throw new Error('Upload was canceled.');
+    } else if (error.message?.includes('CORS') || error.message?.includes('cors')) {
+      throw new Error('Upload failed due to CORS policy. Please check Firebase Storage CORS configuration in Firebase Console.');
+    } else {
+      throw new Error(`Upload failed: ${error.message || 'Unknown error'}`);
+    }
+  }
 }
 
 export interface Post {

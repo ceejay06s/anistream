@@ -120,8 +120,18 @@ export async function executeRecaptcha(
       try {
         const token = await window.grecaptcha.enterprise!.execute(siteKey, { action });
         resolve(token);
-      } catch (error) {
-        reject(error);
+      } catch (error: any) {
+        // If Enterprise fails, try falling back to regular reCAPTCHA if available
+        if (window.grecaptcha?.execute && error?.message?.includes('Invalid site key')) {
+          try {
+            const token = await window.grecaptcha.execute(siteKey, { action });
+            resolve(token);
+          } catch (fallbackError) {
+            reject(fallbackError);
+          }
+        } else {
+          reject(error);
+        }
       }
     });
   });
