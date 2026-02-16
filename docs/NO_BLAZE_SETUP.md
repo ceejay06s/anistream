@@ -155,4 +155,4 @@ Then use it in your cron job:
 4. Set up cron job to call the endpoint daily
 5. Test the endpoint manually first
 
-See `CLOUD_FUNCTIONS_SETUP.md` for details on Firestore triggers (which might work on Spark).
+See `docs/CLOUD_FUNCTIONS_SETUP.md` for details on Firestore triggers (which might work on Spark).

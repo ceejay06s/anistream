@@ -1,27 +1,22 @@
 # AniStream
 
-A modern anime streaming application with a React Native mobile app and Hono backend API.
+An anime streaming platform with community features, built with React Native (Expo) and Hono backend.
 
-## Project Structure
+## 📁 Project Structure
 
 ```
 anistream/
-├── backend-hono/       # Backend API (Hono + TypeScript)
-├── frontend-native/    # Mobile app (React Native + Expo)
-└── archive/            # Archived previous implementations
+├── docs/              # All documentation
+├── scripts/           # Automation scripts
+│   └── backend/      # Backend scripts
+├── backend-hono/     # Backend API (Hono)
+├── frontend-native/  # Frontend (Expo/React Native)
+└── functions/        # Firebase Cloud Functions (deprecated)
 ```
 
-## Features
+## 🚀 Quick Start
 
-- Browse and search anime
-- View anime details and episodes
-- Stream episodes with subtitle support
-- Cross-platform (Android, iOS, Web)
-- Real-time streaming via WebSocket
-
-## Quick Start
-
-### Backend
+### Backend Setup
 
 ```bash
 cd backend-hono
@@ -29,9 +24,9 @@ npm install
 npm run dev
 ```
 
-Server runs on `http://localhost:8801`
+See `docs/README_ENV.md` for environment variable setup.
 
-### Frontend (Mobile)
+### Frontend Setup
 
 ```bash
 cd frontend-native
@@ -39,36 +34,29 @@ npm install
 npm start
 ```
 
-Then:
-- Press `a` for Android
-- Press `i` for iOS
-- Press `w` for Web
+## 📚 Documentation
 
-## Tech Stack
+All documentation is organized in the `docs/` folder:
 
-### Backend
-- [Hono](https://hono.dev/) - Fast web framework
-- [aniwatch](https://www.npmjs.com/package/aniwatch) - Anime data provider
-- WebSocket for real-time streaming
-- TypeScript
+- **[Setup Guides](docs/)** - Configuration and setup instructions
+- **[Deployment](docs/)** - Deployment guides for various platforms
+- **[Testing](docs/TESTING.md)** - Testing documentation
 
-### Frontend
-- [React Native](https://reactnative.dev/) - Cross-platform mobile
-- [Expo](https://expo.dev/) - Development framework
-- [Expo Router](https://docs.expo.dev/router/introduction/) - File-based routing
-- [expo-video](https://docs.expo.dev/versions/latest/sdk/video/) - Video player
-- TypeScript
+## 🛠️ Scripts
 
-## API Endpoints
+Automation scripts are in `scripts/`:
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/anime/search?q={query}` | Search anime |
-| `GET /api/anime/info/:animeId` | Get anime details |
-| `GET /api/anime/episodes/:animeId` | Get episode list |
-| `GET /api/streaming/sources?episodeId={id}` | Get streaming sources |
-| `GET /api/streaming/servers?episodeId={id}` | Get available servers |
+- **[Backend Scripts](scripts/backend/)** - Environment setup, key generation, etc.
 
-## License
+## 🔗 Key Features
+
+- Anime streaming with multiple server support
+- Community posts and comments
+- User profiles with photo uploads
+- Push notifications
+- reCAPTCHA protection
+- Backblaze B2 file storage
+
+## 📝 License
 
 MIT
