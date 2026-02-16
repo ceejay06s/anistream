@@ -1,4 +1,3 @@
-/// <reference types="ws" />
 import { Hono } from 'hono';
 import { upgradeWebSocket } from 'hono/cloudflare-workers';
 import { getEpisodeSources, getEpisodeServers } from '../services/streamingService.js';
