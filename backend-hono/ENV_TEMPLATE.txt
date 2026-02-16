@@ -1,0 +1,24 @@
+# Copy this file to .env and fill in your values
+# This file is ignored by Git (.gitignore)
+
+PORT=8801
+NODE_ENV=development
+
+# Firebase Admin SDK Service Account (Base64 encoded)
+# Get it by running: .\get-base64-key.ps1
+FIREBASE_SERVICE_ACCOUNT=
+
+# Alternative: Firebase Service Account as JSON string
+# FIREBASE_SERVICE_ACCOUNT_JSON=
+
+# Secret token for anime update endpoint (for cron jobs)
+# Generate with: openssl rand -hex 32
+ANIME_UPDATE_SECRET_TOKEN=
+
+# Backblaze B2 Configuration
+# Get these from: https://secure.backblaze.com/user_signin.htm → App Keys
+BACKBLAZE_KEY_ID=
+BACKBLAZE_APPLICATION_KEY=
+BACKBLAZE_BUCKET_NAME=anistream-bckt
+BACKBLAZE_ENDPOINT=https://s3.us-east-005.backblazeb2.com
+BACKBLAZE_REGION=us-east-005

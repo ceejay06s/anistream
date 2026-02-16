@@ -29,45 +29,42 @@ async function uploadMediaFile(
   file: File,
   userId: string
 ): Promise<MediaItem> {
-  const storage = getStorage();
-  if (!storage) {
-    throw new Error('Storage not available on this platform');
-  }
-
-  const { ref, uploadBytes, getDownloadURL } = require('firebase/storage');
-  const { getAuth } = require('firebase/auth');
-  const { app } = require('@/config/firebase');
-
-  // Ensure user is authenticated
-  const auth = getAuth(app);
-  if (!auth.currentUser) {
-    throw new Error('User must be authenticated to upload files');
-  }
-
-  const isVideo = file.type.startsWith('video/');
-  const fileExtension = file.name.split('.').pop() || (isVideo ? 'mp4' : 'jpg');
-  const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExtension}`;
-  const filePath = `posts/${userId}/${fileName}`;
+  // Use backend proxy to avoid CORS issues (no Blaze plan needed)
+  const { API_BASE_URL } = require('./api');
+  const axios = require('axios');
 
   try {
-    const storageRef = ref(storage, filePath);
-    await uploadBytes(storageRef, file);
-    const url = await getDownloadURL(storageRef);
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('userId', userId);
+    formData.append('folder', 'posts');
 
-    return {
-      url,
-      type: isVideo ? 'video' : 'image',
-    };
+    const response = await axios.post(`${API_BASE_URL}/api/upload/file`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    if (response.data.success) {
+      return {
+        url: response.data.url,
+        type: response.data.type,
+      };
+    } else {
+      throw new Error(response.data.error || 'Upload failed');
+    }
   } catch (error: any) {
     // Provide more helpful error messages
-    if (error.code === 'storage/unauthorized') {
-      throw new Error('You do not have permission to upload files. Please ensure you are logged in.');
-    } else if (error.code === 'storage/canceled') {
-      throw new Error('Upload was canceled.');
+    if (error.response?.status === 400) {
+      throw new Error(error.response.data.error || 'Invalid file or request');
+    } else if (error.response?.status === 413) {
+      throw new Error('File size exceeds 10MB limit');
+    } else if (error.response?.status === 401) {
+      throw new Error('You must be authenticated to upload files');
     } else if (error.message?.includes('CORS') || error.message?.includes('cors')) {
-      throw new Error('Upload failed due to CORS policy. Please check Firebase Storage CORS configuration in Firebase Console.');
+      throw new Error('Upload failed due to network error. Please try again.');
     } else {
-      throw new Error(`Upload failed: ${error.message || 'Unknown error'}`);
+      throw new Error(`Upload failed: ${error.response?.data?.message || error.message || 'Unknown error'}`);
     }
   }
 }

@@ -7,9 +7,29 @@ Access to XMLHttpRequest at 'https://firebasestorage.googleapis.com/...'
 from origin 'http://localhost:8081' has been blocked by CORS policy
 ```
 
-## Solution
+**Note:** Configuring CORS via `gsutil` requires a Firebase Blaze (paid) plan. If you don't want to upgrade, use the **Backend Proxy Solution** below instead.
 
-Firebase Storage requires CORS configuration to allow uploads from web browsers. Here's how to fix it:
+## Solution: Backend Proxy (No Blaze Plan Required) ✅
+
+The app now uses a backend proxy for file uploads, which completely avoids CORS issues without requiring any Firebase plan upgrades.
+
+### How It Works
+1. Frontend uploads files to your backend API (`/api/upload/file`)
+2. Backend uses Firebase Admin SDK to upload to Firebase Storage
+3. Backend returns the public URL
+4. No CORS issues since backend-to-backend communication doesn't have CORS restrictions
+
+### Implementation
+- ✅ Backend route created: `backend-hono/src/routes/upload.ts`
+- ✅ Frontend updated to use backend endpoint
+- ✅ Works with Spark (free) plan
+- ✅ No CORS configuration needed
+
+---
+
+## Alternative Solution: Configure CORS via Firebase Console (Requires Blaze Plan)
+
+If you prefer direct uploads and have a Blaze plan, you can configure CORS:
 
 ### Option 1: Configure CORS via Firebase Console (Recommended)
 

@@ -37,9 +37,17 @@ This will:
 
 ### Required
 
+#### Firebase (for Firestore/Admin SDK)
 - **FIREBASE_SERVICE_ACCOUNT**: Base64 encoded Firebase service account JSON
   - Get it by running: `.\get-base64-key.ps1`
   - Or use `FIREBASE_SERVICE_ACCOUNT_JSON` with raw JSON (see below)
+
+#### Backblaze B2 (for file storage)
+- **BACKBLAZE_KEY_ID**: Your Backblaze Application Key ID
+  - Get from: [Backblaze B2 Console](https://secure.backblaze.com/user_signin.htm) → App Keys
+- **BACKBLAZE_APPLICATION_KEY**: Your Backblaze Application Key
+  - Get from: [Backblaze B2 Console](https://secure.backblaze.com/user_signin.htm) → App Keys
+  - ⚠️ **Only shown once** - save it securely!
 
 ### Optional
 
@@ -52,6 +60,10 @@ This will:
   ```
   FIREBASE_SERVICE_ACCOUNT_JSON={"type":"service_account","project_id":"aniwatch-76fd3","private_key_id":"...","private_key":"-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n",...}
   ```
+
+- **BACKBLAZE_BUCKET_NAME**: Backblaze bucket name (default: `anistream-bckt`)
+- **BACKBLAZE_ENDPOINT**: Backblaze endpoint (default: `https://s3.us-east-005.backblazeb2.com`)
+- **BACKBLAZE_REGION**: Backblaze region (default: `us-east-005`)
 
 - **ANIME_UPDATE_SECRET_TOKEN**: Secret token for securing the update endpoint
   - Generate random string: `openssl rand -hex 32`
