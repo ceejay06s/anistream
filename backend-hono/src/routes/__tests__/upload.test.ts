@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, jest } from 'jest';
+// Jest globals are available in test environment
 import { uploadRoutes } from '../upload.js';
 import { getBackblazeClient, BACKBLAZE_BUCKET } from '../../config/backblaze.js';
 import { PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';

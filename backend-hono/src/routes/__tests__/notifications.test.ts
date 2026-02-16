@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, jest } from 'jest';
+// Jest globals are available in test environment
 import { notificationRoutes } from '../notifications.js';
 import { checkAnimeUpdatesForAllUsers } from '../../services/animeUpdateService.js';
 

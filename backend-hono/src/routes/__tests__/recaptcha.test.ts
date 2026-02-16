@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, jest } from 'jest';
+// Jest globals are available in test environment
 import { recaptchaRoutes } from '../recaptcha.js';
 import { verifyRecaptcha } from '../../utils/recaptcha.js';
 

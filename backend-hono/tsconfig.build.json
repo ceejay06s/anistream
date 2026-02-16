@@ -1,5 +1,8 @@
 {
   "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "skipLibCheck": true
+  },
   "include": [
     "src/**/*.ts"
   ],
@@ -11,5 +14,8 @@
     "**/*.spec.ts",
     "jest.config.js",
     "jest.setup.js"
-  ]
+  ],
+  "ts-node": {
+    "exclude": ["**/__tests__/**", "**/*.test.ts", "**/*.spec.ts"]
+  }
 }

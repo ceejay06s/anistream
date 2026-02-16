@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, jest } from 'jest';
+// Jest globals are available in test environment
 import { streamingRoutes } from '../streaming.js';
 import { getEpisodeSources, getEpisodeServers } from '../../services/streamingService.js';
 
