@@ -3,7 +3,7 @@ import axios from 'axios';
 
 /**
  * Get a signed URL for a file in Backblaze B2 (for private buckets)
- * This generates a temporary signed URL that expires after 7 days
+ * This generates a temporary signed URL that expires after 5 days
  * You can call this function anytime to get a fresh signed URL
  * 
  * @param filePath The path to the file in the bucket (e.g., "posts/user123/filename.jpg")
@@ -108,7 +108,7 @@ export async function refreshSignedUrl(filePath: string): Promise<string> {
  * @returns A signed URL
  */
 const urlCache = new Map<string, { url: string; timestamp: number }>();
-const CACHE_DURATION = 6 * 24 * 60 * 60 * 1000; // 6 days (refresh before 7-day expiry)
+const CACHE_DURATION = 4 * 24 * 60 * 60 * 1000; // 4 days (refresh before 5-day expiry)
 
 export async function getOrRefreshSignedUrl(
   filePath: string,

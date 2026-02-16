@@ -85,14 +85,14 @@ uploadRoutes.post('/file', async (c) => {
 
     await s3Client.send(putCommand);
 
-    // Generate signed URL (valid for 7 days - max allowed by S3-compatible services)
+    // Generate signed URL (valid for 5 days - max allowed by S3-compatible services is < 7 days)
     const getCommand = new GetObjectCommand({
       Bucket: BACKBLAZE_BUCKET,
       Key: filePath,
     });
 
     const signedUrl = await getSignedUrl(s3Client, getCommand, {
-      expiresIn: 604800, // 7 days in seconds (maximum allowed)
+      expiresIn: 432000, // 5 days in seconds (5*24*60*60 = 432000) - safely under 7-day limit
     });
 
     // Public URL (if bucket is public, otherwise use signed URL)
@@ -129,14 +129,14 @@ uploadRoutes.get('/file', async (c) => {
 
     const s3Client = getBackblazeClient();
 
-    // Generate signed URL (valid for 7 days - max allowed by S3-compatible services)
+    // Generate signed URL (valid for 5 days - max allowed by S3-compatible services is < 7 days)
     const getCommand = new GetObjectCommand({
       Bucket: BACKBLAZE_BUCKET,
       Key: filePath,
     });
 
     const signedUrl = await getSignedUrl(s3Client, getCommand, {
-      expiresIn: 604800, // 7 days in seconds (maximum allowed)
+      expiresIn: 432000, // 5 days in seconds (5*24*60*60 = 432000) - safely under 7-day limit
     });
 
     // Public URL (if bucket is public, otherwise use signed URL)
