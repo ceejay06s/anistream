@@ -56,6 +56,7 @@ declare module 'ws' {
     backlog?: number;
     path?: string;
     noServer?: boolean;
+    server?: http.Server | https.Server;
     clientTracking?: boolean;
     perMessageDeflate?: boolean | PerMessageDeflateOptions;
     maxPayload?: number;
