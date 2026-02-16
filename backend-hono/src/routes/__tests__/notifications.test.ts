@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+// Jest globals are available in test environment
 import { notificationRoutes } from '../notifications.js';
 import { checkAnimeUpdatesForAllUsers } from '../../services/animeUpdateService.js';
 
@@ -25,7 +25,7 @@ describe('Notification Routes', () => {
       });
 
       const res = await notificationRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; totalUsers?: number; totalAnime?: number; updatesFound?: number; error?: string; message?: string; method?: string };
 
       expect(res.status).toBe(200);
       expect(data.success).toBe(true);
@@ -44,7 +44,7 @@ describe('Notification Routes', () => {
       });
 
       const res = await notificationRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; totalUsers?: number; totalAnime?: number; updatesFound?: number; error?: string; message?: string; method?: string };
 
       expect(res.status).toBe(401);
       expect(data.error).toBe('Unauthorized');
@@ -66,7 +66,7 @@ describe('Notification Routes', () => {
       });
 
       const res = await notificationRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; totalUsers?: number; totalAnime?: number; updatesFound?: number; error?: string; message?: string; method?: string };
 
       expect(res.status).toBe(200);
       expect(data.success).toBe(true);
@@ -82,7 +82,7 @@ describe('Notification Routes', () => {
       });
 
       const res = await notificationRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; totalUsers?: number; totalAnime?: number; updatesFound?: number; error?: string; message?: string; method?: string };
 
       expect(res.status).toBe(500);
       expect(data.success).toBe(false);
@@ -97,7 +97,7 @@ describe('Notification Routes', () => {
       });
 
       const res = await notificationRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; totalUsers?: number; totalAnime?: number; updatesFound?: number; error?: string; message?: string; method?: string };
 
       expect(res.status).toBe(200);
       expect(data.message).toBe('Anime update check endpoint');

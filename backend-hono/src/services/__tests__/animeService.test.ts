@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+// Jest globals are available in test environment
 import { HiAnime } from 'aniwatch';
 import * as animeService from '../animeService.js';
 

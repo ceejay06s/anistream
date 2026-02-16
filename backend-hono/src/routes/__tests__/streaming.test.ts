@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+// Jest globals are available in test environment
 import { streamingRoutes } from '../streaming.js';
 import { getEpisodeSources, getEpisodeServers } from '../../services/streamingService.js';
 
@@ -22,7 +22,7 @@ describe('Streaming Routes', () => {
 
       const req = new Request('http://localhost/api/streaming/sources?episodeId=ep123&server=hd-1&category=sub');
       const res = await streamingRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; data?: any; server?: string; error?: string };
 
       expect(res.status).toBe(200);
       expect(data.success).toBe(true);
@@ -34,7 +34,7 @@ describe('Streaming Routes', () => {
     it('should require episodeId parameter', async () => {
       const req = new Request('http://localhost/api/streaming/sources?server=hd-1');
       const res = await streamingRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; data?: any; server?: string; error?: string };
 
       expect(res.status).toBe(400);
       expect(data.error).toContain('episodeId parameter is required');
@@ -51,7 +51,7 @@ describe('Streaming Routes', () => {
 
       const req = new Request('http://localhost/api/streaming/sources?episodeId=ep123&server=hd-1&fallback=true');
       const res = await streamingRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; data?: any; server?: string; error?: string };
 
       expect(res.status).toBe(200);
       expect(data.success).toBe(true);
@@ -63,7 +63,7 @@ describe('Streaming Routes', () => {
 
       const req = new Request('http://localhost/api/streaming/sources?episodeId=ep123&fallback=true');
       const res = await streamingRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; data?: any; server?: string; error?: string };
 
       expect(res.status).toBe(404);
       expect(data.success).toBe(false);
@@ -78,7 +78,7 @@ describe('Streaming Routes', () => {
 
       const req = new Request('http://localhost/api/streaming/servers?episodeId=ep123');
       const res = await streamingRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; data?: any; server?: string; error?: string };
 
       expect(res.status).toBe(200);
       expect(data.success).toBe(true);
@@ -89,7 +89,7 @@ describe('Streaming Routes', () => {
     it('should require episodeId parameter', async () => {
       const req = new Request('http://localhost/api/streaming/servers');
       const res = await streamingRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; data?: any; server?: string; error?: string };
 
       expect(res.status).toBe(400);
       expect(data.error).toContain('episodeId parameter is required');

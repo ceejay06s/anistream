@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+// Jest globals are available in test environment
 import { recaptchaRoutes } from '../recaptcha.js';
 import { verifyRecaptcha } from '../../utils/recaptcha.js';
 
@@ -21,7 +21,7 @@ describe('reCAPTCHA Routes', () => {
       });
 
       const res = await recaptchaRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; error?: string };
 
       expect(res.status).toBe(200);
       expect(data.success).toBe(true);
@@ -38,7 +38,7 @@ describe('reCAPTCHA Routes', () => {
       });
 
       const res = await recaptchaRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; error?: string };
 
       expect(res.status).toBe(200);
       expect(data.success).toBe(false);
@@ -52,7 +52,7 @@ describe('reCAPTCHA Routes', () => {
       });
 
       const res = await recaptchaRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; error?: string };
 
       expect(res.status).toBe(400);
       expect(data.error).toContain('Token is required');
@@ -68,7 +68,7 @@ describe('reCAPTCHA Routes', () => {
       });
 
       const res = await recaptchaRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; error?: string };
 
       expect(res.status).toBe(500);
       expect(data.success).toBe(false);
