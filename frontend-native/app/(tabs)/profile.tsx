@@ -1111,6 +1111,7 @@ export default function ProfileScreen() {
         </View>
       </Modal>
     );
+  };
 
   if (loading) {
     return (
