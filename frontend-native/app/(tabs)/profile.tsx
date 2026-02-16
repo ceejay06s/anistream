@@ -1109,7 +1109,7 @@ export default function ProfileScreen() {
             </ScrollView>
           </View>
         </View>
-      </View>
+      </Modal>
     );
 
   if (loading) {
