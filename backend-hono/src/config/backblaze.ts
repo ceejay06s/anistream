@@ -53,5 +53,5 @@ export function getBackblazePublicUrl(filePath: string): string {
   return `https://${bucketName}.s3.${region}.backblazeb2.com/${filePath}`;
   
   // Note: For private buckets (current setup), signed URLs are used instead
-  // Signed URLs are generated in the upload route with 1-year expiration
+  // Signed URLs are generated in the upload/get routes with 7-day expiration (max allowed)
 }

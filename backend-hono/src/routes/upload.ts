@@ -85,14 +85,14 @@ uploadRoutes.post('/file', async (c) => {
 
     await s3Client.send(putCommand);
 
-    // Generate signed URL (valid for 1 year)
+    // Generate signed URL (valid for 7 days - max allowed by S3-compatible services)
     const getCommand = new GetObjectCommand({
       Bucket: BACKBLAZE_BUCKET,
       Key: filePath,
     });
 
     const signedUrl = await getSignedUrl(s3Client, getCommand, {
-      expiresIn: 31536000, // 1 year in seconds
+      expiresIn: 604800, // 7 days in seconds (maximum allowed)
     });
 
     // Public URL (if bucket is public, otherwise use signed URL)
@@ -110,6 +110,48 @@ uploadRoutes.post('/file', async (c) => {
     console.error('Error uploading file:', error);
     return c.json({
       error: 'Failed to upload file',
+      message: error.message || 'Unknown error',
+    }, 500);
+  }
+});
+
+/**
+ * Get signed URL for a file in Backblaze B2 (for private buckets)
+ * This allows retrieving files from a private bucket by generating a temporary signed URL
+ */
+uploadRoutes.get('/file', async (c) => {
+  try {
+    const filePath = c.req.query('filePath');
+
+    if (!filePath) {
+      return c.json({ error: 'File path is required as query parameter' }, 400);
+    }
+
+    const s3Client = getBackblazeClient();
+
+    // Generate signed URL (valid for 7 days - max allowed by S3-compatible services)
+    const getCommand = new GetObjectCommand({
+      Bucket: BACKBLAZE_BUCKET,
+      Key: filePath,
+    });
+
+    const signedUrl = await getSignedUrl(s3Client, getCommand, {
+      expiresIn: 604800, // 7 days in seconds (maximum allowed)
+    });
+
+    // Public URL (if bucket is public, otherwise use signed URL)
+    const publicUrl = getBackblazePublicUrl(filePath);
+
+    return c.json({
+      success: true,
+      url: signedUrl, // Use signed URL for private buckets
+      publicUrl: publicUrl, // Public URL (if bucket is public)
+      filePath,
+    });
+  } catch (error: any) {
+    console.error('Error generating signed URL:', error);
+    return c.json({
+      error: 'Failed to generate signed URL',
       message: error.message || 'Unknown error',
     }, 500);
   }
