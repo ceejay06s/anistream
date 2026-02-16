@@ -477,6 +477,48 @@ export default function ProfileScreen() {
     setPhotoPreview(preview);
   };
 
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(false);
+
+    const files = event.dataTransfer.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setError('Please drop an image file');
+      setTimeout(() => setError(''), 5000);
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    if (file.size > maxSize) {
+      setError('Image size must be less than 5MB');
+      setTimeout(() => setError(''), 5000);
+      return;
+    }
+
+    setSelectedPhotoFile(file);
+    const preview = URL.createObjectURL(file);
+    setPhotoPreview(preview);
+  };
+
   const handleRemovePhoto = () => {
     if (photoPreview) {
       URL.revokeObjectURL(photoPreview);
