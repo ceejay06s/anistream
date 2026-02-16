@@ -8,7 +8,10 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "build:web": "npx expo export --platform web",
-    "deploy:web": "npx expo export --platform web && eas deploy --platform web"
+    "deploy:web": "npx expo export --platform web && eas deploy --platform web",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.990.0",
@@ -37,9 +40,14 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.0",
+    "@testing-library/jest-native": "^5.4.3",
+    "@testing-library/react-native": "^13.3.3",
+    "@types/jest": "^30.0.0",
     "@types/react": "~19.1.10",
     "@types/ws": "^8.18.1",
     "babel-plugin-module-resolver": "^5.0.0",
+    "jest": "^30.2.0",
+    "jest-expo": "^54.0.17",
     "typescript": "~5.9.2"
   },
   "private": true

@@ -7,7 +7,8 @@ This guide explains how to set up environment variables for local development.
 Run the setup script to automatically create `.env` from your service account:
 
 ```powershell
-.\setup-env.ps1
+cd backend-hono
+..\scripts\backend\setup-env.ps1
 ```
 
 This will:
@@ -25,7 +26,8 @@ This will:
 
 2. Get your base64 service account:
    ```powershell
-   .\get-base64-key.ps1
+   cd backend-hono
+   ..\scripts\backend\get-base64-key.ps1
    ```
 
 3. Edit `.env` and paste the base64 string:
@@ -39,7 +41,7 @@ This will:
 
 #### Firebase (for Firestore/Admin SDK)
 - **FIREBASE_SERVICE_ACCOUNT**: Base64 encoded Firebase service account JSON
-  - Get it by running: `.\get-base64-key.ps1`
+  - Get it by running: `..\scripts\backend\get-base64-key.ps1` (from backend-hono directory)
   - Or use `FIREBASE_SERVICE_ACCOUNT_JSON` with raw JSON (see below)
 
 #### Backblaze B2 (for file storage)
@@ -67,7 +69,7 @@ This will:
 
 - **ANIME_UPDATE_SECRET_TOKEN**: Secret token for securing the update endpoint
   - Generate random string: `openssl rand -hex 32`
-  - Or let `setup-env.ps1` generate it for you
+    - Or let `scripts/backend/setup-env.ps1` generate it for you
 
 - **NODE_ENV**: Environment mode
   - `development` for local

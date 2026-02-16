@@ -5,7 +5,7 @@ PORT=8801
 NODE_ENV=development
 
 # Firebase Admin SDK Service Account (Base64 encoded)
-# Get it by running: .\get-base64-key.ps1
+# Get it by running: ..\scripts\backend\get-base64-key.ps1
 FIREBASE_SERVICE_ACCOUNT=
 
 # Alternative: Firebase Service Account as JSON string
