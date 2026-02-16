@@ -9,6 +9,11 @@ const SpeedInsights = Platform.OS === 'web'
   ? require('@vercel/speed-insights/react').SpeedInsights
   : () => null;
 
+// Vercel Analytics - web only
+const Analytics = Platform.OS === 'web'
+  ? require('@vercel/analytics/react').Analytics
+  : () => null;
+
 export default function RootLayout() {
   return (
     <AuthProvider>
@@ -16,6 +21,7 @@ export default function RootLayout() {
         <View style={styles.container}>
           <StatusBar style="light" />
           {Platform.OS === 'web' && <SpeedInsights />}
+          {Platform.OS === 'web' && <Analytics />}
           <Stack
             screenOptions={{
               headerShown: false,
