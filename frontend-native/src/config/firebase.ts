@@ -1,6 +1,8 @@
-import { initializeApp } from 'firebase/app';
-import { getAnalytics, isSupported } from 'firebase/analytics';
 import { Platform } from 'react-native';
+
+let app: any = null;
+let analytics: any = null;
+let auth: any = null;
 
 const firebaseConfig = {
   apiKey: "AIzaSyDYyLlE_xE_d_f5E0ppooxJywN8xyR_7_s",
@@ -12,18 +14,23 @@ const firebaseConfig = {
   measurementId: "G-Z7F9WKFD8L"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-
-// Initialize Analytics (only on web)
-let analytics: ReturnType<typeof getAnalytics> | null = null;
-
 if (Platform.OS === 'web') {
-  isSupported().then((supported) => {
+  const { initializeApp } = require('firebase/app');
+  const { getAnalytics, isSupported } = require('firebase/analytics');
+  const { getAuth } = require('firebase/auth');
+
+  app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+
+  isSupported().then((supported: boolean) => {
     if (supported) {
       analytics = getAnalytics(app);
     }
   });
 }
 
-export { app, analytics };
+// VAPID key for Web Push Notifications
+// Public key (used in frontend)
+export const VAPID_PUBLIC_KEY = 'BOGVADtXqA3ANL8EIi9SYcsetjZZ-I3J_saRIIdmj_EOOwGKX8g1KIQTVVgyyok_eu8-6U0Nn6YbSl9y4KxYprE';
+
+export { app, analytics, auth, firebaseConfig };

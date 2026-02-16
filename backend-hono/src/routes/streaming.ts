@@ -191,8 +191,9 @@ streamingRoutes.get('/proxy', async (c) => {
     const isM3U8 = decodedUrl.includes('.m3u8');
     const isSegment = isVideoSegment(decodedUrl);
     const isSubtitle = isSubtitleFile(decodedUrl);
+    const isImage = /\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?|$)/i.test(decodedUrl);
 
-    console.log(`Proxying ${isM3U8 ? 'M3U8' : isSubtitle ? 'subtitle' : isSegment ? 'segment' : 'video'}: ${decodedUrl.substring(0, 100)}...`);
+    console.log(`Proxying ${isM3U8 ? 'M3U8' : isSubtitle ? 'subtitle' : isImage ? 'image' : isSegment ? 'segment' : 'video'}: ${decodedUrl.substring(0, 100)}...`);
 
     // Use got-scraping for browser-like TLS fingerprint
     // The TLS fingerprint is the key to bypassing CDN anti-bot
@@ -211,10 +212,10 @@ streamingRoutes.get('/proxy', async (c) => {
         operatingSystems: ['ios'],
         locales: ['en-US'],
       },
-      // Critical: Set Referer to megacloud.blog for segments
+      // Critical: Set Referer based on content type
       headers: {
-        'Referer': isSegment ? 'https://megacloud.blog/' : 'https://hianime.to/',
-        'Origin': isSegment ? 'https://megacloud.blog' : 'https://hianime.to',
+        'Referer': isSegment ? 'https://megacloud.blog/' : isImage ? 'https://hianime.to/' : 'https://hianime.to/',
+        'Origin': isSegment ? 'https://megacloud.blog' : isImage ? 'https://hianime.to' : 'https://hianime.to',
       },
     });
 
@@ -250,6 +251,21 @@ streamingRoutes.get('/proxy', async (c) => {
           contentType = 'text/plain; charset=utf-8';
         } else {
           contentType = 'text/plain; charset=utf-8';
+        }
+      } else if (isImage) {
+        // Set correct content-type for images
+        if (decodedUrl.includes('.jpg') || decodedUrl.includes('.jpeg')) {
+          contentType = 'image/jpeg';
+        } else if (decodedUrl.includes('.png')) {
+          contentType = 'image/png';
+        } else if (decodedUrl.includes('.gif')) {
+          contentType = 'image/gif';
+        } else if (decodedUrl.includes('.webp')) {
+          contentType = 'image/webp';
+        } else if (decodedUrl.includes('.svg')) {
+          contentType = 'image/svg+xml';
+        } else {
+          contentType = 'image/jpeg'; // Default
         }
       } else {
         contentType = 'video/mp2t';

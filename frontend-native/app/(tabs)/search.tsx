@@ -16,6 +16,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { animeApi, Anime } from '@/services/api';
+import { getProxiedImageUrl } from '@/utils/imageProxy';
 import {
   filterOptions,
   filterDisplayNames,
@@ -121,7 +122,7 @@ export default function SearchScreen() {
       activeOpacity={0.7}
     >
       <Image
-        source={{ uri: item.poster }}
+        source={{ uri: getProxiedImageUrl(item.poster) || '' }}
         style={styles.animePoster}
         resizeMode="cover"
       />

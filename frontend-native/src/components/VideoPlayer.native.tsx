@@ -27,6 +27,8 @@ export interface VideoPlayerProps {
   // Title bar props (web only, native has OS navigation)
   title?: string;
   onBack?: () => void;
+  // Callback to get current time for clipping
+  onCurrentTimeChange?: (time: number) => void;
 }
 
 export function VideoPlayer({
@@ -37,6 +39,7 @@ export function VideoPlayer({
   onReady,
   subtitleTracks = [],
   onRequestNewSource,
+  onCurrentTimeChange,
 }: VideoPlayerProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -99,7 +102,12 @@ export function VideoPlayer({
     // Update time every 100ms for smooth subtitle sync
     timeUpdateRef.current = setInterval(() => {
       if (player.currentTime !== undefined) {
-        setCurrentTime(player.currentTime);
+        const newTime = player.currentTime;
+        setCurrentTime(newTime);
+        // Notify parent of time change for clipping
+        if (onCurrentTimeChange) {
+          onCurrentTimeChange(newTime);
+        }
       }
     }, 100);
 
@@ -109,7 +117,7 @@ export function VideoPlayer({
         timeUpdateRef.current = null;
       }
     };
-  }, [player, currentSubtitle]);
+  }, [player, currentSubtitle, onCurrentTimeChange]);
 
   // Auto-select first subtitle if available
   useEffect(() => {

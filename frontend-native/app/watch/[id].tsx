@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,13 +7,23 @@ import {
   ActivityIndicator,
   ScrollView,
   Platform,
+  TextInput,
+  Modal,
+  FlatList,
+  Image,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { VideoPlayer } from '@/components/VideoPlayer';
-import { streamingApi, StreamingData, StreamingSource, animeApi, Episode } from '@/services/api';
+import { streamingApi, StreamingData, StreamingSource, animeApi, Episode, AnimeInfo } from '@/services/api';
 import { useStreamSocket } from '@/hooks/useStreamSocket';
+import { useAuth } from '@/context/AuthContext';
+import { communityService, Post, Comment } from '@/services/communityService';
+import { executeRecaptcha } from '@/utils/recaptcha';
+import { isRecaptchaEnabled, RECAPTCHA_SITE_KEY } from '@/config/recaptcha';
+import { verifyRecaptchaToken } from '@/services/recaptchaService';
 
 export default function WatchScreen() {
   const { id, ep, episodeId } = useLocalSearchParams<{ id: string; ep?: string; episodeId?: string }>();
@@ -25,6 +35,23 @@ export default function WatchScreen() {
   const [useWebSocket, setUseWebSocket] = useState(true);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [episodesLoading, setEpisodesLoading] = useState(true);
+  
+  // Community features
+  const { user } = useAuth();
+  const [currentVideoTime, setCurrentVideoTime] = useState(0);
+  const [animeInfo, setAnimeInfo] = useState<AnimeInfo | null>(null);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [showPostModal, setShowPostModal] = useState(false);
+  const [showCommentsModal, setShowCommentsModal] = useState(false);
+  const [newPostContent, setNewPostContent] = useState('');
+  const [newComment, setNewComment] = useState('');
+  const [clippedTimestamp, setClippedTimestamp] = useState<number | null>(null);
+  const [submittingPost, setSubmittingPost] = useState(false);
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const [loadingPosts, setLoadingPosts] = useState(false);
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
 
   // Clean up Expo Router internal params from URL on web
   useEffect(() => {
@@ -86,8 +113,10 @@ export default function WatchScreen() {
   useEffect(() => {
     if (id) {
       loadEpisodes();
+      loadAnimeInfo();
+      loadEpisodePosts();
     }
-  }, [id]);
+  }, [id, ep]);
 
   const loadEpisodes = async () => {
     if (!id) return;
@@ -100,6 +129,155 @@ export default function WatchScreen() {
     } finally {
       setEpisodesLoading(false);
     }
+  };
+
+  const loadAnimeInfo = async () => {
+    if (!id) return;
+    try {
+      const info = await animeApi.getInfo(id);
+      setAnimeInfo(info);
+    } catch (err) {
+      console.error('Failed to load anime info:', err);
+    }
+  };
+
+  const loadEpisodePosts = async () => {
+    if (!id) return;
+    try {
+      setLoadingPosts(true);
+      const allPosts = await communityService.getPosts(50);
+      // Filter posts for this anime (episode-specific filtering can be added later)
+      const episodePosts = allPosts.filter(
+        post => post.animeId === id
+      );
+      setPosts(episodePosts);
+    } catch (err) {
+      console.error('Failed to load posts:', err);
+    } finally {
+      setLoadingPosts(false);
+    }
+  };
+
+  const loadComments = async (postId?: string) => {
+    // Use selected post ID or create episode-specific post ID
+    const targetPostId = postId || selectedPost?.id || `episode-${id}-${episodeNumber}`;
+    try {
+      setLoadingComments(true);
+      const episodeComments = await communityService.getComments(targetPostId);
+      setComments(episodeComments);
+    } catch (err) {
+      console.error('Failed to load comments:', err);
+      setComments([]);
+    } finally {
+      setLoadingComments(false);
+    }
+  };
+
+  const handleClipScene = () => {
+    setClippedTimestamp(currentVideoTime);
+    setNewPostContent(`Amazing scene at ${formatTime(currentVideoTime)}! 🎬`);
+    setShowPostModal(true);
+  };
+
+  const handleCreatePost = async () => {
+    if (!user || !newPostContent.trim()) return;
+    
+    try {
+      setSubmittingPost(true);
+      
+      // Verify reCAPTCHA if enabled
+      if (isRecaptchaEnabled() && Platform.OS === 'web') {
+        try {
+          const token = await executeRecaptcha(RECAPTCHA_SITE_KEY, 'create_post');
+          // Verify token with backend
+          const isValid = await verifyRecaptchaToken(token);
+          if (!isValid) {
+            throw new Error('reCAPTCHA verification failed');
+          }
+        } catch (recaptchaError) {
+          console.warn('reCAPTCHA verification failed:', recaptchaError);
+          // Continue with post creation even if reCAPTCHA fails
+          // In production, you might want to block the request
+        }
+      }
+      
+      // Include episode info and timestamp in post content if clipped
+      let postContent = newPostContent;
+      if (clippedTimestamp !== null) {
+        postContent = `${newPostContent}\n\n🎬 Scene at ${formatTime(clippedTimestamp)} - Episode ${episodeNumber}`;
+      } else {
+        postContent = `${newPostContent}\n\n📺 Episode ${episodeNumber}`;
+      }
+      
+      await communityService.createPost(
+        {
+          uid: user.uid,
+          displayName: user.displayName,
+          photoURL: user.photoURL,
+        },
+        postContent,
+        id,
+        animeInfo?.name,
+        undefined // No media files for now
+      );
+      setNewPostContent('');
+      setClippedTimestamp(null);
+      setShowPostModal(false);
+      loadEpisodePosts();
+    } catch (err: any) {
+      console.error('Failed to create post:', err);
+      alert(err.message || 'Failed to create post');
+    } finally {
+      setSubmittingPost(false);
+    }
+  };
+
+  const handleAddComment = async () => {
+    if (!user || !newComment.trim()) return;
+    
+    const targetPostId = selectedPost?.id || `episode-${id}-${episodeNumber}`;
+    try {
+      setSubmittingComment(true);
+      
+      // Verify reCAPTCHA if enabled
+      if (isRecaptchaEnabled() && Platform.OS === 'web') {
+        try {
+          const token = await executeRecaptcha(RECAPTCHA_SITE_KEY, 'add_comment');
+          // Verify token with backend
+          const isValid = await verifyRecaptchaToken(token);
+          if (!isValid) {
+            throw new Error('reCAPTCHA verification failed');
+          }
+        } catch (recaptchaError) {
+          console.warn('reCAPTCHA verification failed:', recaptchaError);
+          // Continue with comment creation even if reCAPTCHA fails
+          // In production, you might want to block the request
+        }
+      }
+      
+      await communityService.addComment(
+        {
+          uid: user.uid,
+          displayName: user.displayName,
+          photoURL: user.photoURL,
+        },
+        targetPostId,
+        newComment
+      );
+      setNewComment('');
+      await loadComments(targetPostId);
+    } catch (err: any) {
+      console.error('Failed to add comment:', err);
+      alert(err.message || 'Failed to add comment');
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
+
+  const formatTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   // Load sources when episode/category changes
@@ -324,6 +502,7 @@ export default function WatchScreen() {
               onRequestNewSource={handleRequestNewSource}
               title={id?.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
               onBack={handleBack}
+              onCurrentTimeChange={setCurrentVideoTime}
             />
           ) : iframeFallback ? (
             // Show button to switch to iframe
@@ -460,7 +639,227 @@ export default function WatchScreen() {
             <Text style={styles.retryingText}>{retryMessage}</Text>
           )}
         </View>
+
+        {/* Community Section */}
+        <View style={styles.communitySection}>
+          <View style={styles.communityHeader}>
+            <Text style={styles.communityTitle}>Community</Text>
+            <View style={styles.communityActions}>
+              <TouchableOpacity
+                style={styles.clipButton}
+                onPress={handleClipScene}
+              >
+                <Ionicons name="videocam" size={18} color="#fff" />
+                <Text style={styles.clipButtonText}>Clip Scene</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.postButton}
+                onPress={() => {
+                  setClippedTimestamp(null);
+                  setNewPostContent('');
+                  setShowPostModal(true);
+                }}
+              >
+                <Ionicons name="create-outline" size={18} color="#fff" />
+                <Text style={styles.postButtonText}>Post</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.commentButton}
+                onPress={async () => {
+                  setSelectedPost(null);
+                  await loadComments();
+                  setShowCommentsModal(true);
+                }}
+              >
+                <Ionicons name="chatbubbles-outline" size={18} color="#fff" />
+                <Text style={styles.commentButtonText}>
+                  Comments {comments.length > 0 && `(${comments.length})`}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Posts List */}
+          {loadingPosts ? (
+            <ActivityIndicator size="small" color="#e50914" style={styles.loadingIndicator} />
+          ) : posts.length > 0 ? (
+            <FlatList
+              data={posts}
+              keyExtractor={(item) => item.id}
+              scrollEnabled={false}
+              renderItem={({ item }) => (
+                <View style={styles.postItem}>
+                  <View style={styles.postHeader}>
+                    {item.userPhoto ? (
+                      <Image source={{ uri: item.userPhoto }} style={styles.postAvatar} />
+                    ) : (
+                      <View style={styles.postAvatarPlaceholder}>
+                        <Ionicons name="person" size={16} color="#888" />
+                      </View>
+                    )}
+                    <View style={styles.postHeaderText}>
+                      <Text style={styles.postUserName}>{item.userName}</Text>
+                      <Text style={styles.postTime}>{communityService.formatTimeAgo(item.createdAt)}</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.postContent}>{item.content}</Text>
+                  {item.animeName && (
+                    <Text style={styles.postAnime}>📺 {item.animeName}</Text>
+                  )}
+                  <View style={styles.postFooter}>
+                    <TouchableOpacity
+                      style={styles.postAction}
+                      onPress={async () => {
+                        if (user) {
+                          await communityService.toggleLike(user.uid, item.id);
+                          loadEpisodePosts();
+                        }
+                      }}
+                    >
+                      <Ionicons
+                        name={user && item.likes.includes(user.uid) ? 'heart' : 'heart-outline'}
+                        size={18}
+                        color={user && item.likes.includes(user.uid) ? '#e50914' : '#888'}
+                      />
+                      <Text style={styles.postActionText}>{item.likes.length}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.postAction}
+                      onPress={async () => {
+                        setSelectedPost(item);
+                        await loadComments(item.id);
+                        setShowCommentsModal(true);
+                      }}
+                    >
+                      <Ionicons name="chatbubble-outline" size={18} color="#888" />
+                      <Text style={styles.postActionText}>{item.commentCount}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+            />
+          ) : (
+            <Text style={styles.noPostsText}>No posts yet. Be the first to share your thoughts!</Text>
+          )}
+        </View>
       </ScrollView>
+
+      {/* Create Post Modal */}
+      <Modal
+        visible={showPostModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowPostModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Create Post</Text>
+              <TouchableOpacity onPress={() => setShowPostModal(false)}>
+                <Ionicons name="close" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
+            {clippedTimestamp !== null && (
+              <View style={styles.clipInfo}>
+                <Ionicons name="videocam" size={16} color="#e50914" />
+                <Text style={styles.clipInfoText}>Scene clipped at {formatTime(clippedTimestamp)}</Text>
+              </View>
+            )}
+            <TextInput
+              style={styles.postInput}
+              placeholder="Share your thoughts about this episode..."
+              placeholderTextColor="#666"
+              multiline
+              value={newPostContent}
+              onChangeText={setNewPostContent}
+              textAlignVertical="top"
+            />
+            <TouchableOpacity
+              style={[styles.submitButton, (!user || !newPostContent.trim() || submittingPost) && styles.submitButtonDisabled]}
+              onPress={handleCreatePost}
+              disabled={!user || !newPostContent.trim() || submittingPost}
+            >
+              {submittingPost ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.submitButtonText}>Post</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Comments Modal */}
+      <Modal
+        visible={showCommentsModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowCommentsModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                Comments {selectedPost ? `on ${selectedPost.userName}'s post` : `on Episode ${episodeNumber}`}
+              </Text>
+              <TouchableOpacity onPress={() => setShowCommentsModal(false)}>
+                <Ionicons name="close" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.commentsList}>
+              {loadingComments ? (
+                <ActivityIndicator size="small" color="#e50914" style={styles.loadingIndicator} />
+              ) : comments.length > 0 ? (
+                comments.map((comment) => (
+                  <View key={comment.id} style={styles.commentItem}>
+                    {comment.userPhoto ? (
+                      <Image source={{ uri: comment.userPhoto }} style={styles.commentAvatar} />
+                    ) : (
+                      <View style={styles.commentAvatarPlaceholder}>
+                        <Ionicons name="person" size={14} color="#888" />
+                      </View>
+                    )}
+                    <View style={styles.commentContent}>
+                      <Text style={styles.commentUserName}>{comment.userName}</Text>
+                      <Text style={styles.commentText}>{comment.content}</Text>
+                      <Text style={styles.commentTime}>{communityService.formatTimeAgo(comment.createdAt)}</Text>
+                    </View>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.noCommentsText}>No comments yet. Be the first to comment!</Text>
+              )}
+            </ScrollView>
+            <View style={styles.commentInputContainer}>
+              <TextInput
+                style={styles.commentInput}
+                placeholder="Add a comment..."
+                placeholderTextColor="#666"
+                value={newComment}
+                onChangeText={setNewComment}
+                multiline
+              />
+              <TouchableOpacity
+                style={[styles.sendButton, (!user || !newComment.trim() || submittingComment) && styles.sendButtonDisabled]}
+                onPress={handleAddComment}
+                disabled={!user || !newComment.trim() || submittingComment}
+              >
+                {submittingComment ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Ionicons name="send" size={20} color="#fff" />
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -726,5 +1125,285 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 14,
     fontWeight: '500',
+  },
+  communitySection: {
+    padding: 16,
+    paddingHorizontal: Platform.OS === 'web' ? 32 : 16,
+    borderTopWidth: 1,
+    borderTopColor: '#1a1a1a',
+  },
+  communityHeader: {
+    marginBottom: 16,
+  },
+  communityTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  communityActions: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  clipButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#e50914',
+    borderRadius: 8,
+  },
+  clipButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  postButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#222',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  postButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  commentButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#222',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  commentButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  loadingIndicator: {
+    marginVertical: 20,
+  },
+  postItem: {
+    backgroundColor: '#111',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#222',
+  },
+  postHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 10,
+  },
+  postAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  postAvatarPlaceholder: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#222',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  postHeaderText: {
+    flex: 1,
+  },
+  postUserName: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  postTime: {
+    color: '#666',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  postContent: {
+    color: '#fff',
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  postAnime: {
+    color: '#e50914',
+    fontSize: 12,
+    marginBottom: 8,
+  },
+  postFooter: {
+    flexDirection: 'row',
+    gap: 16,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#222',
+  },
+  postAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  postActionText: {
+    color: '#888',
+    fontSize: 14,
+  },
+  noPostsText: {
+    color: '#666',
+    fontSize: 14,
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#1a1a1a',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  clipInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#222',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  clipInfoText: {
+    color: '#e50914',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  postInput: {
+    backgroundColor: '#222',
+    borderRadius: 8,
+    padding: 12,
+    color: '#fff',
+    fontSize: 14,
+    minHeight: 100,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  submitButton: {
+    backgroundColor: '#e50914',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  submitButtonDisabled: {
+    backgroundColor: '#333',
+    opacity: 0.5,
+  },
+  submitButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  commentsList: {
+    maxHeight: 400,
+    marginBottom: 16,
+  },
+  commentItem: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+  },
+  commentAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+  },
+  commentAvatarPlaceholder: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#222',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  commentContent: {
+    flex: 1,
+  },
+  commentUserName: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  commentText: {
+    color: '#fff',
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 4,
+  },
+  commentTime: {
+    color: '#666',
+    fontSize: 11,
+  },
+  noCommentsText: {
+    color: '#666',
+    fontSize: 14,
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
+  commentInputContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'flex-end',
+  },
+  commentInput: {
+    flex: 1,
+    backgroundColor: '#222',
+    borderRadius: 8,
+    padding: 12,
+    color: '#fff',
+    fontSize: 14,
+    maxHeight: 100,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  sendButton: {
+    backgroundColor: '#e50914',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sendButtonDisabled: {
+    backgroundColor: '#333',
+    opacity: 0.5,
   },
 });

@@ -5,3 +5,15 @@ dist
 .idea
 yarn.lock
 pnpm-lock.yaml
+
+# Expo
+.expo/
+frontend-native/.expo/
+
+# Windows reserved names
+nul
+NUL
+
+# Firebase Functions
+functions/lib/
+functions/node_modules/

@@ -21,6 +21,8 @@ export interface VideoPlayerProps {
   // Title bar props
   title?: string;
   onBack?: () => void;
+  // Callback to get current time for clipping
+  onCurrentTimeChange?: (time: number) => void;
 }
 
 export function VideoPlayer({
@@ -36,6 +38,7 @@ export function VideoPlayer({
   onRequestNewSource,
   title,
   onBack,
+  onCurrentTimeChange,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -100,13 +103,19 @@ export function VideoPlayer({
   const handleTimeUpdate = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
-    setCurrentTime(video.currentTime);
+    const newTime = video.currentTime;
+    setCurrentTime(newTime);
+    
+    // Notify parent of time change for clipping
+    if (onCurrentTimeChange) {
+      onCurrentTimeChange(newTime);
+    }
 
     // Update buffered
     if (video.buffered.length > 0) {
       setBuffered(video.buffered.end(video.buffered.length - 1));
     }
-  }, []);
+  }, [onCurrentTimeChange]);
 
   const handlePlayPause = useCallback(() => {
     const video = videoRef.current;

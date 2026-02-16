@@ -1,12 +1,13 @@
 services:
   - type: web
     name: anistream-backend
-    runtime: node
-    rootDir: backend-hono
-    buildCommand: yarn install --production=false && yarn build
-    startCommand: yarn start
-    plan: free
-    healthCheckPath: /api
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: 10000
+    # Note: Add FIREBASE_SERVICE_ACCOUNT and other secrets via Render Dashboard
+    # Do not commit sensitive values here

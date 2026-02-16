@@ -3,6 +3,8 @@ import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { animeRoutes } from './routes/anime.js';
 import { streamingRoutes } from './routes/streaming.js';
+import { recaptchaRoutes } from './routes/recaptcha.js';
+import { notificationRoutes } from './routes/notifications.js';
 import { createWebSocketServer } from './routes/websocket.js';
 
 const app = new Hono();
@@ -38,6 +40,8 @@ app.get('/api', (c) => {
 // Routes
 app.route('/api/anime', animeRoutes);
 app.route('/api/streaming', streamingRoutes);
+app.route('/api/recaptcha', recaptchaRoutes);
+app.route('/api/notifications', notificationRoutes);
 
 // 404 handler
 app.notFound((c) => {

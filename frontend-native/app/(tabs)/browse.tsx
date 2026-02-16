@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,11 +10,13 @@ import {
   ScrollView,
   Platform,
   useWindowDimensions,
+  RefreshControl,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { animeApi, Anime } from '@/services/api';
+import { getProxiedImageUrl } from '@/utils/imageProxy';
 import {
   exploreRoutes,
   routeDisplayNames,
@@ -39,6 +41,7 @@ export default function BrowseScreen() {
   const [selectedAZ, setSelectedAZ] = useState<AZOption>('all');
   const [animeList, setAnimeList] = useState<Anime[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
 
   // Calculate responsive columns based on screen width
@@ -119,6 +122,12 @@ export default function BrowseScreen() {
     }
   };
 
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  }, [browseMode, selectedCategory, selectedGenre, selectedAZ]);
+
   const handleAnimePress = (anime: Anime) => {
     router.push({
       pathname: '/detail/[id]',
@@ -150,7 +159,7 @@ export default function BrowseScreen() {
         activeOpacity={0.7}
       >
         <Image
-          source={{ uri: item.poster }}
+          source={{ uri: getProxiedImageUrl(item.poster) || '' }}
           style={styles.animePoster}
           resizeMode="cover"
         />
@@ -367,6 +376,14 @@ export default function BrowseScreen() {
           columnWrapperStyle={numColumns > 1 ? styles.animeRow : undefined}
           style={styles.listContainer}
           showsVerticalScrollIndicator={true}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor="#e50914"
+              colors={['#e50914']}
+            />
+          }
         />
       )}
     </SafeAreaView>
