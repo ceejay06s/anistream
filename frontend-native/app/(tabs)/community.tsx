@@ -38,6 +38,9 @@ export default function CommunityScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [selectedMedia, setSelectedMedia] = useState<{ file: File; preview: string; type: 'image' | 'video' }[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Ref to prevent modal from reopening immediately after closing
+  const modalClosingRef = useRef(false);
 
   // Comments modal
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
@@ -66,6 +69,32 @@ export default function CommunityScreen() {
     setRefreshing(true);
     await loadPosts();
     setRefreshing(false);
+  }, []);
+
+  const handleCloseCreateModal = useCallback(() => {
+    if (modalClosingRef.current) return; // Prevent multiple close calls
+    modalClosingRef.current = true;
+    setShowCreateModal(false);
+    // Clean up previews when closing
+    setSelectedMedia((prev) => {
+      prev.forEach((m) => URL.revokeObjectURL(m.preview));
+      return [];
+    });
+    setNewPostContent('');
+    // Reset the flag after a short delay to allow modal to fully close
+    setTimeout(() => {
+      modalClosingRef.current = false;
+    }, 400);
+  }, []);
+  
+  // Memoized handler to prevent TextInput cursor issues
+  const handlePostContentChange = useCallback((text: string) => {
+    setNewPostContent(text);
+  }, []);
+  
+  // Memoized handler for comment input
+  const handleCommentChange = useCallback((text: string) => {
+    setNewComment(text);
   }, []);
 
   const handleMediaSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -144,11 +173,12 @@ export default function CommunityScreen() {
         mediaFiles.length > 0 ? mediaFiles : undefined
       );
       setPosts([newPost, ...posts]);
+      // Clear form and close modal first
       setNewPostContent('');
       // Clean up previews
       selectedMedia.forEach((m) => URL.revokeObjectURL(m.preview));
       setSelectedMedia([]);
-      setShowCreateModal(false);
+      handleCloseCreateModal();
     } catch (err) {
       console.error('Failed to create post:', err);
     } finally {
@@ -362,108 +392,6 @@ export default function CommunityScreen() {
     </View>
   );
 
-  // Create Post Modal
-  const CreatePostModal = () => (
-    <Modal visible={showCreateModal} animationType="slide" transparent>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.modalOverlay}
-      >
-        <View style={styles.createModalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Create Post</Text>
-            <TouchableOpacity onPress={() => {
-              // Clean up previews when closing
-              selectedMedia.forEach((m) => URL.revokeObjectURL(m.preview));
-              setSelectedMedia([]);
-              setNewPostContent('');
-              setShowCreateModal(false);
-            }}>
-              <Ionicons name="close" size={24} color="#fff" />
-            </TouchableOpacity>
-          </View>
-
-          <TextInput
-            style={styles.postInput}
-            placeholder="Share your thoughts with the community..."
-            placeholderTextColor="#666"
-            value={newPostContent}
-            onChangeText={setNewPostContent}
-            multiline
-            maxLength={500}
-            autoFocus
-          />
-
-          {/* Media Preview */}
-          {selectedMedia.length > 0 && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.mediaPreviewContainer}>
-              {selectedMedia.map((media, index) => (
-                <View key={index} style={styles.mediaPreviewItem}>
-                  {media.type === 'image' ? (
-                    <Image source={{ uri: media.preview }} style={styles.mediaPreviewImage} />
-                  ) : (
-                    <View style={styles.mediaPreviewVideo}>
-                      <Ionicons name="play-circle" size={32} color="#fff" />
-                    </View>
-                  )}
-                  <TouchableOpacity style={styles.removeMediaButton} onPress={() => removeMedia(index)}>
-                    <Ionicons name="close-circle" size={24} color="#e50914" />
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </ScrollView>
-          )}
-
-          <View style={styles.modalFooter}>
-            <View style={styles.footerLeft}>
-              {Platform.OS === 'web' && (
-                <>
-                  <input
-                    ref={fileInputRef as any}
-                    type="file"
-                    accept="image/*,video/*"
-                    multiple
-                    onChange={handleMediaSelect as any}
-                    style={{ display: 'none' }}
-                  />
-                  <TouchableOpacity
-                    style={[styles.mediaButton, selectedMedia.length >= 4 && styles.mediaButtonDisabled]}
-                    onPress={() => fileInputRef.current?.click()}
-                    disabled={selectedMedia.length >= 4}
-                  >
-                    <Ionicons name="image-outline" size={22} color={selectedMedia.length >= 4 ? '#444' : '#888'} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.mediaButton, selectedMedia.length >= 4 && styles.mediaButtonDisabled]}
-                    onPress={() => fileInputRef.current?.click()}
-                    disabled={selectedMedia.length >= 4}
-                  >
-                    <Ionicons name="videocam-outline" size={22} color={selectedMedia.length >= 4 ? '#444' : '#888'} />
-                  </TouchableOpacity>
-                </>
-              )}
-              <Text style={styles.charCount}>{newPostContent.length}/500</Text>
-            </View>
-            <TouchableOpacity
-              style={[
-                styles.postButton,
-                (!newPostContent.trim() && selectedMedia.length === 0) || submitting ? styles.postButtonDisabled : null,
-              ]}
-              onPress={handleCreatePost}
-              disabled={(!newPostContent.trim() && selectedMedia.length === 0) || submitting}
-            >
-              {submitting ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Text style={styles.postButtonText}>Post</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-
   // Comments Modal
   const CommentsModal = () => (
     <Modal visible={!!selectedPost} animationType="slide" transparent>
@@ -499,11 +427,12 @@ export default function CommunityScreen() {
           {user && (
             <View style={styles.commentInputContainer}>
               <TextInput
+                key="comment-input"
                 style={styles.commentInput}
                 placeholder="Add a comment..."
                 placeholderTextColor="#666"
                 value={newComment}
-                onChangeText={setNewComment}
+                onChangeText={handleCommentChange}
                 maxLength={280}
               />
               <TouchableOpacity
@@ -580,7 +509,113 @@ export default function CommunityScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <CreatePostModal />
+      {/* Create Post Modal */}
+      <Modal 
+        visible={showCreateModal && !modalClosingRef.current} 
+        animationType="slide" 
+        transparent
+        onRequestClose={handleCloseCreateModal}
+        onDismiss={() => {
+          // Ensure state is clean when modal is dismissed
+          if (!showCreateModal) {
+            setNewPostContent('');
+            setSelectedMedia([]);
+          }
+        }}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.createModalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Create Post</Text>
+              <TouchableOpacity onPress={handleCloseCreateModal}>
+                <Ionicons name="close" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
+
+            <TextInput
+              key="create-post-input"
+              style={styles.postInput}
+              placeholder="Share your thoughts with the community..."
+              placeholderTextColor="#666"
+              value={newPostContent}
+              onChangeText={handlePostContentChange}
+              multiline
+              maxLength={500}
+              autoFocus={false}
+            />
+
+            {/* Media Preview */}
+            {selectedMedia.length > 0 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.mediaPreviewContainer}>
+                {selectedMedia.map((media, index) => (
+                  <View key={index} style={styles.mediaPreviewItem}>
+                    {media.type === 'image' ? (
+                      <Image source={{ uri: media.preview }} style={styles.mediaPreviewImage} />
+                    ) : (
+                      <View style={styles.mediaPreviewVideo}>
+                        <Ionicons name="play-circle" size={32} color="#fff" />
+                      </View>
+                    )}
+                    <TouchableOpacity style={styles.removeMediaButton} onPress={() => removeMedia(index)}>
+                      <Ionicons name="close-circle" size={24} color="#e50914" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+
+            <View style={styles.modalFooter}>
+              <View style={styles.footerLeft}>
+                {Platform.OS === 'web' && (
+                  <>
+                    <input
+                      ref={fileInputRef as any}
+                      type="file"
+                      accept="image/*,video/*"
+                      multiple
+                      onChange={handleMediaSelect as any}
+                      style={{ display: 'none' }}
+                    />
+                    <TouchableOpacity
+                      style={[styles.mediaButton, selectedMedia.length >= 4 && styles.mediaButtonDisabled]}
+                      onPress={() => fileInputRef.current?.click()}
+                      disabled={selectedMedia.length >= 4}
+                    >
+                      <Ionicons name="image-outline" size={22} color={selectedMedia.length >= 4 ? '#444' : '#888'} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.mediaButton, selectedMedia.length >= 4 && styles.mediaButtonDisabled]}
+                      onPress={() => fileInputRef.current?.click()}
+                      disabled={selectedMedia.length >= 4}
+                    >
+                      <Ionicons name="videocam-outline" size={22} color={selectedMedia.length >= 4 ? '#444' : '#888'} />
+                    </TouchableOpacity>
+                  </>
+                )}
+                <Text style={styles.charCount}>{newPostContent.length}/500</Text>
+              </View>
+              <TouchableOpacity
+                style={[
+                  styles.postButton,
+                  (!newPostContent.trim() && selectedMedia.length === 0) || submitting ? styles.postButtonDisabled : null,
+                ]}
+                onPress={handleCreatePost}
+                disabled={(!newPostContent.trim() && selectedMedia.length === 0) || submitting}
+              >
+                {submitting ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.postButtonText}>Post</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
       <CommentsModal />
 
       <View style={styles.header}>
@@ -588,7 +623,10 @@ export default function CommunityScreen() {
         {user && (
           <TouchableOpacity
             style={styles.createButton}
-            onPress={() => setShowCreateModal(true)}
+            onPress={() => {
+              if (modalClosingRef.current || showCreateModal) return; // Prevent opening if modal is closing or already open
+              setShowCreateModal(true);
+            }}
           >
             <Ionicons name="add" size={24} color="#fff" />
           </TouchableOpacity>
@@ -605,7 +643,10 @@ export default function CommunityScreen() {
           {user && (
             <TouchableOpacity
               style={styles.createFirstButton}
-              onPress={() => setShowCreateModal(true)}
+              onPress={() => {
+                if (modalClosingRef.current || showCreateModal) return; // Prevent opening if modal is closing or already open
+                setShowCreateModal(true);
+              }}
             >
               <Text style={styles.createFirstButtonText}>Create Post</Text>
             </TouchableOpacity>
