@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -52,6 +52,9 @@ export default function WatchScreen() {
   const [loadingPosts, setLoadingPosts] = useState(false);
   const [loadingComments, setLoadingComments] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  
+  // Ref to prevent modal from reopening immediately after closing
+  const modalClosingRef = useRef(false);
 
   // Clean up Expo Router internal params from URL on web
   useEffect(() => {
@@ -173,11 +176,34 @@ export default function WatchScreen() {
     }
   };
 
-  const handleClipScene = () => {
+  // Memoize formatTime to prevent unnecessary re-renders
+  const formatTime = useCallback((seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }, []);
+
+  const handleClipScene = useCallback(() => {
+    if (modalClosingRef.current || showPostModal) return; // Prevent opening if modal is closing or already open
     setClippedTimestamp(currentVideoTime);
     setNewPostContent(`Amazing scene at ${formatTime(currentVideoTime)}! 🎬`);
     setShowPostModal(true);
-  };
+  }, [currentVideoTime, formatTime, showPostModal]);
+  
+  const handleClosePostModal = useCallback(() => {
+    if (modalClosingRef.current) return; // Prevent multiple close calls
+    modalClosingRef.current = true;
+    setShowPostModal(false);
+    // Reset the flag after a short delay to allow modal to fully close
+    setTimeout(() => {
+      modalClosingRef.current = false;
+    }, 400);
+  }, []);
+  
+  // Memoized handler to prevent TextInput cursor issues
+  const handlePostContentChange = useCallback((text: string) => {
+    setNewPostContent(text);
+  }, []);
 
   const handleCreatePost = async () => {
     if (!user || !newPostContent.trim()) return;
@@ -220,10 +246,14 @@ export default function WatchScreen() {
         animeInfo?.name,
         undefined // No media files for now
       );
+      // Clear form and close modal first
       setNewPostContent('');
       setClippedTimestamp(null);
-      setShowPostModal(false);
-      loadEpisodePosts();
+      handleClosePostModal();
+      // Delay reloading posts to allow modal to close smoothly
+      setTimeout(() => {
+        loadEpisodePosts();
+      }, 400);
     } catch (err: any) {
       console.error('Failed to create post:', err);
       alert(err.message || 'Failed to create post');
@@ -274,11 +304,6 @@ export default function WatchScreen() {
     }
   };
 
-  const formatTime = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
 
   // Load sources when episode/category changes
   useEffect(() => {
@@ -655,6 +680,7 @@ export default function WatchScreen() {
               <TouchableOpacity
                 style={styles.postButton}
                 onPress={() => {
+                  if (modalClosingRef.current || showPostModal) return; // Prevent opening if modal is closing or already open
                   setClippedTimestamp(null);
                   setNewPostContent('');
                   setShowPostModal(true);
@@ -746,10 +772,17 @@ export default function WatchScreen() {
 
       {/* Create Post Modal */}
       <Modal
-        visible={showPostModal}
+        visible={showPostModal && !modalClosingRef.current}
         transparent
         animationType="slide"
-        onRequestClose={() => setShowPostModal(false)}
+        onRequestClose={handleClosePostModal}
+        onDismiss={() => {
+          // Ensure state is clean when modal is dismissed
+          if (!showPostModal) {
+            setNewPostContent('');
+            setClippedTimestamp(null);
+          }
+        }}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -758,24 +791,28 @@ export default function WatchScreen() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Create Post</Text>
-              <TouchableOpacity onPress={() => setShowPostModal(false)}>
+              <TouchableOpacity onPress={handleClosePostModal}>
                 <Ionicons name="close" size={24} color="#fff" />
               </TouchableOpacity>
             </View>
-            {clippedTimestamp !== null && (
-              <View style={styles.clipInfo}>
-                <Ionicons name="videocam" size={16} color="#e50914" />
-                <Text style={styles.clipInfoText}>Scene clipped at {formatTime(clippedTimestamp)}</Text>
-              </View>
-            )}
+            <View style={[styles.clipInfo, clippedTimestamp === null && styles.clipInfoHidden]}>
+              {clippedTimestamp !== null && (
+                <>
+                  <Ionicons name="videocam" size={16} color="#e50914" />
+                  <Text style={styles.clipInfoText}>Scene clipped at {formatTime(clippedTimestamp)}</Text>
+                </>
+              )}
+            </View>
             <TextInput
+              key="post-input"
               style={styles.postInput}
               placeholder="Share your thoughts about this episode..."
               placeholderTextColor="#666"
               multiline
               value={newPostContent}
-              onChangeText={setNewPostContent}
+              onChangeText={handlePostContentChange}
               textAlignVertical="top"
+              autoFocus={false}
             />
             <TouchableOpacity
               style={[styles.submitButton, (!user || !newPostContent.trim() || submittingPost) && styles.submitButtonDisabled]}
@@ -1299,6 +1336,14 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     marginBottom: 12,
+    minHeight: 44,
+  },
+  clipInfoHidden: {
+    height: 0,
+    minHeight: 0,
+    padding: 0,
+    marginBottom: 0,
+    opacity: 0,
   },
   clipInfoText: {
     color: '#e50914',
