@@ -31,6 +31,14 @@
       "package": "com.anistream.app",
       "googleServicesFile": "./google-services.json"
     },
+    "androidStatusBar": {
+      "hidden": true,
+      "translucent": true
+    },
+    "androidNavigationBar": {
+      "visible": "sticky-immersive",
+      "backgroundColor": "#000000"
+    },
     "web": {
       "bundler": "metro",
       "output": "single",
@@ -39,8 +47,15 @@
     "plugins": [
       "expo-router",
       "expo-video",
-      "expo-font"
+      "expo-font",
+      "expo-updates"
     ],
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/1450dbd9-07d7-4a77-ba56-622510e6acfb"
+    },
     "experiments": {
       "typedRoutes": true
     },

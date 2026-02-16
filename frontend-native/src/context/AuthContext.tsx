@@ -101,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // 2. Enable Google Sign-In
       // 3. Get the Web client ID (not the iOS/Android client IDs)
       // 4. Replace the placeholder below with your actual client ID
-      const GOOGLE_CLIENT_ID = '797841167253-xxxxxxxxxxxxx.apps.googleusercontent.com';
+      const GOOGLE_CLIENT_ID = '797841167253-tl8v6hm1dg1lof6qmterms3hl077bb8g.apps.googleusercontent.com';
       
       // Use discovery endpoint for Google
       const discovery = {
