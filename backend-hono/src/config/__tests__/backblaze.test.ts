@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+import { describe, it, expect, beforeEach, jest } from 'jest';
 import { getBackblazeClient, BACKBLAZE_BUCKET, getBackblazePublicUrl } from '../backblaze.js';
 import { S3Client } from '@aws-sdk/client-s3';
 

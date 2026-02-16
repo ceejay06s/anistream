@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+import { describe, it, expect, beforeEach, jest } from 'jest';
 import { animeRoutes } from '../anime.js';
 import * as animeService from '../../services/animeService.js';
 
@@ -19,7 +19,7 @@ describe('Anime Routes', () => {
 
       const req = new Request('http://localhost/api/anime/trending');
       const res = await animeRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; data: any };
 
       expect(res.status).toBe(200);
       expect(data.success).toBe(true);
@@ -34,7 +34,7 @@ describe('Anime Routes', () => {
 
       const req = new Request('http://localhost/api/anime/trending');
       const res = await animeRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; error?: string };
 
       expect(res.status).toBe(500);
       expect(data.success).toBe(false);
@@ -51,7 +51,7 @@ describe('Anime Routes', () => {
 
       const req = new Request('http://localhost/api/anime/search?q=naruto');
       const res = await animeRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; data: any };
 
       expect(res.status).toBe(200);
       expect(data.success).toBe(true);
@@ -62,7 +62,7 @@ describe('Anime Routes', () => {
     it('should return 400 if query is missing', async () => {
       const req = new Request('http://localhost/api/anime/search');
       const res = await animeRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { error: string };
 
       expect(res.status).toBe(400);
       expect(data.error).toContain('Query parameter "q" is required');
@@ -74,7 +74,7 @@ describe('Anime Routes', () => {
 
       const req = new Request('http://localhost/api/anime/search?q=test&type=tv&page=2');
       const res = await animeRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; data: any };
 
       expect(res.status).toBe(200);
       expect(animeService.searchAnime).toHaveBeenCalledWith('test', expect.objectContaining({
@@ -98,7 +98,7 @@ describe('Anime Routes', () => {
 
       const req = new Request('http://localhost/api/anime/info/test-id');
       const res = await animeRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; data: any };
 
       expect(res.status).toBe(200);
       expect(data.success).toBe(true);
@@ -111,7 +111,7 @@ describe('Anime Routes', () => {
 
       const req = new Request('http://localhost/api/anime/info/non-existent');
       const res = await animeRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; error: string };
 
       expect(res.status).toBe(404);
       expect(data.success).toBe(false);
@@ -129,7 +129,7 @@ describe('Anime Routes', () => {
 
       const req = new Request('http://localhost/api/anime/episodes/test-id');
       const res = await animeRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; data: any };
 
       expect(res.status).toBe(200);
       expect(data.success).toBe(true);
@@ -144,7 +144,7 @@ describe('Anime Routes', () => {
 
       const req = new Request('http://localhost/api/anime/category/movie?page=1');
       const res = await animeRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; data: any };
 
       expect(res.status).toBe(200);
       expect(data.success).toBe(true);
@@ -159,7 +159,7 @@ describe('Anime Routes', () => {
 
       const req = new Request('http://localhost/api/anime/genre/action?page=1');
       const res = await animeRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; data: any };
 
       expect(res.status).toBe(200);
       expect(data.success).toBe(true);
@@ -174,7 +174,7 @@ describe('Anime Routes', () => {
 
       const req = new Request('http://localhost/api/anime/az/A?page=1');
       const res = await animeRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; data: any };
 
       expect(res.status).toBe(200);
       expect(data.success).toBe(true);
@@ -189,7 +189,7 @@ describe('Anime Routes', () => {
 
       const req = new Request('http://localhost/api/anime/filter?q=test&type=tv&status=ongoing&page=1');
       const res = await animeRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; data: any };
 
       expect(res.status).toBe(200);
       expect(data.success).toBe(true);

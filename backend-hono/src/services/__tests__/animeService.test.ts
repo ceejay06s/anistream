@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+import { describe, it, expect, beforeEach, jest } from 'jest';
 import { HiAnime } from 'aniwatch';
 import * as animeService from '../animeService.js';
 

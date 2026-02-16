@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "tsc --project tsconfig.build.json",
     "start": "node dist/index.js",
     "type-check": "tsc --noEmit",
     "test": "jest",
@@ -22,6 +22,8 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.990.0",
+    "@aws-sdk/s3-request-presigner": "^3.990.0",
     "@hono/node-server": "^1.12.0",
     "@upstash/redis": "^1.36.2",
     "aniwatch": "^2.24.3",
@@ -34,8 +36,6 @@
     "ws": "^8.19.0"
   },
   "devDependencies": {
-    "@aws-sdk/client-s3": "^3.990.0",
-    "@aws-sdk/s3-request-presigner": "^3.990.0",
     "@jest/globals": "^30.2.0",
     "@types/cors": "^2.8.17",
     "@types/jest": "^30.0.0",

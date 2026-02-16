@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+import { describe, it, expect, beforeEach, jest } from 'jest';
 import { uploadRoutes } from '../upload.js';
 import { getBackblazeClient, BACKBLAZE_BUCKET } from '../../config/backblaze.js';
 import { PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
@@ -39,7 +39,7 @@ describe('Upload Routes', () => {
       });
 
       const res = await uploadRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; type?: string; filePath?: string; error?: string; message?: string };
 
       expect(res.status).toBe(200);
       expect(data.success).toBe(true);
@@ -63,7 +63,7 @@ describe('Upload Routes', () => {
       });
 
       const res = await uploadRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; type?: string; filePath?: string; error?: string; message?: string };
 
       expect(res.status).toBe(400);
       expect(data.error).toContain('File size exceeds 10MB');
@@ -82,7 +82,7 @@ describe('Upload Routes', () => {
       });
 
       const res = await uploadRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; type?: string; filePath?: string; error?: string; message?: string };
 
       expect(res.status).toBe(400);
       expect(data.error).toContain('Only image and video files are allowed');
@@ -101,7 +101,7 @@ describe('Upload Routes', () => {
       });
 
       const res = await uploadRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; type?: string; filePath?: string; error?: string; message?: string };
 
       expect(res.status).toBe(400);
       expect(data.error).toContain('User ID is required');
@@ -122,7 +122,7 @@ describe('Upload Routes', () => {
       });
 
       const res = await uploadRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; type?: string; filePath?: string; error?: string; message?: string };
 
       expect(res.status).toBe(500);
       expect(data.error).toBe('Failed to upload file');
@@ -140,7 +140,7 @@ describe('Upload Routes', () => {
       });
 
       const res = await uploadRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; type?: string; filePath?: string; error?: string; message?: string };
 
       expect(res.status).toBe(200);
       expect(data.success).toBe(true);
@@ -155,7 +155,7 @@ describe('Upload Routes', () => {
       });
 
       const res = await uploadRoutes.fetch(req);
-      const data = await res.json();
+      const data = await res.json() as { success: boolean; type?: string; filePath?: string; error?: string; message?: string };
 
       expect(res.status).toBe(400);
       expect(data.error).toContain('File path is required');

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+import { describe, it, expect, beforeEach, jest } from 'jest';
 import { verifyRecaptcha } from '../recaptcha.js';
 
 // Mock fetch
