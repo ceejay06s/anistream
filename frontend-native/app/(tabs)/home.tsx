@@ -12,6 +12,7 @@ import {
   Dimensions,
   NativeSyntheticEvent,
   NativeScrollEvent,
+  RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,6 +20,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { animeApi, Anime } from '@/services/api';
 import { exploreRoutes, routeDisplayNames, ExploreRoute } from '@/data/meta';
+import { newsService, NewsItem } from '@/services/newsService';
+import { getProxiedImageUrl } from '@/utils/imageProxy';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const BANNER_HEIGHT = Platform.OS === 'web' ? Math.min(SCREEN_HEIGHT * 0.7, 600) : 350;
@@ -54,6 +57,9 @@ export default function HomeScreen() {
       error: null,
     }))
   );
+  const [news, setNews] = useState<NewsItem[]>([]);
+  const [loadingNews, setLoadingNews] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Clean up Expo Router internal params from URL on web
   useEffect(() => {
@@ -73,7 +79,20 @@ export default function HomeScreen() {
 
   useEffect(() => {
     loadAllCategories();
+    loadNews();
   }, []);
+
+  const loadNews = async () => {
+    try {
+      setLoadingNews(true);
+      const newsData = await newsService.getNews(5);
+      setNews(newsData);
+    } catch (err) {
+      console.error('Failed to load news:', err);
+    } finally {
+      setLoadingNews(false);
+    }
+  };
 
   // Auto-scroll carousel
   useEffect(() => {
@@ -129,6 +148,22 @@ export default function HomeScreen() {
     await Promise.allSettled(promises);
   };
 
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    // Reset categories to loading state
+    setCategories(
+      homeCategories.map(route => ({
+        route,
+        title: routeDisplayNames[route],
+        anime: [],
+        loading: true,
+        error: null,
+      }))
+    );
+    await Promise.all([loadAllCategories(), loadNews()]);
+    setRefreshing(false);
+  }, []);
+
   const handleAnimePress = (anime: Anime) => {
     router.push({
       pathname: '/detail/[id]',
@@ -157,7 +192,7 @@ export default function HomeScreen() {
       style={styles.bannerSlide}
     >
       <Image
-        source={{ uri: item.poster }}
+        source={{ uri: getProxiedImageUrl(item.poster) || '' }}
         style={styles.bannerImage}
         resizeMode="cover"
       />
@@ -228,7 +263,7 @@ export default function HomeScreen() {
       activeOpacity={0.7}
     >
       <Image
-        source={{ uri: item.poster }}
+        source={{ uri: getProxiedImageUrl(item.poster) || '' }}
         style={styles.animePoster}
         resizeMode="cover"
       />
@@ -281,6 +316,72 @@ export default function HomeScreen() {
     );
   };
 
+  const getNewsIcon = (type: NewsItem['type']): keyof typeof Ionicons.glyphMap => {
+    switch (type) {
+      case 'new_episode': return 'play-circle';
+      case 'new_season': return 'calendar';
+      case 'announcement': return 'megaphone';
+      default: return 'newspaper';
+    }
+  };
+
+  const getNewsColor = (type: NewsItem['type']): string => {
+    switch (type) {
+      case 'new_episode': return '#46d369';
+      case 'new_season': return '#e50914';
+      case 'announcement': return '#ffc107';
+      default: return '#888';
+    }
+  };
+
+  const renderNewsItem = ({ item }: { item: NewsItem }) => (
+    <View style={styles.newsCard}>
+      <View style={[styles.newsIconContainer, { backgroundColor: getNewsColor(item.type) + '22' }]}>
+        <Ionicons name={getNewsIcon(item.type)} size={20} color={getNewsColor(item.type)} />
+      </View>
+      <View style={styles.newsContent}>
+        <Text style={styles.newsTitle} numberOfLines={2}>{item.title}</Text>
+        <Text style={styles.newsSummary} numberOfLines={2}>{item.summary}</Text>
+        <View style={styles.newsMeta}>
+          {item.animeName && <Text style={styles.newsAnimeName}>{item.animeName}</Text>}
+          <Text style={styles.newsTime}>{newsService.formatTimeAgo(item.createdAt)}</Text>
+        </View>
+      </View>
+    </View>
+  );
+
+  const renderNewsSection = () => {
+    if (loadingNews) {
+      return (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Latest News</Text>
+          </View>
+          <View style={styles.loadingSection}>
+            <ActivityIndicator size="small" color="#e50914" />
+          </View>
+        </View>
+      );
+    }
+
+    if (news.length === 0) return null;
+
+    return (
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Latest News</Text>
+        </View>
+        <View style={styles.newsList}>
+          {news.map((item) => (
+            <View key={item.id}>
+              {renderNewsItem({ item })}
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  };
+
   const allLoading = categories.every(c => c.loading);
 
   if (allLoading) {
@@ -294,7 +395,18 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scrollView} stickyHeaderIndices={[]}>
+      <ScrollView
+        style={styles.scrollView}
+        stickyHeaderIndices={[]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor="#e50914"
+            colors={['#e50914']}
+          />
+        }
+      >
         {/* Hero Carousel Banner */}
         {spotlightAnime.length > 0 && (
           <View style={styles.bannerContainer}>
@@ -322,6 +434,9 @@ export default function HomeScreen() {
         <View style={styles.categoriesContainer}>
           {categories.map(renderCategory)}
         </View>
+
+        {/* News Section */}
+        {renderNewsSection()}
 
         {/* Footer spacer */}
         <View style={{ height: 100 }} />
@@ -613,5 +728,53 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#46d369',
     marginTop: 2,
+  },
+  // News styles
+  newsList: {
+    paddingHorizontal: Platform.OS === 'web' ? 48 : 12,
+    gap: 12,
+  },
+  newsCard: {
+    flexDirection: 'row',
+    backgroundColor: '#111',
+    borderRadius: 8,
+    padding: 12,
+    gap: 12,
+  },
+  newsIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  newsContent: {
+    flex: 1,
+  },
+  newsTitle: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  newsSummary: {
+    color: '#888',
+    fontSize: 12,
+    lineHeight: 18,
+    marginBottom: 8,
+  },
+  newsMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  newsAnimeName: {
+    color: '#e50914',
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  newsTime: {
+    color: '#666',
+    fontSize: 11,
   },
 });

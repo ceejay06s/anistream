@@ -8,11 +8,23 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Platform,
+  Modal,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { animeApi, AnimeInfo, Episode, VoiceActor, RelatedAnime } from '@/services/api';
+import { getProxiedImageUrl } from '@/utils/imageProxy';
+import { useAuth } from '@/context/AuthContext';
+import { savedAnimeService, SavedAnime, CollectionStatus, COLLECTION_LABELS } from '@/services/savedAnimeService';
+
+const COLLECTION_ICONS: Record<CollectionStatus, keyof typeof Ionicons.glyphMap> = {
+  watching: 'play-circle',
+  plan_to_watch: 'time',
+  completed: 'checkmark-circle',
+  on_hold: 'pause-circle',
+  dropped: 'close-circle',
+};
 
 const EPISODES_PER_PAGE = 50;
 
@@ -22,12 +34,19 @@ export default function DetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 
+  const { user } = useAuth();
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [animeInfo, setAnimeInfo] = useState<AnimeInfo | null>(null);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [currentPage, setCurrentPage] = useState(0);
   const [activeTab, setActiveTab] = useState<TabType>('synopsis');
+
+  // Save/bookmark state
+  const [savedStatus, setSavedStatus] = useState<SavedAnime | null>(null);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [savingStatus, setSavingStatus] = useState(false);
 
   // Clean up Expo Router internal params from URL on web
   useEffect(() => {
@@ -51,6 +70,73 @@ export default function DetailScreen() {
       loadAnimeData();
     }
   }, [id]);
+
+  // Check if anime is saved
+  useEffect(() => {
+    if (user && id) {
+      checkSavedStatus();
+    }
+  }, [user, id]);
+
+  const checkSavedStatus = async () => {
+    if (!user || !id) return;
+    try {
+      const status = await savedAnimeService.getAnimeStatus(user.uid, id);
+      setSavedStatus(status);
+    } catch (err) {
+      console.error('Failed to check saved status:', err);
+    }
+  };
+
+  const handleSaveWithStatus = async (status: CollectionStatus) => {
+    if (!user || !animeInfo) return;
+
+    setSavingStatus(true);
+    try {
+      if (savedStatus) {
+        // Update existing status
+        await savedAnimeService.updateAnimeStatus(user.uid, animeInfo.id, status);
+        setSavedStatus({ ...savedStatus, status });
+      } else {
+        // Save new anime
+        await savedAnimeService.saveAnime(user.uid, {
+          id: animeInfo.id,
+          name: animeInfo.name,
+          poster: animeInfo.poster,
+          type: animeInfo.type,
+        }, status);
+        setSavedStatus({
+          id: animeInfo.id,
+          name: animeInfo.name,
+          poster: animeInfo.poster,
+          type: animeInfo.type,
+          status,
+          savedAt: Date.now(),
+          notifyOnUpdate: true,
+        });
+      }
+      setShowStatusModal(false);
+    } catch (err) {
+      console.error('Failed to save anime:', err);
+    } finally {
+      setSavingStatus(false);
+    }
+  };
+
+  const handleRemoveFromCollection = async () => {
+    if (!user || !id) return;
+
+    setSavingStatus(true);
+    try {
+      await savedAnimeService.unsaveAnime(user.uid, id);
+      setSavedStatus(null);
+      setShowStatusModal(false);
+    } catch (err) {
+      console.error('Failed to remove anime:', err);
+    } finally {
+      setSavingStatus(false);
+    }
+  };
 
   const loadAnimeData = async () => {
     if (!id) return;
@@ -191,7 +277,7 @@ export default function DetailScreen() {
                   {/* Character */}
                   <View style={styles.castPerson}>
                     <Image
-                      source={{ uri: cv.character.poster || 'https://via.placeholder.com/60' }}
+                      source={{ uri: getProxiedImageUrl(cv.character.poster) || 'https://via.placeholder.com/60' }}
                       style={styles.castImage}
                     />
                     <Text style={styles.castName} numberOfLines={2}>
@@ -208,7 +294,7 @@ export default function DetailScreen() {
                   {/* Voice Actor */}
                   <View style={styles.castPerson}>
                     <Image
-                      source={{ uri: cv.voiceActor.poster || 'https://via.placeholder.com/60' }}
+                      source={{ uri: getProxiedImageUrl(cv.voiceActor.poster) || 'https://via.placeholder.com/60' }}
                       style={styles.castImage}
                     />
                     <Text style={styles.castName} numberOfLines={2}>
@@ -277,7 +363,7 @@ export default function DetailScreen() {
                   onPress={() => handleAnimePress(anime)}
                 >
                   <Image
-                    source={{ uri: anime.poster }}
+                    source={{ uri: getProxiedImageUrl(anime.poster) || '' }}
                     style={styles.animeCardImage}
                   />
                   <Text style={styles.animeCardTitle} numberOfLines={2}>
@@ -303,7 +389,7 @@ export default function DetailScreen() {
                   onPress={() => handleAnimePress(anime)}
                 >
                   <Image
-                    source={{ uri: anime.poster }}
+                    source={{ uri: getProxiedImageUrl(anime.poster) || '' }}
                     style={styles.animeCardImage}
                   />
                   <Text style={styles.animeCardTitle} numberOfLines={2}>
@@ -332,7 +418,7 @@ export default function DetailScreen() {
                   onPress={() => handleAnimePress(anime)}
                 >
                   <Image
-                    source={{ uri: anime.poster }}
+                    source={{ uri: getProxiedImageUrl(anime.poster) || '' }}
                     style={styles.animeCardImage}
                   />
                   <Text style={styles.animeCardTitle} numberOfLines={2}>
@@ -399,8 +485,70 @@ export default function DetailScreen() {
     );
   }
 
+  // Status Modal Component
+  const StatusModal = () => (
+    <Modal visible={showStatusModal} animationType="fade" transparent>
+      <TouchableOpacity
+        style={styles.modalOverlay}
+        activeOpacity={1}
+        onPress={() => setShowStatusModal(false)}
+      >
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>
+            {savedStatus ? 'Change Status' : 'Add to Collection'}
+          </Text>
+
+          {(Object.keys(COLLECTION_LABELS) as CollectionStatus[]).map((status) => (
+            <TouchableOpacity
+              key={status}
+              style={[
+                styles.statusOption,
+                savedStatus?.status === status && styles.statusOptionActive,
+              ]}
+              onPress={() => handleSaveWithStatus(status)}
+              disabled={savingStatus}
+            >
+              <Ionicons
+                name={COLLECTION_ICONS[status]}
+                size={20}
+                color={savedStatus?.status === status ? '#e50914' : '#888'}
+              />
+              <Text
+                style={[
+                  styles.statusOptionText,
+                  savedStatus?.status === status && styles.statusOptionTextActive,
+                ]}
+              >
+                {COLLECTION_LABELS[status]}
+              </Text>
+              {savedStatus?.status === status && (
+                <Ionicons name="checkmark" size={20} color="#e50914" style={{ marginLeft: 'auto' }} />
+              )}
+            </TouchableOpacity>
+          ))}
+
+          {savedStatus && (
+            <TouchableOpacity
+              style={styles.removeOption}
+              onPress={handleRemoveFromCollection}
+              disabled={savingStatus}
+            >
+              <Ionicons name="trash-outline" size={20} color="#e50914" />
+              <Text style={styles.removeOptionText}>Remove from Collection</Text>
+            </TouchableOpacity>
+          )}
+
+          {savingStatus && (
+            <ActivityIndicator size="small" color="#e50914" style={{ marginTop: 12 }} />
+          )}
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusModal />
       <ScrollView style={styles.scrollView}>
         {/* Header with back button */}
         <View style={styles.header}>
@@ -412,7 +560,7 @@ export default function DetailScreen() {
         {/* Hero Section */}
         <View style={styles.heroSection}>
           <Image
-            source={{ uri: animeInfo.poster }}
+            source={{ uri: getProxiedImageUrl(animeInfo.poster) || '' }}
             style={styles.poster}
             resizeMode="cover"
           />
@@ -426,6 +574,35 @@ export default function DetailScreen() {
                 <Ionicons name="star" size={16} color="#ffc107" />
                 <Text style={styles.rating}>{animeInfo.rating}</Text>
               </View>
+            )}
+
+            {/* Save Button */}
+            {Platform.OS === 'web' && (
+              <TouchableOpacity
+                style={[
+                  styles.saveButton,
+                  savedStatus && styles.saveButtonActive,
+                ]}
+                onPress={() => {
+                  if (user) {
+                    setShowStatusModal(true);
+                  } else {
+                    router.push('/(tabs)/profile');
+                  }
+                }}
+              >
+                <Ionicons
+                  name={savedStatus ? COLLECTION_ICONS[savedStatus.status] : 'bookmark-outline'}
+                  size={18}
+                  color={savedStatus ? '#e50914' : '#fff'}
+                />
+                <Text style={[
+                  styles.saveButtonText,
+                  savedStatus && styles.saveButtonTextActive,
+                ]}>
+                  {savedStatus ? COLLECTION_LABELS[savedStatus.status] : 'Add to List'}
+                </Text>
+              </TouchableOpacity>
             )}
           </View>
         </View>
@@ -953,5 +1130,90 @@ const styles = StyleSheet.create({
   pageIndicator: {
     color: '#888',
     fontSize: 14,
+  },
+  // Save Button
+  saveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#333',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginTop: 16,
+    gap: 8,
+    alignSelf: 'flex-start',
+  },
+  saveButtonActive: {
+    backgroundColor: 'rgba(229, 9, 20, 0.15)',
+    borderWidth: 1,
+    borderColor: '#e50914',
+  },
+  saveButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  saveButtonTextActive: {
+    color: '#e50914',
+  },
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 16,
+    padding: 20,
+    width: '100%',
+    maxWidth: 320,
+  },
+  modalTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  statusOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 8,
+    marginBottom: 8,
+    backgroundColor: '#0a0a0a',
+    gap: 12,
+  },
+  statusOptionActive: {
+    backgroundColor: 'rgba(229, 9, 20, 0.15)',
+    borderWidth: 1,
+    borderColor: '#e50914',
+  },
+  statusOptionText: {
+    color: '#888',
+    fontSize: 15,
+  },
+  statusOptionTextActive: {
+    color: '#fff',
+    fontWeight: '500',
+  },
+  removeOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 8,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#e50914',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  removeOptionText: {
+    color: '#e50914',
+    fontSize: 14,
+    fontWeight: '500',
   },
 });

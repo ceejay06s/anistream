@@ -2,5 +2,13 @@ node_modules/
 dist/
 .env
 .env.local
+.env.*.local
 *.log
 .DS_Store
+
+# Firebase service account keys (sensitive)
+**/serviceAccountKey.json
+**/firebase-adminsdk-*.json
+src/config/serviceAccountKey.json
+src/config/aniwatch-76fd3-firebase-adminsdk-*.json
+serviceAccountKey.base64.txt
