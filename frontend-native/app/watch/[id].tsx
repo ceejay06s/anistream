@@ -52,6 +52,9 @@ export default function WatchScreen() {
   const [loadingPosts, setLoadingPosts] = useState(false);
   const [loadingComments, setLoadingComments] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  
+  // Ref to prevent modal from reopening immediately after closing
+  const modalClosingRef = useRef(false);
 
   // Clean up Expo Router internal params from URL on web
   useEffect(() => {
@@ -174,9 +177,19 @@ export default function WatchScreen() {
   };
 
   const handleClipScene = () => {
+    if (modalClosingRef.current) return; // Prevent opening if modal is closing
     setClippedTimestamp(currentVideoTime);
     setNewPostContent(`Amazing scene at ${formatTime(currentVideoTime)}! 🎬`);
     setShowPostModal(true);
+  };
+  
+  const handleClosePostModal = () => {
+    modalClosingRef.current = true;
+    setShowPostModal(false);
+    // Reset the flag after a short delay to allow modal to fully close
+    setTimeout(() => {
+      modalClosingRef.current = false;
+    }, 300);
   };
 
   const handleCreatePost = async () => {
@@ -222,7 +235,7 @@ export default function WatchScreen() {
       );
       setNewPostContent('');
       setClippedTimestamp(null);
-      setShowPostModal(false);
+      handleClosePostModal();
       loadEpisodePosts();
     } catch (err: any) {
       console.error('Failed to create post:', err);
@@ -655,6 +668,7 @@ export default function WatchScreen() {
               <TouchableOpacity
                 style={styles.postButton}
                 onPress={() => {
+                  if (modalClosingRef.current) return; // Prevent opening if modal is closing
                   setClippedTimestamp(null);
                   setNewPostContent('');
                   setShowPostModal(true);
@@ -749,7 +763,7 @@ export default function WatchScreen() {
         visible={showPostModal}
         transparent
         animationType="slide"
-        onRequestClose={() => setShowPostModal(false)}
+        onRequestClose={handleClosePostModal}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -758,7 +772,7 @@ export default function WatchScreen() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Create Post</Text>
-              <TouchableOpacity onPress={() => setShowPostModal(false)}>
+              <TouchableOpacity onPress={handleClosePostModal}>
                 <Ionicons name="close" size={24} color="#fff" />
               </TouchableOpacity>
             </View>
