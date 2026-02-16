@@ -11,7 +11,8 @@ function getStorage() {
 }
 
 /**
- * Uploads a profile photo to Firebase Storage
+ * Uploads a profile photo to Firebase Storage via backend proxy
+ * This avoids CORS issues and doesn't require Blaze plan
  * @param file The image file to upload
  * @param userId The user's ID
  * @returns The download URL of the uploaded photo
@@ -20,10 +21,9 @@ export async function uploadProfilePhoto(
   file: File,
   userId: string
 ): Promise<string> {
-  const storage = getStorage();
-  if (!storage) {
-    throw new Error('Storage not available on this platform');
-  }
+  // Use backend proxy to avoid CORS issues (no Blaze plan needed)
+  const { API_BASE_URL } = require('./api');
+  const axios = require('axios');
 
   // Validate file type
   if (!file.type.startsWith('image/')) {
@@ -36,18 +36,32 @@ export async function uploadProfilePhoto(
     throw new Error('Image size must be less than 5MB');
   }
 
-  const { ref, uploadBytes, getDownloadURL } = require('firebase/storage');
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('userId', userId);
+    formData.append('folder', 'profiles');
 
-  // Generate unique filename
-  const fileExtension = file.name.split('.').pop() || 'jpg';
-  const fileName = `profile_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExtension}`;
-  const filePath = `profiles/${userId}/${fileName}`;
+    const response = await axios.post(`${API_BASE_URL}/api/upload/file`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
 
-  const storageRef = ref(storage, filePath);
-  await uploadBytes(storageRef, file);
-  const url = await getDownloadURL(storageRef);
-
-  return url;
+    if (response.data.success) {
+      return response.data.url;
+    } else {
+      throw new Error(response.data.error || 'Upload failed');
+    }
+  } catch (error: any) {
+    if (error.response?.status === 400) {
+      throw new Error(error.response.data.error || 'Invalid file or request');
+    } else if (error.response?.status === 413) {
+      throw new Error('Image size must be less than 5MB');
+    } else {
+      throw new Error(`Upload failed: ${error.response?.data?.message || error.message || 'Unknown error'}`);
+    }
+  }
 }
 
 /**
