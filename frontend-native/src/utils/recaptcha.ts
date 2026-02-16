@@ -3,15 +3,27 @@ import { Platform } from 'react-native';
 declare global {
   interface Window {
     grecaptcha?: {
-      ready: (callback: () => void) => void;
-      execute: (siteKey: string, options: { action: string }) => Promise<string>;
-      render: (elementId: string, options: {
+      enterprise?: {
+        ready: (callback: () => void) => void;
+        execute: (siteKey: string, options: { action: string }) => Promise<string>;
+        render: (elementId: string, options: {
+          sitekey: string;
+          callback: (token: string) => void;
+          'expired-callback': () => void;
+          'error-callback': () => void;
+        }) => number;
+        reset: (widgetId: number) => void;
+      };
+      // Fallback for non-enterprise (if needed)
+      ready?: (callback: () => void) => void;
+      execute?: (siteKey: string, options: { action: string }) => Promise<string>;
+      render?: (elementId: string, options: {
         sitekey: string;
         callback: (token: string) => void;
         'expired-callback': () => void;
         'error-callback': () => void;
       }) => number;
-      reset: (widgetId: number) => void;
+      reset?: (widgetId: number) => void;
     };
   }
 }
@@ -27,7 +39,7 @@ function loadRecaptchaScript(): Promise<void> {
     return Promise.reject(new Error('reCAPTCHA is only available on web'));
   }
 
-  if (window.grecaptcha) {
+  if (window.grecaptcha?.enterprise) {
     return Promise.resolve();
   }
 
@@ -39,13 +51,13 @@ function loadRecaptchaScript(): Promise<void> {
     // Wait for existing load to complete
     return new Promise((resolve, reject) => {
       const checkInterval = setInterval(() => {
-        if (window.grecaptcha) {
+        if (window.grecaptcha?.enterprise) {
           clearInterval(checkInterval);
           scriptLoaded = true;
           resolve();
         } else if (!scriptLoading) {
           clearInterval(checkInterval);
-          reject(new Error('Failed to load reCAPTCHA script'));
+          reject(new Error('Failed to load reCAPTCHA Enterprise script'));
         }
       }, 100);
     });
@@ -55,15 +67,15 @@ function loadRecaptchaScript(): Promise<void> {
 
   return new Promise((resolve, reject) => {
     const script = document.createElement('script');
-    script.src = 'https://www.google.com/recaptcha/api.js';
+    script.src = 'https://www.google.com/recaptcha/enterprise.js';
     script.async = true;
     script.defer = true;
     script.onload = () => {
       scriptLoaded = true;
       scriptLoading = false;
-      // Wait for grecaptcha to be available
+      // Wait for grecaptcha.enterprise to be available
       const checkInterval = setInterval(() => {
-        if (window.grecaptcha) {
+        if (window.grecaptcha?.enterprise) {
           clearInterval(checkInterval);
           resolve();
         }
@@ -71,8 +83,8 @@ function loadRecaptchaScript(): Promise<void> {
       // Timeout after 5 seconds
       setTimeout(() => {
         clearInterval(checkInterval);
-        if (!window.grecaptcha) {
-          reject(new Error('reCAPTCHA script loaded but grecaptcha is not available'));
+        if (!window.grecaptcha?.enterprise) {
+          reject(new Error('reCAPTCHA Enterprise script loaded but grecaptcha.enterprise is not available'));
         }
       }, 5000);
     };
@@ -99,14 +111,14 @@ export async function executeRecaptcha(
 
   await loadRecaptchaScript();
 
-  if (!window.grecaptcha) {
-    throw new Error('reCAPTCHA is not available');
+  if (!window.grecaptcha?.enterprise) {
+    throw new Error('reCAPTCHA Enterprise is not available');
   }
 
   return new Promise((resolve, reject) => {
-    window.grecaptcha.ready(async () => {
+    window.grecaptcha.enterprise!.ready(async () => {
       try {
-        const token = await window.grecaptcha.execute(siteKey, { action });
+        const token = await window.grecaptcha.enterprise!.execute(siteKey, { action });
         resolve(token);
       } catch (error) {
         reject(error);
@@ -137,14 +149,14 @@ export async function renderRecaptcha(
 
   await loadRecaptchaScript();
 
-  if (!window.grecaptcha) {
-    throw new Error('reCAPTCHA is not available');
+  if (!window.grecaptcha?.enterprise) {
+    throw new Error('reCAPTCHA Enterprise is not available');
   }
 
   return new Promise((resolve, reject) => {
-    window.grecaptcha.ready(() => {
+    window.grecaptcha.enterprise!.ready(() => {
       try {
-        const widgetId = window.grecaptcha.render(elementId, {
+        const widgetId = window.grecaptcha.enterprise!.render(elementId, {
           sitekey: siteKey,
           callback: callback,
           'expired-callback': onExpired || (() => {}),
@@ -163,8 +175,8 @@ export async function renderRecaptcha(
  * @param widgetId The widget ID returned from renderRecaptcha
  */
 export function resetRecaptcha(widgetId: number): void {
-  if (Platform.OS !== 'web' || typeof window === 'undefined' || !window.grecaptcha) {
+  if (Platform.OS !== 'web' || typeof window === 'undefined' || !window.grecaptcha?.enterprise) {
     return;
   }
-  window.grecaptcha.reset(widgetId);
+  window.grecaptcha.enterprise.reset(widgetId);
 }
