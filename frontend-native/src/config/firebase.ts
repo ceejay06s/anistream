@@ -14,14 +14,14 @@ const firebaseConfig = {
   measurementId: "G-Z7F9WKFD8L"
 };
 
+const { initializeApp } = require('firebase/app');
+const { getAuth } = require('firebase/auth');
+
+app = initializeApp(firebaseConfig);
+auth = getAuth(app);
+
 if (Platform.OS === 'web') {
-  const { initializeApp } = require('firebase/app');
   const { getAnalytics, isSupported } = require('firebase/analytics');
-  const { getAuth } = require('firebase/auth');
-
-  app = initializeApp(firebaseConfig);
-  auth = getAuth(app);
-
   isSupported().then((supported: boolean) => {
     if (supported) {
       analytics = getAnalytics(app);

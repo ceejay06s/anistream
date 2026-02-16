@@ -1,8 +1,11 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Platform } from 'react-native';
+import { useAuth } from '@/context/AuthContext';
 
 export default function TabLayout() {
+  const { user } = useAuth();
+  
   return (
     <Tabs
       screenOptions={{
@@ -62,6 +65,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="chatbubbles-outline" size={22} color={color} />
           ),
+          href: user ? '/community' : null, // Hide tab if not logged in
         }}
       />
       <Tabs.Screen

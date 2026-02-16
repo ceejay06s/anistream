@@ -23,8 +23,9 @@
       }
     },
     "android": {
+      "icon": "./assets/android-icon.png",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/android-icon.png",
         "backgroundColor": "#000000"
       },
       "package": "com.anistream.app",

@@ -80,7 +80,6 @@ export default function ProfileScreen() {
 
   // Modals
   const [showFAQ, setShowFAQ] = useState(false);
-  const [showPolicy, setShowPolicy] = useState(false);
   const [showBugReport, setShowBugReport] = useState(false);
   const [bugReportText, setBugReportText] = useState('');
 
@@ -692,20 +691,100 @@ export default function ProfileScreen() {
           </View>
           <ScrollView style={styles.modalScroll}>
             <View style={styles.faqItem}>
-              <Text style={styles.faqQuestion}>How do I save anime to my list?</Text>
-              <Text style={styles.faqAnswer}>Tap the bookmark icon on any anime detail page to save it to your list.</Text>
+              <Text style={styles.faqQuestion}>What is AniStream?</Text>
+              <Text style={styles.faqAnswer}>
+                AniStream is an educational application developed to demonstrate web and mobile 
+                application development concepts. It showcases user authentication, data management, 
+                API integration, and third-party service implementation. This app is provided 
+                solely for educational purposes.
+              </Text>
             </View>
             <View style={styles.faqItem}>
-              <Text style={styles.faqQuestion}>Is AniStream free?</Text>
-              <Text style={styles.faqAnswer}>Yes, AniStream is completely free to use with no subscription required.</Text>
+              <Text style={styles.faqQuestion}>Is AniStream free to use?</Text>
+              <Text style={styles.faqAnswer}>
+                Yes, AniStream is completely free to use. As an educational project, there are no 
+                subscriptions, fees, or premium features. The application is provided "as is" 
+                for educational demonstration purposes.
+              </Text>
+            </View>
+            <View style={styles.faqItem}>
+              <Text style={styles.faqQuestion}>What data does AniStream collect?</Text>
+              <Text style={styles.faqAnswer}>
+                AniStream collects minimal data necessary for basic functionality. We only receive 
+                basic information through Google Authentication (name, email, profile picture). 
+                We do not collect, track, or store any additional personal data beyond what is 
+                required for authentication. For more details, please review our Privacy Policy.
+              </Text>
+            </View>
+            <View style={styles.faqItem}>
+              <Text style={styles.faqQuestion}>Does AniStream use third-party services?</Text>
+              <Text style={styles.faqAnswer}>
+                Yes, AniStream relies on various third-party services to function, including 
+                Google (Firebase) for authentication, content delivery networks for streaming, 
+                and storage providers for file management. These services have their own privacy 
+                policies and terms of service that apply to your use.
+              </Text>
+            </View>
+            <View style={styles.faqItem}>
+              <Text style={styles.faqQuestion}>How do I save anime to my list?</Text>
+              <Text style={styles.faqAnswer}>
+                To save anime to your list, navigate to any anime detail page and tap the bookmark 
+                icon. You can organize your saved anime into different collections: Watching, 
+                Plan to Watch, Completed, On Hold, or Dropped. You can also enable notifications 
+                to be alerted when new episodes are released.
+              </Text>
             </View>
             <View style={styles.faqItem}>
               <Text style={styles.faqQuestion}>Why isn't a video playing?</Text>
-              <Text style={styles.faqAnswer}>Try switching to a different server or quality option. Some sources may be temporarily unavailable.</Text>
+              <Text style={styles.faqAnswer}>
+                If a video isn't playing, try the following: (1) Switch to a different streaming 
+                server, (2) Select a different video quality option, (3) Check your internet 
+                connection, (4) Refresh the page. Some sources may be temporarily unavailable 
+                as this app relies on third-party content delivery services.
+              </Text>
             </View>
             <View style={styles.faqItem}>
-              <Text style={styles.faqQuestion}>How do I report a broken link?</Text>
-              <Text style={styles.faqAnswer}>Use the Bug Report option in Settings to report any issues.</Text>
+              <Text style={styles.faqQuestion}>How do I change my account settings?</Text>
+              <Text style={styles.faqAnswer}>
+                Navigate to the Profile tab and select the Settings section. From there, you can 
+                manage notifications, update your profile information, change your email or password, 
+                and adjust playback preferences. You can also delete your account if needed.
+              </Text>
+            </View>
+            <View style={styles.faqItem}>
+              <Text style={styles.faqQuestion}>How do I report issues or bugs?</Text>
+              <Text style={styles.faqAnswer}>
+                Use the "Report a Bug" option in the Settings section. Please provide as much 
+                detail as possible about the issue, including what you were trying to do, what 
+                happened, and any error messages you encountered. This helps us improve the 
+                educational demonstration.
+              </Text>
+            </View>
+            <View style={styles.faqItem}>
+              <Text style={styles.faqQuestion}>Is my data secure?</Text>
+              <Text style={styles.faqAnswer}>
+                While this is an educational application, we implement reasonable security measures 
+                to protect your information. However, please be aware that no method of transmission 
+                over the internet is 100% secure. We only collect minimal data through Google 
+                Authentication and do not sell or share your data with third parties.
+              </Text>
+            </View>
+            <View style={styles.faqItem}>
+              <Text style={styles.faqQuestion}>Can I use AniStream on mobile devices?</Text>
+              <Text style={styles.faqAnswer}>
+                Yes, AniStream is built with React Native and supports both web and mobile platforms. 
+                The app is designed to work on iOS, Android, and web browsers. Some features may 
+                vary between platforms due to platform-specific capabilities.
+              </Text>
+            </View>
+            <View style={styles.faqItem}>
+              <Text style={styles.faqQuestion}>What should I do if I have privacy concerns?</Text>
+              <Text style={styles.faqAnswer}>
+                If you have any privacy concerns, please review our Privacy Policy in the Settings 
+                section. You can also delete your account at any time through the Account settings, 
+                which will remove all your associated data. For additional questions, use the 
+                Bug Report feature to contact us.
+              </Text>
             </View>
           </ScrollView>
         </View>
@@ -713,37 +792,6 @@ export default function ProfileScreen() {
     </Modal>
   );
 
-  // Policy Modal
-  const PolicyModal = () => (
-    <Modal visible={showPolicy} animationType="slide" transparent>
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Privacy Policy</Text>
-            <TouchableOpacity onPress={() => setShowPolicy(false)}>
-              <Ionicons name="close" size={24} color="#fff" />
-            </TouchableOpacity>
-          </View>
-          <ScrollView style={styles.modalScroll}>
-            <Text style={styles.policyText}>
-              Last updated: February 2026{'\n\n'}
-              AniStream respects your privacy. We collect minimal data necessary to provide our service.{'\n\n'}
-              <Text style={styles.policyHeading}>Data Collection</Text>{'\n'}
-              - Email address (for account creation){'\n'}
-              - Saved anime preferences{'\n'}
-              - Anonymous usage analytics{'\n\n'}
-              <Text style={styles.policyHeading}>Data Usage</Text>{'\n'}
-              Your data is used solely to provide and improve our service. We do not sell your data to third parties.{'\n\n'}
-              <Text style={styles.policyHeading}>Third-Party Services</Text>{'\n'}
-              We use Firebase for authentication and data storage. Their privacy policy applies to data processed by their services.{'\n\n'}
-              <Text style={styles.policyHeading}>Contact</Text>{'\n'}
-              For privacy concerns, contact us at privacy@anistream.app
-            </Text>
-          </ScrollView>
-        </View>
-      </View>
-    </Modal>
-  );
 
   // Bug Report Modal
   const BugReportModal = () => (
@@ -1170,7 +1218,6 @@ export default function ProfileScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <FAQModal />
-        <PolicyModal />
         <BugReportModal />
         <ChangeEmailModal />
         <ChangePasswordModal />
@@ -1406,10 +1453,17 @@ export default function ProfileScreen() {
                   </View>
                   <Ionicons name="chevron-forward" size={20} color="#666" />
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.settingRowButton} onPress={() => setShowPolicy(true)}>
+                <TouchableOpacity style={styles.settingRowButton} onPress={() => router.push('/policy')}>
                   <View style={styles.settingInfo}>
                     <Ionicons name="document-text-outline" size={22} color="#fff" />
                     <Text style={styles.settingText}>Privacy Policy</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#666" />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.settingRowButton} onPress={() => router.push('/terms')}>
+                  <View style={styles.settingInfo}>
+                    <Ionicons name="document-text-outline" size={22} color="#fff" />
+                    <Text style={styles.settingText}>Terms of Service</Text>
                   </View>
                   <Ionicons name="chevron-forward" size={20} color="#666" />
                 </TouchableOpacity>
@@ -1436,69 +1490,10 @@ export default function ProfileScreen() {
     );
   }
 
-  // Not available on native - show settings anyway
-  if (Platform.OS !== 'web') {
-    return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <FAQModal />
-        <PolicyModal />
-        <BugReportModal />
-        <ChangeEmailModal />
-        <ChangePasswordModal />
-        <UpdateProfileModal />
-        <DeleteAccountModal />
-
-        <ScrollView>
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>Profile</Text>
-          </View>
-
-          <View style={styles.guestSection}>
-            <Ionicons name="person-circle" size={80} color="#444" />
-            <Text style={styles.guestText}>Guest User</Text>
-            <Text style={styles.infoText}>
-              Sign in via web to sync your watchlist across devices.
-            </Text>
-          </View>
-
-          {/* Settings for guest users too */}
-          <View style={styles.tabContent}>
-            <View style={styles.settingsSection}>
-              <Text style={styles.settingsSectionTitle}>Support</Text>
-              <TouchableOpacity style={styles.settingRowButton} onPress={() => setShowFAQ(true)}>
-                <View style={styles.settingInfo}>
-                  <Ionicons name="help-circle-outline" size={22} color="#fff" />
-                  <Text style={styles.settingText}>FAQ</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color="#666" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.settingRowButton} onPress={() => setShowPolicy(true)}>
-                <View style={styles.settingInfo}>
-                  <Ionicons name="document-text-outline" size={22} color="#fff" />
-                  <Text style={styles.settingText}>Privacy Policy</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color="#666" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.settingRowButton} onPress={() => setShowBugReport(true)}>
-                <View style={styles.settingInfo}>
-                  <Ionicons name="bug-outline" size={22} color="#fff" />
-                  <Text style={styles.settingText}>Report a Bug</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color="#666" />
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.versionText}>AniStream v1.0.0</Text>
-          </View>
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
-
-  // Login/Signup form (web only)
+  // Login/Signup form (shown when user is not logged in)
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <FAQModal />
-      <PolicyModal />
       <BugReportModal />
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -1524,15 +1519,17 @@ export default function ProfileScreen() {
 
           {/* Auth Mode Tabs */}
           <View style={styles.tabsContainer}>
-            <TouchableOpacity
-              style={[styles.tab, authMode === 'passwordless' && styles.tabActive]}
-              onPress={() => { setAuthMode('passwordless'); setError(''); setSuccess(''); }}
-            >
-              <Ionicons name="mail" size={16} color={authMode === 'passwordless' ? '#e50914' : '#888'} />
-              <Text style={[styles.tabText, authMode === 'passwordless' && styles.tabTextActive]}>
-                Email Link
-              </Text>
-            </TouchableOpacity>
+            {Platform.OS === 'web' && (
+              <TouchableOpacity
+                style={[styles.tab, authMode === 'passwordless' && styles.tabActive]}
+                onPress={() => { setAuthMode('passwordless'); setError(''); setSuccess(''); }}
+              >
+                <Ionicons name="mail" size={16} color={authMode === 'passwordless' ? '#e50914' : '#888'} />
+                <Text style={[styles.tabText, authMode === 'passwordless' && styles.tabTextActive]}>
+                  Email Link
+                </Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={[styles.tab, authMode === 'login' && styles.tabActive]}
               onPress={() => { setAuthMode('login'); setError(''); setSuccess(''); }}
@@ -1633,10 +1630,24 @@ export default function ProfileScreen() {
             <Text style={styles.loginSupportLink}>FAQ</Text>
           </TouchableOpacity>
           <Text style={styles.loginSupportDot}>•</Text>
-          <TouchableOpacity onPress={() => setShowPolicy(true)}>
+          <TouchableOpacity onPress={() => router.push('/policy')}>
             <Text style={styles.loginSupportLink}>Privacy Policy</Text>
           </TouchableOpacity>
+          <Text style={styles.loginSupportDot}>•</Text>
+          <TouchableOpacity onPress={() => router.push('/terms')}>
+            <Text style={styles.loginSupportLink}>Terms of Service</Text>
+          </TouchableOpacity>
         </View>
+        
+        {/* Guest user info for mobile */}
+        {Platform.OS !== 'web' && (
+          <View style={styles.guestInfoSection}>
+            <Ionicons name="information-circle-outline" size={20} color="#888" />
+            <Text style={styles.guestInfoText}>
+              Sign in to sync your watchlist across devices
+            </Text>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -2008,16 +2019,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
-  // Policy
-  policyText: {
-    color: '#888',
-    fontSize: 14,
-    lineHeight: 22,
-  },
-  policyHeading: {
-    color: '#fff',
-    fontWeight: '600',
-  },
   // Bug Report
   bugReportLabel: {
     color: '#fff',
@@ -2197,6 +2198,20 @@ const styles = StyleSheet.create({
   loginSupportDot: {
     color: '#444',
     fontSize: 13,
+  },
+  guestInfoSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    gap: 8,
+    marginTop: 8,
+  },
+  guestInfoText: {
+    color: '#888',
+    fontSize: 13,
+    textAlign: 'center',
   },
   // Account Management Modal Styles
   inputLabel: {

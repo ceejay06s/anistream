@@ -33,7 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (Platform.OS !== 'web' || !auth) {
+    if (!auth) {
       setLoading(false);
       return;
     }
@@ -57,41 +57,90 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    if (Platform.OS !== 'web' || !auth) {
-      throw new Error('Auth not available on this platform');
+    if (!auth) {
+      throw new Error('Auth not available');
     }
     const { signInWithEmailAndPassword } = require('firebase/auth');
     await signInWithEmailAndPassword(auth, email, password);
   };
 
   const signUp = async (email: string, password: string) => {
-    if (Platform.OS !== 'web' || !auth) {
-      throw new Error('Auth not available on this platform');
+    if (!auth) {
+      throw new Error('Auth not available');
     }
     const { createUserWithEmailAndPassword } = require('firebase/auth');
     await createUserWithEmailAndPassword(auth, email, password);
   };
 
   const signOut = async () => {
-    if (Platform.OS !== 'web' || !auth) {
-      throw new Error('Auth not available on this platform');
+    if (!auth) {
+      throw new Error('Auth not available');
     }
     const { signOut: firebaseSignOut } = require('firebase/auth');
     await firebaseSignOut(auth);
   };
 
   const signInWithGoogle = async () => {
-    if (Platform.OS !== 'web' || !auth) {
-      throw new Error('Auth not available on this platform');
+    if (!auth) {
+      throw new Error('Auth not available');
     }
-    const { signInWithPopup, GoogleAuthProvider } = require('firebase/auth');
-    const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
+    if (Platform.OS === 'web') {
+      const { signInWithPopup, GoogleAuthProvider } = require('firebase/auth');
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } else {
+      // Mobile: Use expo-auth-session for Google OAuth
+      const AuthSession = require('expo-auth-session');
+      const WebBrowser = require('expo-web-browser');
+      
+      // Complete auth session when done
+      WebBrowser.maybeCompleteAuthSession();
+      
+      // NOTE: You need to configure the Google OAuth Client ID in Firebase Console:
+      // 1. Go to Firebase Console > Authentication > Sign-in method > Google
+      // 2. Enable Google Sign-In
+      // 3. Get the Web client ID (not the iOS/Android client IDs)
+      // 4. Replace the placeholder below with your actual client ID
+      const GOOGLE_CLIENT_ID = '797841167253-xxxxxxxxxxxxx.apps.googleusercontent.com';
+      
+      // Use discovery endpoint for Google
+      const discovery = {
+        authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
+        tokenEndpoint: 'https://oauth2.googleapis.com/token',
+        revocationEndpoint: 'https://oauth2.googleapis.com/revoke',
+      };
+
+      // Create auth request
+      const request = new AuthSession.AuthRequest({
+        clientId: GOOGLE_CLIENT_ID,
+        scopes: ['openid', 'profile', 'email'],
+        responseType: AuthSession.ResponseType.IdToken,
+        redirectUri: AuthSession.makeRedirectUri({ useProxy: true }),
+      });
+
+      const result = await request.promptAsync(discovery, {
+        useProxy: true,
+      });
+
+      if (result.type === 'success') {
+        const { id_token } = result.params;
+        const { GoogleAuthProvider, signInWithCredential } = require('firebase/auth');
+        const credential = GoogleAuthProvider.credential(id_token);
+        await signInWithCredential(auth, credential);
+      } else if (result.type === 'cancel') {
+        throw new Error('Google Sign-In was cancelled');
+      } else {
+        throw new Error('Google Sign-In failed');
+      }
+    }
   };
 
   const sendSignInLink = async (email: string) => {
-    if (Platform.OS !== 'web' || !auth) {
-      throw new Error('Auth not available on this platform');
+    if (!auth) {
+      throw new Error('Auth not available');
+    }
+    if (Platform.OS !== 'web') {
+      throw new Error('Email link sign-in is only available on web');
     }
     const { sendSignInLinkToEmail } = require('firebase/auth');
     const actionCodeSettings = {
@@ -106,8 +155,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const completeSignInWithLink = async (email: string, link: string) => {
-    if (Platform.OS !== 'web' || !auth) {
-      throw new Error('Auth not available on this platform');
+    if (!auth) {
+      throw new Error('Auth not available');
+    }
+    if (Platform.OS !== 'web') {
+      throw new Error('Email link sign-in is only available on web');
     }
     const { signInWithEmailLink } = require('firebase/auth');
     await signInWithEmailLink(auth, email, link);
@@ -125,7 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const reauthenticate = async (email: string, password: string) => {
-    if (Platform.OS !== 'web' || !auth || !auth.currentUser) {
+    if (!auth || !auth.currentUser) {
       throw new Error('Auth not available or user not signed in');
     }
     const { signInWithEmailAndPassword, EmailAuthProvider, reauthenticateWithCredential } = require('firebase/auth');
@@ -134,7 +186,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const updateEmail = async (newEmail: string) => {
-    if (Platform.OS !== 'web' || !auth || !auth.currentUser) {
+    if (!auth || !auth.currentUser) {
       throw new Error('Auth not available or user not signed in');
     }
     const { updateEmail: firebaseUpdateEmail } = require('firebase/auth');
@@ -142,7 +194,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const updatePassword = async (newPassword: string) => {
-    if (Platform.OS !== 'web' || !auth || !auth.currentUser) {
+    if (!auth || !auth.currentUser) {
       throw new Error('Auth not available or user not signed in');
     }
     const { updatePassword } = require('firebase/auth');
@@ -150,7 +202,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const updateProfile = async (displayName?: string, photoURL?: string) => {
-    if (Platform.OS !== 'web' || !auth || !auth.currentUser) {
+    if (!auth || !auth.currentUser) {
       throw new Error('Auth not available or user not signed in');
     }
     const { updateProfile: firebaseUpdateProfile } = require('firebase/auth');
@@ -161,7 +213,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteAccount = async () => {
-    if (Platform.OS !== 'web' || !auth || !auth.currentUser) {
+    if (!auth || !auth.currentUser) {
       throw new Error('Auth not available or user not signed in');
     }
     const { deleteUser } = require('firebase/auth');

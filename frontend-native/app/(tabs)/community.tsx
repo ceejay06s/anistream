@@ -48,6 +48,7 @@ export default function CommunityScreen() {
   const [loadingComments, setLoadingComments] = useState(false);
   const [newComment, setNewComment] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
+  const commentInputRef = useRef<TextInput>(null);
 
   useEffect(() => {
     loadPosts();
@@ -92,10 +93,8 @@ export default function CommunityScreen() {
     setNewPostContent(text);
   }, []);
   
-  // Memoized handler for comment input
-  const handleCommentChange = useCallback((text: string) => {
-    setNewComment(text);
-  }, []);
+  // Memoized handler for comment input - removed to prevent re-render issues
+  // Using setNewComment directly in TextInput for better performance
 
   const handleMediaSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -223,6 +222,7 @@ export default function CommunityScreen() {
 
   const openComments = async (post: Post) => {
     setSelectedPost(post);
+    setNewComment(''); // Clear comment input when opening
     setLoadingComments(true);
     try {
       const data = await communityService.getComments(post.id);
@@ -232,6 +232,12 @@ export default function CommunityScreen() {
     } finally {
       setLoadingComments(false);
     }
+  };
+
+  const closeComments = () => {
+    setSelectedPost(null);
+    setComments([]);
+    setNewComment('');
   };
 
   const handleAddComment = async () => {
@@ -392,69 +398,119 @@ export default function CommunityScreen() {
     </View>
   );
 
-  // Comments Modal
-  const CommentsModal = () => (
-    <Modal visible={!!selectedPost} animationType="slide" transparent>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.modalOverlay}
+  // Comments Modal - Function component to prevent relaunching
+  const CommentsModal = () => {
+    if (!selectedPost) return null;
+    
+    return (
+      <Modal 
+        visible={!!selectedPost} 
+        animationType="slide" 
+        transparent={true}
+        onRequestClose={closeComments}
       >
-        <View style={styles.commentsModalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Comments</Text>
-            <TouchableOpacity onPress={() => setSelectedPost(null)}>
-              <Ionicons name="close" size={24} color="#fff" />
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalKeyboardView}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        >
+          <View style={styles.commentsModalContent}>
+            <TouchableOpacity 
+              style={styles.modalOverlay} 
+              activeOpacity={1}
+              onPress={closeComments}
+            />
+            <TouchableOpacity 
+              activeOpacity={1}
+              onPress={(e) => e.stopPropagation()}
+              style={styles.commentsModalInner}
+            >
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Comments</Text>
+                <TouchableOpacity onPress={closeComments}>
+                  <Ionicons name="close" size={24} color="#fff" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView 
+                style={styles.commentsContent}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="none"
+                nestedScrollEnabled={true}
+              >
+                {loadingComments ? (
+                  <View style={styles.commentsLoadingContainer}>
+                    <ActivityIndicator size="small" color="#e50914" />
+                  </View>
+                ) : comments.length === 0 ? (
+                  <View style={styles.emptyComments}>
+                    <Ionicons name="chatbubble-outline" size={48} color="#444" />
+                    <Text style={styles.emptyCommentsText}>No comments yet</Text>
+                    <Text style={styles.emptyCommentsSubtext}>Be the first to comment!</Text>
+                  </View>
+                ) : (
+                  <View style={styles.commentsListContent}>
+                    {comments.map((comment) => (
+                      <View key={comment.id} style={styles.commentItem}>
+                        <View style={styles.commentAuthor}>
+                          {comment.userPhoto ? (
+                            <Image source={{ uri: comment.userPhoto }} style={styles.commentAvatar} />
+                          ) : (
+                            <View style={styles.commentAvatarPlaceholder}>
+                              <Ionicons name="person" size={12} color="#888" />
+                            </View>
+                          )}
+                          <Text style={styles.commentAuthorName}>{comment.userName}</Text>
+                          <Text style={styles.commentTime}>
+                            {communityService.formatTimeAgo(comment.createdAt)}
+                          </Text>
+                        </View>
+                        <Text style={styles.commentContent}>{comment.content}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </ScrollView>
+
+              {user && (
+                <View style={styles.commentInputContainer}>
+                  <TextInput
+                    ref={commentInputRef}
+                    style={styles.commentInput}
+                    placeholder="Add a comment..."
+                    placeholderTextColor="#666"
+                    value={newComment}
+                    onChangeText={setNewComment}
+                    maxLength={280}
+                    multiline
+                    numberOfLines={1}
+                    returnKeyType="default"
+                    blurOnSubmit={false}
+                    textAlignVertical="center"
+                    editable={!submittingComment}
+                  />
+                  <TouchableOpacity
+                    style={[
+                      styles.sendButton,
+                      (!newComment.trim() || submittingComment) && styles.sendButtonDisabled,
+                    ]}
+                    onPress={handleAddComment}
+                    disabled={!newComment.trim() || submittingComment}
+                  >
+                    {submittingComment ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Ionicons name="send" size={18} color="#fff" />
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
             </TouchableOpacity>
           </View>
-
-          {loadingComments ? (
-            <ActivityIndicator size="small" color="#e50914" style={{ marginTop: 20 }} />
-          ) : comments.length === 0 ? (
-            <View style={styles.emptyComments}>
-              <Ionicons name="chatbubble-outline" size={48} color="#444" />
-              <Text style={styles.emptyCommentsText}>No comments yet</Text>
-              <Text style={styles.emptyCommentsSubtext}>Be the first to comment!</Text>
-            </View>
-          ) : (
-            <FlatList
-              data={comments}
-              renderItem={renderComment}
-              keyExtractor={(item) => item.id}
-              style={styles.commentsList}
-            />
-          )}
-
-          {user && (
-            <View style={styles.commentInputContainer}>
-              <TextInput
-                key="comment-input"
-                style={styles.commentInput}
-                placeholder="Add a comment..."
-                placeholderTextColor="#666"
-                value={newComment}
-                onChangeText={handleCommentChange}
-                maxLength={280}
-              />
-              <TouchableOpacity
-                style={[
-                  styles.sendButton,
-                  (!newComment.trim() || submittingComment) && styles.sendButtonDisabled,
-                ]}
-                onPress={handleAddComment}
-                disabled={!newComment.trim() || submittingComment}
-              >
-                {submittingComment ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Ionicons name="send" size={18} color="#fff" />
-                )}
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
+        </KeyboardAvoidingView>
+      </Modal>
+    );
+  };
 
   // Not logged in view
   if (!user && Platform.OS === 'web') {
@@ -867,9 +923,16 @@ const styles = StyleSheet.create({
   },
   // Modals
   modalOverlay: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.8)',
-    justifyContent: 'flex-end',
+  },
+  commentsModalInner: {
+    backgroundColor: '#1a1a1a',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: Dimensions.get('window').height * 0.85,
+    minHeight: Dimensions.get('window').height * 0.5,
+    overflow: 'hidden',
   },
   createModalContent: {
     backgroundColor: '#1a1a1a',
@@ -878,12 +941,24 @@ const styles = StyleSheet.create({
     padding: 16,
     minHeight: 250,
   },
+  modalKeyboardView: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
   commentsModalContent: {
-    backgroundColor: '#1a1a1a',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '80%',
-    minHeight: '50%',
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  commentsContent: {
+    flex: 1,
+    minHeight: 200,
+    maxHeight: Dimensions.get('window').height * 0.6,
+  },
+  commentsLoadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -935,7 +1010,10 @@ const styles = StyleSheet.create({
   // Comments
   commentsList: {
     flex: 1,
+  },
+  commentsListContent: {
     padding: 16,
+    paddingBottom: 8,
   },
   commentItem: {
     marginBottom: 16,
@@ -1002,9 +1080,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#0a0a0a',
     borderRadius: 20,
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 8,
     color: '#fff',
     fontSize: 14,
+    minHeight: 40,
+    maxHeight: 100,
   },
   sendButton: {
     backgroundColor: '#e50914',
