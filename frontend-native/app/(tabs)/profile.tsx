@@ -1048,8 +1048,8 @@ export default function ProfileScreen() {
                 {unreadCount > 0 && (
                   <View style={styles.unreadBadge}>
                     <Text style={styles.unreadBadgeText}>{unreadCount}</Text>
-                  </Text>
-                </View>
+                  </View>
+                )}
               </View>
               <View style={styles.modalHeaderActions}>
                 {unreadCount > 0 && (

@@ -2,6 +2,18 @@ import * as admin from 'firebase-admin';
 import * as path from 'path';
 import * as fs from 'fs';
 
+// Load environment variables from .env file (for local development)
+// Only load in non-production environments or if explicitly enabled
+if (process.env.NODE_ENV !== 'production' || process.env.LOAD_DOTENV === 'true') {
+  try {
+    // Try to load dotenv if available
+    const dotenv = require('dotenv');
+    dotenv.config();
+  } catch (e) {
+    // dotenv not installed, that's okay - will use process.env directly
+  }
+}
+
 let firestoreDb: admin.firestore.Firestore | null = null;
 
 /**
@@ -48,20 +60,23 @@ function initializeFirebaseAdmin(): admin.firestore.Firestore {
       }
     }
 
-    // Method 2b: Try environment variable (JSON string) - alternative method
+    // Method 2a: Try environment variable (JSON string from .env) - for local development
     const envServiceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
     if (envServiceAccountJson) {
       try {
-        const serviceAccount = JSON.parse(envServiceAccountJson);
+        // Handle both escaped and unescaped JSON strings
+        const jsonString = envServiceAccountJson.replace(/\\n/g, '\n').replace(/\\"/g, '"');
+        const serviceAccount = JSON.parse(jsonString);
         admin.initializeApp({
           credential: admin.credential.cert(serviceAccount),
         });
         firestoreDb = admin.firestore();
         return firestoreDb;
       } catch (error) {
-        console.warn('Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON');
+        console.warn('Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON from .env');
       }
     }
+
 
     // Method 2c: Try environment variable path
     const envServiceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
