@@ -22,6 +22,7 @@ import { animeApi, Anime } from '@/services/api';
 import { exploreRoutes, routeDisplayNames, ExploreRoute } from '@/data/meta';
 import { newsService, NewsItem } from '@/services/newsService';
 import { getProxiedImageUrl } from '@/utils/imageProxy';
+import { watchHistoryService, WatchHistoryEntry } from '@/services/watchHistoryService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const BANNER_HEIGHT = Platform.OS === 'web' ? Math.min(SCREEN_HEIGHT * 0.7, 600) : 350;
@@ -60,6 +61,7 @@ export default function HomeScreen() {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loadingNews, setLoadingNews] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [recentlyWatched, setRecentlyWatched] = useState<WatchHistoryEntry[]>([]);
 
   // Clean up Expo Router internal params from URL on web
   useEffect(() => {
@@ -80,7 +82,17 @@ export default function HomeScreen() {
   useEffect(() => {
     loadAllCategories();
     loadNews();
+    loadRecentlyWatched();
   }, []);
+
+  const loadRecentlyWatched = async () => {
+    try {
+      const history = await watchHistoryService.getRecentlyWatched(10);
+      setRecentlyWatched(history);
+    } catch (err) {
+      console.error('Failed to load recently watched:', err);
+    }
+  };
 
   const loadNews = async () => {
     try {
@@ -430,6 +442,53 @@ export default function HomeScreen() {
           </View>
         )}
 
+        {/* Recently Watched Section */}
+        {recentlyWatched.length > 0 && (
+          <View style={styles.recentlyWatchedSection}>
+            <Text style={styles.sectionTitle}>Continue Watching</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.recentlyWatchedList}
+            >
+              {recentlyWatched.map((entry) => (
+                <TouchableOpacity
+                  key={`${entry.animeId}-${entry.episodeNumber}`}
+                  style={styles.recentlyWatchedCard}
+                  onPress={() => router.push({
+                    pathname: '/watch/[id]',
+                    params: { id: entry.animeId, ep: entry.episodeNumber },
+                  })}
+                >
+                  <Image
+                    source={{ uri: getProxiedImageUrl(entry.animePoster || '') || '' }}
+                    style={styles.recentlyWatchedPoster}
+                  />
+                  <View style={styles.recentlyWatchedProgress}>
+                    <View
+                      style={[
+                        styles.recentlyWatchedProgressBar,
+                        { width: `${Math.min(90, (entry.timestamp / (entry.duration || 1400)) * 100)}%` },
+                      ]}
+                    />
+                  </View>
+                  <View style={styles.recentlyWatchedInfo}>
+                    <Text style={styles.recentlyWatchedTitle} numberOfLines={1}>
+                      {entry.animeName}
+                    </Text>
+                    <Text style={styles.recentlyWatchedEpisode}>
+                      Ep {entry.episodeNumber} • {watchHistoryService.formatTime(entry.timestamp)}
+                    </Text>
+                  </View>
+                  <View style={styles.recentlyWatchedPlayButton}>
+                    <Ionicons name="play" size={20} color="#fff" />
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
         {/* Category Sections - Netflix style overlap */}
         <View style={styles.categoriesContainer}>
           {categories.map(renderCategory)}
@@ -776,5 +835,63 @@ const styles = StyleSheet.create({
   newsTime: {
     color: '#666',
     fontSize: 11,
+  },
+  // Recently Watched Styles
+  recentlyWatchedSection: {
+    marginTop: -30,
+    paddingTop: 16,
+    paddingBottom: 8,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    borderRadius: 12,
+    marginHorizontal: 8,
+    marginBottom: 16,
+  },
+  recentlyWatchedList: {
+    paddingHorizontal: 12,
+    gap: 12,
+  },
+  recentlyWatchedCard: {
+    width: 140,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  recentlyWatchedPoster: {
+    width: '100%',
+    height: 80,
+    backgroundColor: '#333',
+  },
+  recentlyWatchedProgress: {
+    height: 3,
+    backgroundColor: '#333',
+  },
+  recentlyWatchedProgressBar: {
+    height: '100%',
+    backgroundColor: '#e50914',
+  },
+  recentlyWatchedInfo: {
+    padding: 8,
+  },
+  recentlyWatchedTitle: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  recentlyWatchedEpisode: {
+    color: '#888',
+    fontSize: 10,
+  },
+  recentlyWatchedPlayButton: {
+    position: 'absolute',
+    top: 25,
+    left: '50%',
+    marginLeft: -16,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

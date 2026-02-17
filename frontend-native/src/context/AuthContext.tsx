@@ -7,6 +7,7 @@ interface User {
   email: string | null;
   displayName: string | null;
   photoURL: string | null;
+  hasPassword: boolean;
 }
 
 interface AuthContextType {
@@ -24,6 +25,7 @@ interface AuthContextType {
   updateProfile: (displayName?: string, photoURL?: string) => Promise<void>;
   deleteAccount: () => Promise<void>;
   reauthenticate: (email: string, password: string) => Promise<void>;
+  setPassword: (password: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -41,11 +43,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { onAuthStateChanged } = require('firebase/auth');
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser: any) => {
       if (firebaseUser) {
+        // Check if user has password provider linked
+        const hasPassword = firebaseUser.providerData?.some(
+          (provider: any) => provider.providerId === 'password'
+        ) || false;
         setUser({
           uid: firebaseUser.uid,
           email: firebaseUser.email,
           displayName: firebaseUser.displayName,
           photoURL: firebaseUser.photoURL,
+          hasPassword,
         });
       } else {
         setUser(null);
@@ -203,6 +210,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await deleteUser(auth.currentUser);
   };
 
+  const setPassword = async (password: string) => {
+    if (!auth || !auth.currentUser) {
+      throw new Error('Auth not available or user not signed in');
+    }
+    if (!auth.currentUser.email) {
+      throw new Error('User does not have an email address');
+    }
+    const { EmailAuthProvider, linkWithCredential } = require('firebase/auth');
+    const credential = EmailAuthProvider.credential(auth.currentUser.email, password);
+    await linkWithCredential(auth.currentUser, credential);
+    // Update user state to reflect password is now set
+    setUser(prev => prev ? { ...prev, hasPassword: true } : null);
+  };
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -219,6 +240,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updateProfile,
       deleteAccount,
       reauthenticate,
+      setPassword,
     }}>
       {children}
     </AuthContext.Provider>

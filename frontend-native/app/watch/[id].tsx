@@ -24,6 +24,7 @@ import { communityService, Post, Comment } from '@/services/communityService';
 import { executeRecaptcha } from '@/utils/recaptcha';
 import { isRecaptchaEnabled, RECAPTCHA_SITE_KEY } from '@/config/recaptcha';
 import { verifyRecaptchaToken } from '@/services/recaptchaService';
+import { watchHistoryService } from '@/services/watchHistoryService';
 
 export default function WatchScreen() {
   const { id, ep, episodeId } = useLocalSearchParams<{ id: string; ep?: string; episodeId?: string }>();
@@ -52,9 +53,12 @@ export default function WatchScreen() {
   const [loadingPosts, setLoadingPosts] = useState(false);
   const [loadingComments, setLoadingComments] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
-  
-  // Ref to prevent modal from reopening immediately after closing
-  const modalClosingRef = useRef(false);
+
+  // Watch history for resume functionality
+  const [resumeTimestamp, setResumeTimestamp] = useState<number | null>(null);
+  const [showResumePrompt, setShowResumePrompt] = useState(false);
+  const lastSavedTimeRef = useRef<number>(0);
+  const saveProgressIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Clean up Expo Router internal params from URL on web
   useEffect(() => {
@@ -121,6 +125,83 @@ export default function WatchScreen() {
     }
   }, [id, ep]);
 
+  // Load watch history for resume functionality
+  useEffect(() => {
+    if (id && episodeNumber) {
+      loadWatchProgress();
+    }
+    return () => {
+      // Save progress when leaving
+      if (currentVideoTime > 10 && id) {
+        saveWatchProgress(currentVideoTime);
+      }
+      // Clear interval
+      if (saveProgressIntervalRef.current) {
+        clearInterval(saveProgressIntervalRef.current);
+      }
+    };
+  }, [id, episodeNumber]);
+
+  // Auto-save progress every 10 seconds
+  useEffect(() => {
+    if (saveProgressIntervalRef.current) {
+      clearInterval(saveProgressIntervalRef.current);
+    }
+
+    saveProgressIntervalRef.current = setInterval(() => {
+      if (currentVideoTime > 10 && Math.abs(currentVideoTime - lastSavedTimeRef.current) > 5) {
+        saveWatchProgress(currentVideoTime);
+        lastSavedTimeRef.current = currentVideoTime;
+      }
+    }, 10000);
+
+    return () => {
+      if (saveProgressIntervalRef.current) {
+        clearInterval(saveProgressIntervalRef.current);
+      }
+    };
+  }, [currentVideoTime, id, episodeNumber, animeInfo]);
+
+  const loadWatchProgress = async () => {
+    if (!id) return;
+    try {
+      const progress = await watchHistoryService.getProgress(id, episodeNumber);
+      if (progress && progress.timestamp > 30) {
+        // Only show resume if more than 30 seconds in
+        setResumeTimestamp(progress.timestamp);
+        setShowResumePrompt(true);
+      }
+    } catch (err) {
+      console.error('Failed to load watch progress:', err);
+    }
+  };
+
+  const saveWatchProgress = async (time: number) => {
+    if (!id || time < 10) return;
+    try {
+      await watchHistoryService.saveProgress({
+        animeId: id,
+        animeName: animeInfo?.name || id.replace(/-/g, ' '),
+        animePoster: animeInfo?.poster,
+        episodeId: fullEpisodeId,
+        episodeNumber,
+        timestamp: time,
+      });
+    } catch (err) {
+      console.error('Failed to save watch progress:', err);
+    }
+  };
+
+  const handleResumeYes = () => {
+    setShowResumePrompt(false);
+    // The VideoPlayer will handle seeking to resumeTimestamp
+  };
+
+  const handleResumeNo = () => {
+    setResumeTimestamp(null);
+    setShowResumePrompt(false);
+  };
+
   const loadEpisodes = async () => {
     if (!id) return;
     try {
@@ -184,20 +265,16 @@ export default function WatchScreen() {
   }, []);
 
   const handleClipScene = useCallback(() => {
-    if (modalClosingRef.current || showPostModal) return; // Prevent opening if modal is closing or already open
+    if (showPostModal) return;
     setClippedTimestamp(currentVideoTime);
     setNewPostContent(`Amazing scene at ${formatTime(currentVideoTime)}! 🎬`);
     setShowPostModal(true);
   }, [currentVideoTime, formatTime, showPostModal]);
-  
+
   const handleClosePostModal = useCallback(() => {
-    if (modalClosingRef.current) return; // Prevent multiple close calls
-    modalClosingRef.current = true;
     setShowPostModal(false);
-    // Reset the flag after a short delay to allow modal to fully close
-    setTimeout(() => {
-      modalClosingRef.current = false;
-    }, 400);
+    setNewPostContent('');
+    setClippedTimestamp(null);
   }, []);
   
   // Memoized handler to prevent TextInput cursor issues
@@ -246,14 +323,9 @@ export default function WatchScreen() {
         animeInfo?.name,
         undefined // No media files for now
       );
-      // Clear form and close modal first
-      setNewPostContent('');
-      setClippedTimestamp(null);
+      // Close modal and reload posts
       handleClosePostModal();
-      // Delay reloading posts to allow modal to close smoothly
-      setTimeout(() => {
-        loadEpisodePosts();
-      }, 400);
+      loadEpisodePosts();
     } catch (err: any) {
       console.error('Failed to create post:', err);
       alert(err.message || 'Failed to create post');
@@ -468,6 +540,26 @@ export default function WatchScreen() {
           </View>
         )}
 
+        {/* Resume prompt */}
+        {showResumePrompt && resumeTimestamp && (
+          <View style={styles.resumePrompt}>
+            <View style={styles.resumePromptContent}>
+              <Ionicons name="play-circle-outline" size={24} color="#e50914" />
+              <Text style={styles.resumePromptText}>
+                Resume from {watchHistoryService.formatTime(resumeTimestamp)}?
+              </Text>
+            </View>
+            <View style={styles.resumePromptActions}>
+              <TouchableOpacity style={styles.resumeButton} onPress={handleResumeYes}>
+                <Text style={styles.resumeButtonText}>Resume</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.restartButton} onPress={handleResumeNo}>
+                <Text style={styles.restartButtonText}>Start Over</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* Video Player */}
         <View style={styles.playerContainer}>
           {loading ? (
@@ -528,6 +620,11 @@ export default function WatchScreen() {
               title={id?.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
               onBack={handleBack}
               onCurrentTimeChange={setCurrentVideoTime}
+              onPrevious={handlePreviousEpisode}
+              onNext={handleNextEpisode}
+              hasPrevious={hasPreviousEpisode}
+              hasNext={hasNextEpisode}
+              initialTime={resumeTimestamp || undefined}
             />
           ) : iframeFallback ? (
             // Show button to switch to iframe
@@ -680,7 +777,7 @@ export default function WatchScreen() {
               <TouchableOpacity
                 style={styles.postButton}
                 onPress={() => {
-                  if (modalClosingRef.current || showPostModal) return; // Prevent opening if modal is closing or already open
+                  if (showPostModal) return;
                   setClippedTimestamp(null);
                   setNewPostContent('');
                   setShowPostModal(true);
@@ -772,17 +869,12 @@ export default function WatchScreen() {
 
       {/* Create Post Modal */}
       <Modal
-        visible={showPostModal && !modalClosingRef.current}
+        visible={showPostModal}
         transparent
         animationType="slide"
         onRequestClose={handleClosePostModal}
-        onDismiss={() => {
-          // Ensure state is clean when modal is dismissed
-          if (!showPostModal) {
-            setNewPostContent('');
-            setClippedTimestamp(null);
-          }
-        }}
+        statusBarTranslucent
+        hardwareAccelerated
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -835,6 +927,8 @@ export default function WatchScreen() {
         transparent
         animationType="slide"
         onRequestClose={() => setShowCommentsModal(false)}
+        statusBarTranslucent
+        hardwareAccelerated
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -1450,5 +1544,54 @@ const styles = StyleSheet.create({
   sendButtonDisabled: {
     backgroundColor: '#333',
     opacity: 0.5,
+  },
+  // Resume prompt styles
+  resumePrompt: {
+    backgroundColor: '#1a1a1a',
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  resumePromptContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  resumePromptText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  resumePromptActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  resumeButton: {
+    flex: 1,
+    backgroundColor: '#e50914',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  resumeButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  restartButton: {
+    flex: 1,
+    backgroundColor: '#333',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  restartButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
   },
 });

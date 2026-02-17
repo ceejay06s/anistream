@@ -23,6 +23,13 @@ export interface VideoPlayerProps {
   onBack?: () => void;
   // Callback to get current time for clipping
   onCurrentTimeChange?: (time: number) => void;
+  // Episode navigation
+  onPrevious?: () => void;
+  onNext?: () => void;
+  hasPrevious?: boolean;
+  hasNext?: boolean;
+  // Resume playback
+  initialTime?: number;
 }
 
 export function VideoPlayer({
@@ -39,10 +46,16 @@ export function VideoPlayer({
   title,
   onBack,
   onCurrentTimeChange,
+  onPrevious,
+  onNext,
+  hasPrevious,
+  hasNext,
+  initialTime,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const hasSeekToInitial = useRef(false);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -252,6 +265,13 @@ export function VideoPlayer({
         console.log('HLS manifest parsed');
         setIsLoading(false);
         onReady?.();
+
+        // Seek to initial time if provided
+        if (initialTime && initialTime > 0 && !hasSeekToInitial.current) {
+          hasSeekToInitial.current = true;
+          video.currentTime = initialTime;
+        }
+
         if (autoPlay) {
           video.play().catch((e) => {
             console.log('Autoplay prevented:', e);
@@ -344,7 +364,12 @@ export function VideoPlayer({
         hlsRef.current = null;
       }
     };
-  }, [source, autoPlay, onError, onReady, useIframe, retryCount, handleTimeUpdate]);
+  }, [source, autoPlay, onError, onReady, useIframe, retryCount, handleTimeUpdate, initialTime]);
+
+  // Reset seek state when source changes
+  useEffect(() => {
+    hasSeekToInitial.current = false;
+  }, [source]);
 
   // Iframe fallback - use hianime.to directly
   if (useIframe && animeId) {
@@ -434,6 +459,10 @@ export function VideoPlayer({
             title={title}
             episodeInfo={episodeNumber ? `Episode ${episodeNumber}` : undefined}
             onBack={onBack}
+            onPrevious={onPrevious}
+            onNext={onNext}
+            hasPrevious={hasPrevious}
+            hasNext={hasNext}
           />
         )}
         {isLoading && (
@@ -469,7 +498,7 @@ const videoStyles: React.CSSProperties = {
   width: '100%',
   height: '100%',
   backgroundColor: '#000',
-  objectFit: 'initial',
+  objectFit: 'contain',
 };
 
 const styles = StyleSheet.create({

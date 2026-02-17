@@ -57,12 +57,13 @@ export default function ProfileScreen() {
     updateProfile,
     deleteAccount,
     reauthenticate,
+    setPassword,
   } = useAuth();
 
   const [authMode, setAuthMode] = useState<AuthMode>('passwordless');
   const [profileTab, setProfileTab] = useState<ProfileTab>('saved');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -86,6 +87,9 @@ export default function ProfileScreen() {
   // Account management modals
   const [showChangeEmail, setShowChangeEmail] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const [showSetPassword, setShowSetPassword] = useState(false);
+  const [newSetPassword, setNewSetPassword] = useState('');
+  const [confirmSetPassword, setConfirmSetPassword] = useState('');
   const [showUpdateProfile, setShowUpdateProfile] = useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
 
@@ -211,7 +215,7 @@ export default function ProfileScreen() {
   };
 
   const handlePasswordSubmit = async () => {
-    if (!email || !password) {
+    if (!email || !passwordInput) {
       setError('Please fill in all fields');
       return;
     }
@@ -237,12 +241,12 @@ export default function ProfileScreen() {
       }
 
       if (authMode === 'login') {
-        await signIn(email, password);
+        await signIn(email, passwordInput);
       } else {
-        await signUp(email, password);
+        await signUp(email, passwordInput);
       }
       setEmail('');
-      setPassword('');
+      setPasswordInput('');
     } catch (err: any) {
       setError(err.message || 'An error occurred');
     } finally {
@@ -444,6 +448,37 @@ export default function ProfileScreen() {
       setTimeout(() => setSuccess(''), 3000);
     } catch (err: any) {
       setError(err.message || 'Failed to update password');
+      setTimeout(() => setError(''), 5000);
+    } finally {
+      setUpdatingAccount(false);
+    }
+  };
+
+  const handleSetPassword = async () => {
+    if (!newSetPassword || !confirmSetPassword) {
+      setError('Please fill in all fields');
+      return;
+    }
+    if (newSetPassword.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+    if (newSetPassword !== confirmSetPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    setUpdatingAccount(true);
+    setError('');
+    try {
+      await setPassword(newSetPassword);
+      setSuccess('Password set successfully! You can now sign in with email and password.');
+      setNewSetPassword('');
+      setConfirmSetPassword('');
+      setShowSetPassword(false);
+      setTimeout(() => setSuccess(''), 5000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to set password');
       setTimeout(() => setError(''), 5000);
     } finally {
       setUpdatingAccount(false);
@@ -934,6 +969,65 @@ export default function ProfileScreen() {
     </Modal>
   );
 
+  // Set Password Modal (for users who signed in with Google)
+  const SetPasswordModal = () => (
+    <Modal visible={showSetPassword} animationType="slide" transparent onRequestClose={() => setShowSetPassword(false)}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Set Password</Text>
+            <TouchableOpacity onPress={() => setShowSetPassword(false)}>
+              <Ionicons name="close" size={24} color="#fff" />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.modalBody}>
+            <Text style={styles.setPasswordInfo}>
+              Add a password to your account so you can sign in with email and password in addition to Google.
+            </Text>
+            <Text style={styles.inputLabel}>New Password</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Enter password (min 6 characters)"
+              placeholderTextColor="#666"
+              value={newSetPassword}
+              onChangeText={setNewSetPassword}
+              secureTextEntry
+            />
+            <Text style={styles.inputLabel}>Confirm Password</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Confirm password"
+              placeholderTextColor="#666"
+              value={confirmSetPassword}
+              onChangeText={setConfirmSetPassword}
+              secureTextEntry
+            />
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            {success ? <Text style={styles.successText}>{success}</Text> : null}
+            <TouchableOpacity
+              style={[styles.modalButton, updatingAccount && styles.modalButtonDisabled]}
+              onPress={handleSetPassword}
+              disabled={updatingAccount}
+            >
+              {updatingAccount ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.modalButtonText}>Set Password</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.modalCancelButton}
+              onPress={() => setShowSetPassword(false)}
+              disabled={updatingAccount}
+            >
+              <Text style={styles.modalCancelButtonText}>Skip for now</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+
   // Update Profile Modal
   const UpdateProfileModal = () => (
     <Modal visible={showUpdateProfile} animationType="slide" transparent onRequestClose={() => {
@@ -1221,6 +1315,7 @@ export default function ProfileScreen() {
         <BugReportModal />
         <ChangeEmailModal />
         <ChangePasswordModal />
+        <SetPasswordModal />
         <UpdateProfileModal />
         <DeleteAccountModal />
 
@@ -1403,18 +1498,36 @@ export default function ProfileScreen() {
                   </View>
                   <Ionicons name="chevron-forward" size={20} color="#666" />
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.settingRowButton} onPress={() => {
-                  setCurrentPassword('');
-                  setNewPassword('');
-                  setConfirmPassword('');
-                  setShowChangePassword(true);
-                }}>
-                  <View style={styles.settingInfo}>
-                    <Ionicons name="lock-closed-outline" size={22} color="#fff" />
-                    <Text style={styles.settingText}>Change Password</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color="#666" />
-                </TouchableOpacity>
+                {user?.hasPassword ? (
+                  <TouchableOpacity style={styles.settingRowButton} onPress={() => {
+                    setCurrentPassword('');
+                    setNewPassword('');
+                    setConfirmPassword('');
+                    setShowChangePassword(true);
+                  }}>
+                    <View style={styles.settingInfo}>
+                      <Ionicons name="lock-closed-outline" size={22} color="#fff" />
+                      <Text style={styles.settingText}>Change Password</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color="#666" />
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity style={styles.settingRowButton} onPress={() => {
+                    setNewSetPassword('');
+                    setConfirmSetPassword('');
+                    setError('');
+                    setShowSetPassword(true);
+                  }}>
+                    <View style={styles.settingInfo}>
+                      <Ionicons name="lock-open-outline" size={22} color="#e50914" />
+                      <View>
+                        <Text style={[styles.settingText, { color: '#e50914' }]}>Set Password</Text>
+                        <Text style={styles.settingSubtext}>Enable email/password sign in</Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color="#666" />
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity style={styles.settingRowButton} onPress={() => {
                   setNewDisplayName(user?.displayName || '');
                   setSelectedPhotoFile(null);
@@ -1563,8 +1676,8 @@ export default function ProfileScreen() {
                 style={styles.input}
                 placeholder="Password"
                 placeholderTextColor="#666"
-                value={password}
-                onChangeText={setPassword}
+                value={passwordInput}
+                onChangeText={setPasswordInput}
                 secureTextEntry
               />
             </View>
@@ -2492,5 +2605,16 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: '#e50914',
     alignSelf: 'center',
+  },
+  setPasswordInfo: {
+    color: '#888',
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 16,
+    padding: 12,
+    backgroundColor: 'rgba(229, 9, 20, 0.1)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(229, 9, 20, 0.2)',
   },
 });

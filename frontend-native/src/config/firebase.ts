@@ -15,10 +15,21 @@ const firebaseConfig = {
 };
 
 const { initializeApp } = require('firebase/app');
-const { getAuth } = require('firebase/auth');
 
 app = initializeApp(firebaseConfig);
-auth = getAuth(app);
+
+// Initialize auth with persistence
+if (Platform.OS === 'web') {
+  const { getAuth } = require('firebase/auth');
+  auth = getAuth(app);
+} else {
+  // Mobile: Use AsyncStorage for session persistence
+  const { initializeAuth, getReactNativePersistence } = require('firebase/auth');
+  const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+  auth = initializeAuth(app, {
+    persistence: getReactNativePersistence(AsyncStorage),
+  });
+}
 
 if (Platform.OS === 'web') {
   const { getAnalytics, isSupported } = require('firebase/analytics');

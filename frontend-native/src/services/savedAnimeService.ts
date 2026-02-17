@@ -1,10 +1,9 @@
-import { Platform } from 'react-native';
 import { app } from '@/config/firebase';
 import { Anime } from './api';
 
 // Lazy initialization to avoid module load order issues
 function getDb() {
-  if (Platform.OS !== 'web' || !app) {
+  if (!app) {
     return null;
   }
   const { getFirestore } = require('firebase/firestore');
