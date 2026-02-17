@@ -1,5 +1,4 @@
 import axios from 'axios';
-import { Platform } from 'react-native';
 
 // Use environment variable for production, fallback to localhost for development
 const getBaseUrl = () => {
@@ -172,28 +171,27 @@ export const streamingApi = {
     });
     const data = response.data.data || { sources: [] };
 
-    // On web, proxy URLs through backend to handle CORS
-    if (Platform.OS === 'web') {
-      // Proxy video sources
-      if (data.sources) {
-        data.sources = data.sources.map((source: StreamingSource) => {
-          if (source.isM3U8 && source.url) {
-            const proxyUrl = `${API_BASE_URL}/api/streaming/proxy?url=${encodeURIComponent(source.url)}`;
-            return { ...source, url: proxyUrl };
-          }
-          return source;
-        });
-      }
-      // Proxy subtitle tracks
-      if (data.tracks) {
-        data.tracks = data.tracks.map((track: { url: string; lang: string }) => {
-          if (track.url) {
-            const proxyUrl = `${API_BASE_URL}/api/streaming/proxy?url=${encodeURIComponent(track.url)}`;
-            return { ...track, url: proxyUrl };
-          }
-          return track;
-        });
-      }
+    // Proxy URLs through backend to handle CORS and required headers
+    // This is needed for both web (CORS) and mobile (some servers block direct access)
+    // Proxy video sources
+    if (data.sources) {
+      data.sources = data.sources.map((source: StreamingSource) => {
+        if (source.isM3U8 && source.url) {
+          const proxyUrl = `${API_BASE_URL}/api/streaming/proxy?url=${encodeURIComponent(source.url)}`;
+          return { ...source, url: proxyUrl };
+        }
+        return source;
+      });
+    }
+    // Proxy subtitle tracks
+    if (data.tracks) {
+      data.tracks = data.tracks.map((track: { url: string; lang: string }) => {
+        if (track.url) {
+          const proxyUrl = `${API_BASE_URL}/api/streaming/proxy?url=${encodeURIComponent(track.url)}`;
+          return { ...track, url: proxyUrl };
+        }
+        return track;
+      });
     }
 
     return data;

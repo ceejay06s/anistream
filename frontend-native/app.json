@@ -32,10 +32,12 @@
       "googleServicesFile": "./google-services.json"
     },
     "androidStatusBar": {
-      "hidden": true,
+      "barStyle": "light-content",
+      "backgroundColor": "#00000000",
       "translucent": true
     },
     "androidNavigationBar": {
+      "visible": "sticky-immersive",
       "backgroundColor": "#000000"
     },
     "web": {
@@ -47,7 +49,19 @@
       "expo-router",
       "expo-video",
       "expo-font",
-      "expo-updates"
+      "expo-updates",
+      [
+        "expo-notifications",
+        {
+          "color": "#e50914"
+        }
+      ],
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.797841167253-tl8v6hm1dg1lof6qmterms3hl077bb8g"
+        }
+      ]
     ],
     "runtimeVersion": {
       "policy": "appVersion"

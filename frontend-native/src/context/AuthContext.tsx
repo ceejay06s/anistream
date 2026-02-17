@@ -89,49 +89,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
     } else {
-      // Mobile: Use expo-auth-session for Google OAuth
-      const AuthSession = require('expo-auth-session');
-      const WebBrowser = require('expo-web-browser');
-      
-      // Complete auth session when done
-      WebBrowser.maybeCompleteAuthSession();
-      
-      // NOTE: You need to configure the Google OAuth Client ID in Firebase Console:
-      // 1. Go to Firebase Console > Authentication > Sign-in method > Google
-      // 2. Enable Google Sign-In
-      // 3. Get the Web client ID (not the iOS/Android client IDs)
-      // 4. Replace the placeholder below with your actual client ID
-      const GOOGLE_CLIENT_ID = '797841167253-tl8v6hm1dg1lof6qmterms3hl077bb8g.apps.googleusercontent.com';
-      
-      // Use discovery endpoint for Google
-      const discovery = {
-        authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
-        tokenEndpoint: 'https://oauth2.googleapis.com/token',
-        revocationEndpoint: 'https://oauth2.googleapis.com/revoke',
-      };
+      // Mobile: Use native Google Sign-In
+      const { GoogleSignin } = require('@react-native-google-signin/google-signin');
+      const { GoogleAuthProvider, signInWithCredential } = require('firebase/auth');
 
-      // Create auth request
-      const request = new AuthSession.AuthRequest({
-        clientId: GOOGLE_CLIENT_ID,
-        scopes: ['openid', 'profile', 'email'],
-        responseType: AuthSession.ResponseType.IdToken,
-        redirectUri: AuthSession.makeRedirectUri({ useProxy: true }),
+      // Configure Google Sign-In
+      GoogleSignin.configure({
+        webClientId: '797841167253-tl8v6hm1dg1lof6qmterms3hl077bb8g.apps.googleusercontent.com',
       });
 
-      const result = await request.promptAsync(discovery, {
-        useProxy: true,
-      });
-
-      if (result.type === 'success') {
-        const { id_token } = result.params;
-        const { GoogleAuthProvider, signInWithCredential } = require('firebase/auth');
-        const credential = GoogleAuthProvider.credential(id_token);
-        await signInWithCredential(auth, credential);
-      } else if (result.type === 'cancel') {
-        throw new Error('Google Sign-In was cancelled');
-      } else {
-        throw new Error('Google Sign-In failed');
+      // Check if already signed in to Google
+      const isSignedIn = await GoogleSignin.hasPreviousSignIn();
+      if (isSignedIn) {
+        await GoogleSignin.signOut();
       }
+
+      // Perform sign in
+      const signInResult = await GoogleSignin.signIn();
+      const idToken = signInResult.data?.idToken;
+
+      if (!idToken) {
+        throw new Error('No ID token received from Google Sign-In');
+      }
+
+      // Sign in to Firebase with the Google credential
+      const credential = GoogleAuthProvider.credential(idToken);
+      await signInWithCredential(auth, credential);
     }
   };
 
