@@ -187,18 +187,8 @@ export default function CommunityScreen() {
     }
 
     try {
-      const isLiked = await communityService.toggleLike(user.uid, postId);
-      setPosts(prev =>
-        prev.map(post => {
-          if (post.id === postId) {
-            const newLikes = isLiked
-              ? [...post.likes, user.uid]
-              : post.likes.filter(id => id !== user.uid);
-            return { ...post, likes: newLikes };
-          }
-          return post;
-        })
-      );
+      // Real-time listener handles the UI update automatically — no manual setPosts needed
+      await communityService.toggleLike(user.uid, postId);
     } catch (err) {
       console.error('Failed to toggle like:', err);
     }
@@ -208,8 +198,8 @@ export default function CommunityScreen() {
     if (!user) return;
 
     try {
+      // Real-time listener handles the UI update automatically
       await communityService.deletePost(user.uid, postId);
-      setPosts(prev => prev.filter(post => post.id !== postId));
     } catch (err) {
       console.error('Failed to delete post:', err);
     }

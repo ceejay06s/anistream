@@ -26,7 +26,6 @@ import { executeRecaptcha } from '@/utils/recaptcha';
 import { isRecaptchaEnabled, RECAPTCHA_SITE_KEY } from '@/config/recaptcha';
 import { verifyRecaptchaToken } from '@/services/recaptchaService';
 import { uploadProfilePhoto } from '@/services/profileService';
-import { userNotificationService, UserNotification } from '@/services/userNotificationService';
 import { NotificationBell } from '@/components/NotificationBell';
 import * as Updates from 'expo-updates';
 
@@ -95,10 +94,6 @@ export default function ProfileScreen() {
   const [showUpdateProfile, setShowUpdateProfile] = useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
 
-  // Notifications
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [notifications, setNotifications] = useState<UserNotification[]>([]);
-  const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -1186,99 +1181,7 @@ export default function ProfileScreen() {
     </Modal>
   );
 
-  // Notifications Modal
-  const NotificationsModal = () => {
-    const getNotificationIcon = (type: string) => {
-      switch (type) {
-        case 'post_anime_interest':
-          return 'chatbubble-outline';
-        case 'comment_on_post':
-        case 'comment_on_commented_post':
-          return 'chatbubbles-outline';
-        case 'anime_new_episode':
-        case 'anime_new_season':
-          return 'play-circle-outline';
-        default:
-          return 'notifications-outline';
-      }
-    };
 
-    const unreadCount = notifications.filter(n => !n.read).length;
-
-    return (
-      <Modal visible={showNotifications} animationType="slide" transparent statusBarTranslucent hardwareAccelerated onRequestClose={() => setShowNotifications(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <View style={styles.modalHeaderLeft}>
-                <Text style={styles.modalTitle}>Notifications</Text>
-                {unreadCount > 0 && (
-                  <View style={styles.unreadBadge}>
-                    <Text style={styles.unreadBadgeText}>{unreadCount}</Text>
-                  </View>
-                )}
-              </View>
-              <View style={styles.modalHeaderActions}>
-                {unreadCount > 0 && (
-                  <TouchableOpacity onPress={handleMarkAllAsRead} style={styles.markAllReadButton}>
-                    <Text style={styles.markAllReadText}>Mark all read</Text>
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity onPress={() => setShowNotifications(false)}>
-                  <Ionicons name="close" size={24} color="#fff" />
-                </TouchableOpacity>
-              </View>
-            </View>
-            <ScrollView style={styles.notificationsList}>
-              {loadingNotifications ? (
-                <View style={styles.notificationsEmpty}>
-                  <ActivityIndicator size="large" color="#e50914" />
-                </View>
-              ) : notifications.length === 0 ? (
-                <View style={styles.notificationsEmpty}>
-                  <Ionicons name="notifications-off-outline" size={48} color="#444" />
-                  <Text style={styles.notificationsEmptyText}>No notifications</Text>
-                  <Text style={styles.notificationsEmptySubtext}>You're all caught up!</Text>
-                </View>
-              ) : (
-                notifications.map((notification) => (
-                  <TouchableOpacity
-                    key={notification.id}
-                    style={[
-                      styles.notificationItem,
-                      !notification.read && styles.notificationItemUnread,
-                    ]}
-                    onPress={() => handleNotificationPress(notification)}
-                  >
-                    <View style={styles.notificationIconContainer}>
-                      <Ionicons
-                        name={getNotificationIcon(notification.type) as any}
-                        size={24}
-                        color={!notification.read ? '#e50914' : '#888'}
-                      />
-                    </View>
-                    <View style={styles.notificationContent}>
-                      <Text style={[
-                        styles.notificationTitle,
-                        !notification.read && styles.notificationTitleUnread,
-                      ]}>
-                        {notification.title}
-                      </Text>
-                      <Text style={styles.notificationBody}>{notification.body}</Text>
-                      <Text style={styles.notificationTime}>
-                        {userNotificationService.formatTimeAgo(notification.createdAt)}
-                      </Text>
-                    </View>
-                    {!notification.read && <View style={styles.notificationDot} />}
-                  </TouchableOpacity>
-                ))
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-    );
-  };
 
   if (loading) {
     return (
@@ -1390,7 +1293,7 @@ export default function ProfileScreen() {
             <View style={styles.netflixHeaderTop}>
               <Text style={styles.netflixHeaderTitle}>Profile</Text>
               <View style={styles.netflixHeaderActions}>
-                <NotificationBell onPress={() => setShowNotifications(true)} />
+                <NotificationBell onPress={() => router.push('/(tabs)/notifications')} />
                 <TouchableOpacity style={styles.signOutIcon} onPress={handleSignOut}>
                   <Ionicons name="log-out-outline" size={24} color="#fff" />
                 </TouchableOpacity>
