@@ -36,6 +36,9 @@ export interface VideoPlayerProps {
   sources?: PlayerSource[];
   selectedSourceUrl?: string;
   onQualityChange?: (source: PlayerSource) => void;
+  // Skip intro/outro
+  intro?: { start: number; end: number };
+  outro?: { start: number; end: number };
 }
 
 export function VideoPlayer({
@@ -62,6 +65,8 @@ export function VideoPlayer({
   sources,
   selectedSourceUrl,
   onQualityChange,
+  intro,
+  outro,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -88,6 +93,9 @@ export function VideoPlayer({
     backgroundColor: 'semi',
   });
   const [useCustomControls, setUseCustomControls] = useState(true);
+  const [autoSkip, setAutoSkip] = useState(false);
+  const autoSkippedIntroRef = useRef(false);
+  const autoSkippedOutroRef = useRef(false);
 
   const showStreamError = (message: string) => {
     console.log('Stream error:', message);
@@ -167,16 +175,28 @@ export function VideoPlayer({
 
   const handleToggleFullscreen = useCallback(() => {
     const container = containerRef.current;
+    const video = videoRef.current;
     if (!container) return;
 
     if (!document.fullscreenElement) {
-      container.requestFullscreen().then(() => {
+      if (container.requestFullscreen) {
+        container.requestFullscreen().then(() => {
+          setIsFullscreen(true);
+        }).catch(console.error);
+      } else if ((video as any)?.webkitEnterFullscreen) {
+        // iOS Safari fallback — only supports fullscreen on <video> directly
+        (video as any).webkitEnterFullscreen();
         setIsFullscreen(true);
-      }).catch(console.error);
+      }
     } else {
-      document.exitFullscreen().then(() => {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().then(() => {
+          setIsFullscreen(false);
+        }).catch(console.error);
+      } else if ((document as any).webkitExitFullscreen) {
+        (document as any).webkitExitFullscreen();
         setIsFullscreen(false);
-      }).catch(console.error);
+      }
     }
   }, []);
 
@@ -204,15 +224,17 @@ export function VideoPlayer({
     }
   }, []);
 
-  // Fullscreen change listener
+  // Fullscreen change listener (standard + webkit for iOS Safari)
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
+      setIsFullscreen(!!(document.fullscreenElement || (document as any).webkitFullscreenElement));
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
     };
   }, []);
 
@@ -372,19 +394,34 @@ export function VideoPlayer({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source, autoPlay, useIframe, retryCount]);
 
-  // Reset seek state when source changes
+  // Reset seek state and auto-skip flags when source changes
   useEffect(() => {
     hasSeekToInitial.current = false;
+    autoSkippedIntroRef.current = false;
+    autoSkippedOutroRef.current = false;
   }, [source]);
 
-  // Handle initial seek separately to avoid re-creating HLS
+  // Auto-skip intro/outro when enabled
+  useEffect(() => {
+    if (!autoSkip) return;
+    if (intro && currentTime >= intro.start && currentTime < intro.end && !autoSkippedIntroRef.current) {
+      autoSkippedIntroRef.current = true;
+      handleSeek(intro.end);
+    }
+    if (outro && currentTime >= outro.start && currentTime < outro.end && !autoSkippedOutroRef.current) {
+      autoSkippedOutroRef.current = true;
+      handleSeek(outro.end);
+    }
+  }, [currentTime, autoSkip, intro, outro, handleSeek]);
+
+  // Handle initial seek — fires when initialTime is set OR when loading finishes
   useEffect(() => {
     const video = videoRef.current;
-    if (video && initialTime && initialTime > 0 && !hasSeekToInitial.current && video.readyState >= 1) {
+    if (!isLoading && video && initialTime && initialTime > 0 && !hasSeekToInitial.current) {
       hasSeekToInitial.current = true;
       video.currentTime = initialTime;
     }
-  }, [initialTime]);
+  }, [initialTime, isLoading]);
 
   // Iframe fallback - use hianime.to directly
   if (useIframe && animeId) {
@@ -483,6 +520,12 @@ export function VideoPlayer({
             sources={sources}
             selectedSourceUrl={selectedSourceUrl}
             onQualityChange={onQualityChange}
+            intro={intro}
+            outro={outro}
+            onSkipIntro={() => intro && handleSeek(intro.end)}
+            onSkipOutro={() => outro && handleSeek(outro.end)}
+            autoSkip={autoSkip}
+            onAutoSkipChange={setAutoSkip}
           />
         )}
         {isLoading && (
@@ -507,6 +550,7 @@ const containerStyles: React.CSSProperties = {
   height: '100%',
 };
 
+
 const iframeStyles: React.CSSProperties = {
   width: '100%',
   height: '100%',
@@ -518,7 +562,7 @@ const videoStyles: React.CSSProperties = {
   width: '100%',
   height: '100%',
   backgroundColor: '#000',
-  objectFit: 'contain',
+  objectFit: 'fill',
 };
 
 const styles = StyleSheet.create({

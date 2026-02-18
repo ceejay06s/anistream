@@ -11,6 +11,7 @@ import {
   Modal,
   FlatList,
   Image,
+  ImageBackground,
   KeyboardAvoidingView,
   useWindowDimensions,
 } from 'react-native';
@@ -864,8 +865,15 @@ export default function WatchScreen() {
           </TouchableOpacity>
         </View>
       ) : loading && !selectedSource ? (
-        // Loading state with retry progress
-        <View style={styles.videoLoadingContainer}>
+        // Loading state with poster cover
+        <ImageBackground
+          source={animeInfo?.poster ? { uri: animeInfo.poster } : undefined}
+          style={styles.videoLoadingContainer}
+          imageStyle={styles.videoLoadingCoverImage}
+          resizeMode="stretch"
+        >
+          {/* Dark overlay */}
+          <View style={styles.videoLoadingOverlay} />
           {animeInfo?.name && (
             <Text style={styles.videoLoadingTitle} numberOfLines={1}>{animeInfo.name}</Text>
           )}
@@ -884,7 +892,7 @@ export default function WatchScreen() {
               Server {serverIndex + 1} of {totalServers}
             </Text>
           )}
-        </View>
+        </ImageBackground>
       ) : selectedSource ? (
         <VideoPlayer
           source={selectedSource.url}
@@ -909,12 +917,14 @@ export default function WatchScreen() {
           onNext={handleNextEpisode}
           hasPrevious={hasPreviousEpisode}
           hasNext={hasNextEpisode}
-          initialTime={resumeTimestamp || undefined}
+          initialTime={showResumePrompt ? undefined : (resumeTimestamp || undefined)}
           category={category}
           onCategoryChange={setCategory}
           sources={streamingData?.sources}
           selectedSourceUrl={selectedSource?.url}
           onQualityChange={handleQualityChange}
+          intro={streamingData?.intro}
+          outro={streamingData?.outro}
         />
       ) : (
         // No source available - show error
@@ -1202,6 +1212,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#111',
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
+  },
+  videoLoadingCoverImage: {
+    opacity: 0.4,
+  },
+  videoLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
   },
   videoLoadingTitle: {
     color: '#fff',

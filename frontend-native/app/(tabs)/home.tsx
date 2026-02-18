@@ -16,6 +16,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -108,14 +109,21 @@ export default function HomeScreen() {
     loadRecentlyWatched();
   }, []);
 
-  const loadRecentlyWatched = async () => {
+  const loadRecentlyWatched = useCallback(async () => {
     try {
       const history = await watchHistoryService.getRecentlyWatched(10);
       setRecentlyWatched(history);
     } catch (err) {
       console.error('Failed to load recently watched:', err);
     }
-  };
+  }, []);
+
+  // Reload watch history every time this tab comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadRecentlyWatched();
+    }, [loadRecentlyWatched])
+  );
 
   const loadNews = async () => {
     try {

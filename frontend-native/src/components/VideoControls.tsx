@@ -62,6 +62,13 @@ export interface VideoControlsProps {
   sources?: PlayerSource[];
   selectedSourceUrl?: string;
   onQualityChange?: (source: PlayerSource) => void;
+  // Skip intro/outro
+  intro?: { start: number; end: number };
+  outro?: { start: number; end: number };
+  onSkipIntro?: () => void;
+  onSkipOutro?: () => void;
+  autoSkip?: boolean;
+  onAutoSkipChange?: (val: boolean) => void;
 }
 
 export function VideoControls({
@@ -96,6 +103,12 @@ export function VideoControls({
   sources,
   selectedSourceUrl,
   onQualityChange,
+  intro,
+  outro,
+  onSkipIntro,
+  onSkipOutro,
+  autoSkip,
+  onAutoSkipChange,
 }: VideoControlsProps) {
   const [showControls, setShowControls] = useState(true);
   const [showSubtitleMenu, setShowSubtitleMenu] = useState(false);
@@ -243,7 +256,8 @@ export function VideoControls({
     );
   }
 
-  if (!showControls && isPlaying) {
+  // For mobile (non-web), early return when controls are hidden
+  if (!isWeb && !showControls && isPlaying) {
     return (
       <TouchableOpacity
         style={styles.invisibleTouchArea}
@@ -254,6 +268,7 @@ export function VideoControls({
   }
 
   // YouTube-style layout for web/PC
+  // Note: always render on web (don't early-return) so touch events still work when controls are hidden
   if (isWeb) {
     return (
       <Animated.View
@@ -261,14 +276,23 @@ export function VideoControls({
         // @ts-ignore - web only events
         onMouseMove={resetHideTimer}
         onMouseEnter={() => setShowControls(true)}
+        onTouchStart={resetHideTimer}
       >
         {/* Gradient overlay at bottom */}
         <div style={youtubeStyles.gradient} />
 
-        {/* Click area for play/pause */}
+        {/* Click area: show controls if hidden, toggle play/pause if visible */}
         <TouchableOpacity
           style={styles.youtubeClickArea}
-          onPress={onPlayPause}
+          onPress={() => {
+            if (!showControls) {
+              resetHideTimer();
+            } else {
+              onPlayPause();
+            }
+          }}
+          // @ts-ignore - web only
+          onTouchStart={resetHideTimer}
           activeOpacity={1}
         />
 
@@ -326,6 +350,22 @@ export function VideoControls({
               </Text>
               <Ionicons name="chevron-forward" size={16} color="#888" />
             </TouchableOpacity>
+
+            {/* Auto-skip toggle */}
+            {(intro || outro) && onAutoSkipChange && (
+              <TouchableOpacity
+                style={styles.youtubeMenuItem}
+                onPress={() => onAutoSkipChange(!autoSkip)}
+              >
+                <Ionicons name="play-skip-forward" size={18} color="#fff" />
+                <Text style={styles.youtubeMenuItemText}>Auto-skip</Text>
+                <Ionicons
+                  name={autoSkip ? 'toggle' : 'toggle-outline'}
+                  size={26}
+                  color={autoSkip ? '#e50914' : '#888'}
+                />
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -407,6 +447,45 @@ export function VideoControls({
             ))}
           </View>
         )}
+
+        {/* Skip Intro button */}
+        {intro && currentTime >= intro.start && currentTime < intro.end && (
+          <TouchableOpacity style={styles.skipOverlayButton} onPress={onSkipIntro}>
+            <Text style={styles.skipOverlayText}>Skip Intro</Text>
+            <Ionicons name="play-skip-forward-outline" size={16} color="#fff" />
+          </TouchableOpacity>
+        )}
+
+        {/* Skip Outro button */}
+        {outro && currentTime >= outro.start && currentTime < outro.end && (
+          <TouchableOpacity style={styles.skipOverlayButton} onPress={onSkipOutro}>
+            <Text style={styles.skipOverlayText}>Skip Outro</Text>
+            <Ionicons name="play-skip-forward-outline" size={16} color="#fff" />
+          </TouchableOpacity>
+        )}
+
+        {/* Subtitle button — top-right overlay */}
+        <TouchableOpacity
+          style={[styles.youtubeTopRightButton, { right: 60 }, currentSubtitle && styles.youtubeTopRightButtonActive]}
+          onPress={() => {
+            setShowSubtitleMenu(!showSubtitleMenu);
+            setShowSettingsMenu(false);
+          }}
+        >
+          <Ionicons name="text" size={20} color={currentSubtitle ? '#fff' : '#ccc'} />
+          {currentSubtitle && <View style={styles.youtubeSubtitleIndicator} />}
+        </TouchableOpacity>
+
+        {/* Settings button — top-right overlay */}
+        <TouchableOpacity
+          style={styles.youtubeTopRightButton}
+          onPress={() => {
+            setShowSettingsMenu(!showSettingsMenu);
+            setShowSubtitleMenu(false);
+          }}
+        >
+          <Ionicons name="settings-sharp" size={20} color="#fff" />
+        </TouchableOpacity>
 
         {/* Bottom controls container */}
         <View style={styles.youtubeBottomContainer}>
@@ -516,42 +595,6 @@ export function VideoControls({
 
             {/* Right controls */}
             <View style={styles.youtubeRightControls}>
-              {/* Subtitles button */}
-              <TouchableOpacity
-                style={[styles.youtubeButton, currentSubtitle && styles.youtubeButtonActive]}
-                onPress={() => {
-                  setShowSubtitleMenu(!showSubtitleMenu);
-                  setShowSettingsMenu(false);
-                }}
-              >
-                <Ionicons name="text" size={20} color={currentSubtitle ? '#fff' : '#ccc'} />
-                {currentSubtitle && <View style={styles.youtubeSubtitleIndicator} />}
-              </TouchableOpacity>
-
-              {/* Settings button */}
-              <TouchableOpacity
-                style={styles.youtubeButton}
-                onPress={() => {
-                  setShowSettingsMenu(!showSettingsMenu);
-                  setShowSubtitleMenu(false);
-                }}
-              >
-                <Ionicons name="settings-sharp" size={20} color="#fff" />
-              </TouchableOpacity>
-
-              {/* Picture in Picture */}
-              <TouchableOpacity
-                style={styles.youtubeButton}
-                onPress={() => {
-                  const video = videoRef.current;
-                  if (video && 'requestPictureInPicture' in video) {
-                    (video as any).requestPictureInPicture().catch(console.error);
-                  }
-                }}
-              >
-                <Ionicons name="browsers-outline" size={20} color="#fff" />
-              </TouchableOpacity>
-
               {/* Fullscreen */}
               <TouchableOpacity style={styles.youtubeButton} onPress={onToggleFullscreen}>
                 <Ionicons name={isFullscreen ? 'contract' : 'expand'} size={22} color="#fff" />
@@ -788,7 +831,38 @@ export function VideoControls({
               </View>
             </>
           )}
+
+          {/* Auto-skip */}
+          {(intro || outro) && onAutoSkipChange && (
+            <>
+              <Text style={styles.settingsLabel}>Skip</Text>
+              <View style={styles.settingsRow}>
+                <TouchableOpacity
+                  style={[styles.settingsButton, autoSkip && styles.settingsButtonActive]}
+                  onPress={() => { onAutoSkipChange(!autoSkip); }}
+                >
+                  <Text style={[styles.settingsButtonText, autoSkip && styles.settingsButtonTextActive]}>
+                    Auto-skip {autoSkip ? 'ON' : 'OFF'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
         </View>
+      )}
+
+      {/* Skip Intro / Outro buttons (mobile) */}
+      {intro && currentTime >= intro.start && currentTime < intro.end && (
+        <TouchableOpacity style={styles.skipOverlayButton} onPress={onSkipIntro}>
+          <Text style={styles.skipOverlayText}>Skip Intro</Text>
+          <Ionicons name="play-skip-forward-outline" size={16} color="#fff" />
+        </TouchableOpacity>
+      )}
+      {outro && currentTime >= outro.start && currentTime < outro.end && (
+        <TouchableOpacity style={styles.skipOverlayButton} onPress={onSkipOutro}>
+          <Text style={styles.skipOverlayText}>Skip Outro</Text>
+          <Ionicons name="play-skip-forward-outline" size={16} color="#fff" />
+        </TouchableOpacity>
       )}
 
       {/* Center play/pause */}
@@ -1162,6 +1236,27 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
 
+  skipOverlayButton: {
+    position: 'absolute',
+    bottom: 64,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+    borderRadius: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    gap: 6,
+    zIndex: 20,
+  },
+  skipOverlayText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
   // YouTube-style web controls
   youtubeOverlay: {
     backgroundColor: 'transparent',
@@ -1243,9 +1338,24 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontVariant: ['tabular-nums'],
   },
+  youtubeTopRightButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 50,
+  },
+  youtubeTopRightButtonActive: {
+    backgroundColor: 'rgba(229, 9, 20, 0.5)',
+  },
   youtubeSettingsMenu: {
     position: 'absolute',
-    bottom: 56,
+    top: 56,
     right: 12,
     backgroundColor: 'rgba(28, 28, 28, 0.95)',
     borderRadius: 12,
