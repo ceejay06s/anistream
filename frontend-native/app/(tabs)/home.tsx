@@ -333,7 +333,7 @@ export default function HomeScreen() {
     }
 
     return (
-      <View key={category.route} style={styles.section}>
+      <View key={category.route} style={styles.section} onStartShouldSetResponder={() => true}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>{category.title}</Text>
           <TouchableOpacity onPress={() => handleSeeAll(category.route)}>
@@ -493,7 +493,7 @@ export default function HomeScreen() {
       >
         {/* Hero Carousel Banner */}
         {spotlightAnime.length > 0 && (
-          <View style={styles.bannerContainer}>
+          <View style={styles.bannerContainer} onStartShouldSetResponder={() => true}>
             <FlatList
               ref={carouselRef}
               data={spotlightAnime}
@@ -520,7 +520,7 @@ export default function HomeScreen() {
 
         {/* Continue Watching Section - Netflix Style */}
         {recentlyWatched.length > 0 && (
-          <View style={styles.continueWatchingSection}>
+          <View style={styles.continueWatchingSection} onStartShouldSetResponder={() => true}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Continue Watching</Text>
             </View>
