@@ -62,8 +62,12 @@ export default function NotificationsScreen() {
   }, [user, markingAll]);
 
   const handleNotificationPress = useCallback(
-    async (item: UserNotification) => {
+    (item: UserNotification) => {
       if (!item.read) {
+        // Optimistically mark read in local state for instant visual feedback
+        setNotifications(prev =>
+          prev.map(n => n.id === item.id ? { ...n, read: true } : n)
+        );
         userNotificationService.markAsRead(item.id);
       }
       if (item.data?.animeId) {

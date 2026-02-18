@@ -10,7 +10,7 @@
     "build:android:local": "expo prebuild --platform android && cmd /c \"cd android && gradlew.bat assembleRelease\"",
     "build:android:apk": "cd android && ./gradlew assembleRelease",
     "build:web": "npx expo export --platform web",
-    "deploy:web": "npx expo export --platform web && eas deploy --platform web",
+    "deploy:web": "npx expo export --platform web && firebase deploy --only hosting && eas deploy",
     "deploy:firebase": "npx expo export --platform web && firebase deploy --only hosting",
     "test": "jest",
     "test:watch": "jest --watch",

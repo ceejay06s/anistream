@@ -267,6 +267,7 @@ export default function HomeScreen() {
         <TouchableOpacity
           key={index}
           onPress={() => {
+            bannerIndexRef.current = index;
             setCurrentBannerIndex(index);
             carouselRef.current?.scrollToIndex({ index, animated: true });
           }}
@@ -584,9 +585,13 @@ export default function HomeScreen() {
               >
                 {user?.photoURL ? (
                   <Image source={{ uri: user.photoURL }} style={styles.headerAvatar} />
-                ) : (
+                ) : user ? (
                   <View style={styles.headerAvatarPlaceholder}>
                     <Ionicons name="person" size={16} color="#fff" />
+                  </View>
+                ) : (
+                  <View style={styles.headerLoginButton}>
+                    <Ionicons name="log-in-outline" size={20} color="#fff" />
                   </View>
                 )}
               </TouchableOpacity>
@@ -620,7 +625,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingLeft: 0,
+    paddingLeft: 40,
     paddingRight: Platform.OS === 'web' ? 48 : 12,
     paddingVertical: Platform.OS === 'web' ? 16 : 8,
   },
@@ -671,6 +676,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#333',
     borderWidth: 1.5,
     borderColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerLoginButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#e50914',
     justifyContent: 'center',
     alignItems: 'center',
   },
