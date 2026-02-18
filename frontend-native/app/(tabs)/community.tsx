@@ -49,27 +49,22 @@ export default function CommunityScreen() {
   const [newComment, setNewComment] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
   const commentInputRef = useRef<TextInput>(null);
+  const commentUnsubscribeRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    loadPosts();
+    setLoading(true);
+    const unsubscribe = communityService.subscribeToPosts(30, (data) => {
+      setPosts(data);
+      setLoading(false);
+      setRefreshing(false);
+    });
+    return () => unsubscribe();
   }, []);
 
-  const loadPosts = async () => {
-    try {
-      setLoading(true);
-      const data = await communityService.getPosts(30);
-      setPosts(data);
-    } catch (err) {
-      console.error('Failed to load posts:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRefresh = useCallback(async () => {
+  const handleRefresh = useCallback(() => {
     setRefreshing(true);
-    await loadPosts();
-    setRefreshing(false);
+    // Real-time listener auto-updates; just reset the flag after a moment
+    setTimeout(() => setRefreshing(false), 800);
   }, []);
 
   const handleCloseCreateModal = useCallback(() => {
@@ -220,21 +215,30 @@ export default function CommunityScreen() {
     }
   };
 
-  const openComments = async (post: Post) => {
-    setSelectedPost(post);
-    setNewComment(''); // Clear comment input when opening
-    setLoadingComments(true);
-    try {
-      const data = await communityService.getComments(post.id);
-      setComments(data);
-    } catch (err) {
-      console.error('Failed to load comments:', err);
-    } finally {
-      setLoadingComments(false);
+  const openComments = (post: Post) => {
+    // Unsubscribe from any previous comment subscription
+    if (commentUnsubscribeRef.current) {
+      commentUnsubscribeRef.current();
+      commentUnsubscribeRef.current = null;
     }
+
+    setSelectedPost(post);
+    setNewComment('');
+    setLoadingComments(true);
+    setComments([]);
+
+    const unsubscribe = communityService.subscribeToComments(post.id, (data) => {
+      setComments(data);
+      setLoadingComments(false);
+    });
+    commentUnsubscribeRef.current = unsubscribe;
   };
 
   const closeComments = () => {
+    if (commentUnsubscribeRef.current) {
+      commentUnsubscribeRef.current();
+      commentUnsubscribeRef.current = null;
+    }
     setSelectedPost(null);
     setComments([]);
     setNewComment('');
@@ -261,12 +265,11 @@ export default function CommunityScreen() {
         }
       }
 
-      const comment = await communityService.addComment(
+      await communityService.addComment(
         { uid: user.uid, displayName: user.displayName, photoURL: user.photoURL },
         selectedPost.id,
         newComment.trim()
       );
-      setComments([...comments, comment]);
       setNewComment('');
       // Update comment count in posts list
       setPosts(prev =>

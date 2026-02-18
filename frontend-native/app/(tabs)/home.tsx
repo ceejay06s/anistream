@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -24,9 +24,18 @@ import { exploreRoutes, routeDisplayNames, ExploreRoute } from '@/data/meta';
 import { newsService, NewsItem } from '@/services/newsService';
 import { getProxiedImageUrl } from '@/utils/imageProxy';
 import { watchHistoryService, WatchHistoryEntry } from '@/services/watchHistoryService';
+import { useAuth } from '@/context/AuthContext';
+import { getCached } from '@/utils/apiCache';
+import { userNotificationService } from '@/services/userNotificationService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const BANNER_HEIGHT = Platform.OS === 'web' ? Math.min(SCREEN_HEIGHT * 0.7, 600) : 350;
+
+// Gradient color arrays defined outside component to prevent recreation on every render
+const BANNER_GRADIENT_COLORS = ['transparent', 'rgba(0,0,0,0.8)', '#000'] as const;
+const HEADER_GRADIENT_COLORS = ['rgba(0,0,0,0.9)', 'rgba(0,0,0,0.6)', 'transparent'] as const;
+const CARD_OVERLAY_GRADIENT = ['transparent', 'rgba(0,0,0,0.9)'] as const;
+const CONTINUE_WATCHING_GRADIENT = ['transparent', 'rgba(0,0,0,0.9)'] as const;
 
 // Featured categories for homepage
 const homeCategories: ExploreRoute[] = [
@@ -47,7 +56,9 @@ interface CategoryData {
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const carouselRef = useRef<FlatList>(null);
+  const bannerIndexRef = useRef(0);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
   const [spotlightAnime, setSpotlightAnime] = useState<Anime[]>([]);
   const [categories, setCategories] = useState<CategoryData[]>(
@@ -63,6 +74,17 @@ export default function HomeScreen() {
   const [loadingNews, setLoadingNews] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [recentlyWatched, setRecentlyWatched] = useState<WatchHistoryEntry[]>([]);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+
+  // Subscribe to unread notification count
+  useEffect(() => {
+    if (!user) return;
+    const unsubscribe = userNotificationService.subscribeToUnreadCount(
+      user.uid,
+      setUnreadNotifications
+    );
+    return () => unsubscribe();
+  }, [user]);
 
   // Clean up Expo Router internal params from URL on web
   useEffect(() => {
@@ -98,7 +120,7 @@ export default function HomeScreen() {
   const loadNews = async () => {
     try {
       setLoadingNews(true);
-      const newsData = await newsService.getNews(5);
+      const newsData = await getCached('news:latest', () => newsService.getNews(5));
       setNews(newsData);
     } catch (err) {
       console.error('Failed to load news:', err);
@@ -107,58 +129,48 @@ export default function HomeScreen() {
     }
   };
 
-  // Auto-scroll carousel
+  // Auto-scroll carousel — uses ref to avoid recreating interval every 5s
   useEffect(() => {
-    if (spotlightAnime.length === 0) return;
+    if (spotlightAnime.length <= 1) return;
 
     const interval = setInterval(() => {
-      const nextIndex = (currentBannerIndex + 1) % spotlightAnime.length;
-      setCurrentBannerIndex(nextIndex);
-      carouselRef.current?.scrollToIndex({
-        index: nextIndex,
-        animated: true,
-      });
+      const next = (bannerIndexRef.current + 1) % spotlightAnime.length;
+      bannerIndexRef.current = next;
+      setCurrentBannerIndex(next);
+      carouselRef.current?.scrollToIndex({ index: next, animated: true });
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [currentBannerIndex, spotlightAnime.length]);
+  }, [spotlightAnime.length]);
 
   const loadAllCategories = async () => {
-    // Load all categories in parallel
-    const promises = homeCategories.map(async (route, index) => {
-      try {
-        const data = await animeApi.getByCategory(route);
+    // Fire all requests in parallel with caching, then update state in one batch
+    const results = await Promise.allSettled(
+      homeCategories.map(route => getCached(`category:${route}`, () => animeApi.getByCategory(route)))
+    );
 
-        // Use top-airing for spotlight
-        if (route === 'top-airing' && data.length > 0) {
-          setSpotlightAnime(data.slice(0, 5));
+    let spotlightData: Anime[] = [];
+    setCategories(prev => {
+      const updated = [...prev];
+      results.forEach((result, index) => {
+        const route = homeCategories[index];
+        if (result.status === 'fulfilled') {
+          const data = result.value;
+          if (route === 'top-airing' && data.length > 0) {
+            spotlightData = data.slice(0, 5);
+          }
+          updated[index] = { ...updated[index], anime: data.slice(0, 15), loading: false, error: null };
+        } else {
+          console.error(`Failed to load ${route}:`, result.reason);
+          updated[index] = { ...updated[index], loading: false, error: 'Failed to load' };
         }
-
-        setCategories(prev => {
-          const updated = [...prev];
-          updated[index] = {
-            ...updated[index],
-            anime: data.slice(0, 15),
-            loading: false,
-            error: null,
-          };
-          return updated;
-        });
-      } catch (err: any) {
-        console.error(`Failed to load ${route}:`, err);
-        setCategories(prev => {
-          const updated = [...prev];
-          updated[index] = {
-            ...updated[index],
-            loading: false,
-            error: 'Failed to load',
-          };
-          return updated;
-        });
-      }
+      });
+      return updated;
     });
 
-    await Promise.allSettled(promises);
+    if (spotlightData.length > 0) {
+      setSpotlightAnime(spotlightData);
+    }
   };
 
   const handleRefresh = useCallback(async () => {
@@ -177,28 +189,29 @@ export default function HomeScreen() {
     setRefreshing(false);
   }, []);
 
-  const handleAnimePress = (anime: Anime) => {
+  const handleAnimePress = useCallback((anime: Anime) => {
     router.push({
       pathname: '/detail/[id]',
       params: { id: anime.id },
     });
-  };
+  }, [router]);
 
-  const handleSeeAll = (route: ExploreRoute) => {
+  const handleSeeAll = useCallback((route: ExploreRoute) => {
     router.push({
       pathname: '/(tabs)/browse',
       params: { category: route },
     });
-  };
+  }, [router]);
 
   const onBannerScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const slideIndex = Math.round(event.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-    if (slideIndex !== currentBannerIndex && slideIndex >= 0 && slideIndex < spotlightAnime.length) {
+    if (slideIndex !== bannerIndexRef.current && slideIndex >= 0 && slideIndex < spotlightAnime.length) {
+      bannerIndexRef.current = slideIndex;
       setCurrentBannerIndex(slideIndex);
     }
-  }, [currentBannerIndex, spotlightAnime.length]);
+  }, [spotlightAnime.length]);
 
-  const renderBannerItem = ({ item }: { item: Anime }) => (
+  const renderBannerItem = useCallback(({ item }: { item: Anime }) => (
     <TouchableOpacity
       activeOpacity={0.9}
       onPress={() => handleAnimePress(item)}
@@ -210,7 +223,7 @@ export default function HomeScreen() {
         resizeMode="cover"
       />
       <LinearGradient
-        colors={['transparent', 'rgba(0,0,0,0.8)', '#000']}
+        colors={BANNER_GRADIENT_COLORS}
         style={styles.bannerGradient}
       />
       <View style={styles.bannerContent}>
@@ -246,7 +259,7 @@ export default function HomeScreen() {
         </View>
       </View>
     </TouchableOpacity>
-  );
+  ), [handleAnimePress]);
 
   const renderDots = () => (
     <View style={styles.dotsContainer}>
@@ -269,7 +282,7 @@ export default function HomeScreen() {
     </View>
   );
 
-  const renderAnimeCard = ({ item }: { item: Anime }) => (
+  const renderAnimeCard = useCallback(({ item }: { item: Anime }) => (
     <Pressable
       style={({ pressed, hovered }: any) => [
         styles.animeCard,
@@ -286,7 +299,7 @@ export default function HomeScreen() {
           />
           {(hovered || pressed) && (
             <LinearGradient
-              colors={['transparent', 'rgba(0,0,0,0.9)']}
+              colors={CARD_OVERLAY_GRADIENT}
               style={styles.animeCardOverlay}
             >
               <Text style={styles.animeCardTitle} numberOfLines={2}>
@@ -297,9 +310,9 @@ export default function HomeScreen() {
         </>
       )}
     </Pressable>
-  );
+  ), [handleAnimePress]);
 
-  const renderCategory = (category: CategoryData) => {
+  const renderCategory = useCallback((category: CategoryData) => {
     if (category.loading) {
       return (
         <View key={category.route} style={styles.section}>
@@ -331,10 +344,14 @@ export default function HomeScreen() {
           showsHorizontalScrollIndicator={Platform.OS !== 'web'}
           contentContainerStyle={styles.animeList}
           style={styles.horizontalList}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={5}
+          windowSize={5}
+          initialNumToRender={4}
         />
       </View>
     );
-  };
+  }, [renderAnimeCard, handleSeeAll]);
 
   const getNewsIcon = (type: NewsItem['type']): keyof typeof Ionicons.glyphMap => {
     switch (type) {
@@ -354,7 +371,7 @@ export default function HomeScreen() {
     }
   };
 
-  const renderNewsItem = ({ item }: { item: NewsItem }) => (
+  const renderNewsItem = useCallback(({ item }: { item: NewsItem }) => (
     <View style={styles.newsCard}>
       <View style={[styles.newsIconContainer, { backgroundColor: getNewsColor(item.type) + '22' }]}>
         <Ionicons name={getNewsIcon(item.type)} size={20} color={getNewsColor(item.type)} />
@@ -368,7 +385,7 @@ export default function HomeScreen() {
         </View>
       </View>
     </View>
-  );
+  ), []);
 
   const renderNewsSection = () => {
     if (loadingNews) {
@@ -391,18 +408,61 @@ export default function HomeScreen() {
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Latest News</Text>
         </View>
-        <View style={styles.newsList}>
-          {news.map((item) => (
-            <View key={item.id}>
-              {renderNewsItem({ item })}
-            </View>
-          ))}
-        </View>
+        <FlatList
+          data={news}
+          renderItem={renderNewsItem}
+          keyExtractor={(item) => item.id}
+          scrollEnabled={false}
+          contentContainerStyle={styles.newsList}
+        />
       </View>
     );
   };
 
-  const allLoading = categories.every(c => c.loading);
+  const renderContinueWatchingItem = useCallback(({ item: entry }: { item: WatchHistoryEntry }) => (
+    <TouchableOpacity
+      key={`continue-${entry.animeId}-${entry.episodeNumber}`}
+      style={styles.continueWatchingCard}
+      onPress={() => router.push({
+        pathname: '/watch/[id]',
+        params: { id: entry.animeId, ep: entry.episodeNumber },
+      })}
+      activeOpacity={0.8}
+    >
+      <Image
+        source={{ uri: getProxiedImageUrl(entry.animePoster || '') || '' }}
+        style={styles.continueWatchingPoster}
+        resizeMode="cover"
+      />
+      <LinearGradient
+        colors={CONTINUE_WATCHING_GRADIENT}
+        style={styles.continueWatchingGradient}
+      />
+      <View style={styles.continueWatchingOverlay}>
+        <View style={styles.continueWatchingPlayIcon}>
+          <Ionicons name="play-circle" size={32} color="#fff" />
+        </View>
+        <View style={styles.continueWatchingTextOverlay}>
+          <Text style={styles.continueWatchingTitle} numberOfLines={1}>
+            {entry.animeName}
+          </Text>
+          <Text style={styles.continueWatchingEpisode}>
+            E{entry.episodeNumber} · {watchHistoryService.formatTime(entry.timestamp)} left
+          </Text>
+        </View>
+      </View>
+      <View style={styles.continueWatchingProgress}>
+        <View
+          style={[
+            styles.continueWatchingProgressBar,
+            { width: `${Math.min(95, (entry.timestamp / (entry.duration || 1400)) * 100)}%` },
+          ]}
+        />
+      </View>
+    </TouchableOpacity>
+  ), [router]);
+
+  const allLoading = useMemo(() => categories.every(c => c.loading), [categories]);
 
   if (allLoading) {
     return (
@@ -445,6 +505,10 @@ export default function HomeScreen() {
                 offset: SCREEN_WIDTH * index,
                 index,
               })}
+              removeClippedSubviews={false}
+              maxToRenderPerBatch={3}
+              windowSize={3}
+              initialNumToRender={1}
             />
             {renderDots()}
           </View>
@@ -456,54 +520,17 @@ export default function HomeScreen() {
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Continue Watching</Text>
             </View>
-            <ScrollView
+            <FlatList
+              data={recentlyWatched}
+              renderItem={renderContinueWatchingItem}
+              keyExtractor={(entry) => `continue-${entry.animeId}-${entry.episodeNumber}`}
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.continueWatchingListContent}
-            >
-              {recentlyWatched.map((entry) => (
-                <TouchableOpacity
-                  key={`continue-${entry.animeId}-${entry.episodeNumber}`}
-                  style={styles.continueWatchingCard}
-                  onPress={() => router.push({
-                    pathname: '/watch/[id]',
-                    params: { id: entry.animeId, ep: entry.episodeNumber },
-                  })}
-                  activeOpacity={0.8}
-                >
-                  <Image
-                    source={{ uri: getProxiedImageUrl(entry.animePoster || '') || '' }}
-                    style={styles.continueWatchingPoster}
-                    resizeMode="cover"
-                  />
-                  <LinearGradient
-                    colors={['transparent', 'rgba(0,0,0,0.9)']}
-                    style={styles.continueWatchingGradient}
-                  />
-                  <View style={styles.continueWatchingOverlay}>
-                    <View style={styles.continueWatchingPlayIcon}>
-                      <Ionicons name="play-circle" size={32} color="#fff" />
-                    </View>
-                    <View style={styles.continueWatchingTextOverlay}>
-                      <Text style={styles.continueWatchingTitle} numberOfLines={1}>
-                        {entry.animeName}
-                      </Text>
-                      <Text style={styles.continueWatchingEpisode}>
-                        E{entry.episodeNumber} · {watchHistoryService.formatTime(entry.timestamp)} left
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.continueWatchingProgress}>
-                    <View
-                      style={[
-                        styles.continueWatchingProgressBar,
-                        { width: `${Math.min(95, (entry.timestamp / (entry.duration || 1400)) * 100)}%` },
-                      ]}
-                    />
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+              removeClippedSubviews={true}
+              maxToRenderPerBatch={4}
+              initialNumToRender={3}
+            />
           </View>
         )}
 
@@ -521,7 +548,7 @@ export default function HomeScreen() {
 
       {/* Floating Header with Gradient */}
       <LinearGradient
-        colors={['rgba(0,0,0,0.9)', 'rgba(0,0,0,0.6)', 'transparent']}
+        colors={HEADER_GRADIENT_COLORS}
         style={styles.floatingHeader}
       >
         <SafeAreaView edges={['top']} style={styles.headerSafeArea}>
@@ -531,12 +558,39 @@ export default function HomeScreen() {
               style={styles.appLogo}
               resizeMode="contain"
             />
-            <TouchableOpacity
-              style={styles.headerSearchButton}
-              onPress={() => router.push('/(tabs)/search')}
-            >
-              <Ionicons name="search" size={24} color="#fff" />
-            </TouchableOpacity>
+            <View style={styles.headerActions}>
+              <TouchableOpacity
+                style={styles.headerIconButton}
+                onPress={() => router.push('/(tabs)/search')}
+              >
+                <Ionicons name="search" size={22} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.headerIconButton}
+                onPress={() => router.push('/(tabs)/notifications')}
+              >
+                <Ionicons name="notifications-outline" size={22} color="#fff" />
+                {unreadNotifications > 0 && (
+                  <View style={styles.notificationBadge}>
+                    <Text style={styles.notificationBadgeText}>
+                      {unreadNotifications > 99 ? '99+' : unreadNotifications}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.headerAvatarButton}
+                onPress={() => router.push('/(tabs)/profile')}
+              >
+                {user?.photoURL ? (
+                  <Image source={{ uri: user.photoURL }} style={styles.headerAvatar} />
+                ) : (
+                  <View style={styles.headerAvatarPlaceholder}>
+                    <Ionicons name="person" size={16} color="#fff" />
+                  </View>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </SafeAreaView>
       </LinearGradient>
@@ -566,15 +620,59 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Platform.OS === 'web' ? 48 : 12,
+    paddingLeft: 0,
+    paddingRight: Platform.OS === 'web' ? 48 : 12,
     paddingVertical: Platform.OS === 'web' ? 16 : 8,
   },
   appLogo: {
     width: Platform.OS === 'web' ? 160 : 140,
     height: Platform.OS === 'web' ? 48 : 40,
   },
-  headerSearchButton: {
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  headerIconButton: {
     padding: 8,
+    position: 'relative',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#e50914',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 3,
+  },
+  notificationBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  headerAvatarButton: {
+    padding: 4,
+  },
+  headerAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1.5,
+    borderColor: '#fff',
+  },
+  headerAvatarPlaceholder: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#333',
+    borderWidth: 1.5,
+    borderColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   centered: {
     flex: 1,

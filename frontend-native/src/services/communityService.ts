@@ -558,6 +558,61 @@ export const communityService = {
     ];
   },
 
+  subscribeToPosts(limitCount: number = 30, callback: (posts: Post[]) => void): () => void {
+    const db = getDb();
+    if (!db) {
+      callback(this.getMockPosts());
+      return () => {};
+    }
+
+    const { collection, query, orderBy, limit, onSnapshot } = require('firebase/firestore');
+    const q = query(
+      collection(db, 'posts'),
+      orderBy('createdAt', 'desc'),
+      limit(limitCount)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot: any) => {
+      const posts: Post[] = snapshot.docs.map((doc: any) => ({
+        id: doc.id,
+        likes: [],
+        commentCount: 0,
+        ...doc.data(),
+      }));
+      callback(posts);
+    }, (err: any) => {
+      console.error('Posts subscription error:', err);
+    });
+
+    return unsubscribe;
+  },
+
+  subscribeToComments(postId: string, callback: (comments: Comment[]) => void): () => void {
+    const db = getDb();
+    if (!db) {
+      callback([]);
+      return () => {};
+    }
+
+    const { collection, query, orderBy, onSnapshot } = require('firebase/firestore');
+    const q = query(
+      collection(db, 'posts', postId, 'comments'),
+      orderBy('createdAt', 'asc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot: any) => {
+      const comments: Comment[] = snapshot.docs.map((doc: any) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      callback(comments);
+    }, (err: any) => {
+      console.error('Comments subscription error:', err);
+    });
+
+    return unsubscribe;
+  },
+
   formatTimeAgo(timestamp: number): string {
     const now = Date.now();
     const diff = now - timestamp;

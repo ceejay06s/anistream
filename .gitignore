@@ -62,3 +62,4 @@ frontend-native/android/app/src/main/res/values/styles.xml
 frontend-native/android/app/src/main/res/values-night/colors.xml
 frontend-native/android/gradle/wrapper/gradle-wrapper.jar
 frontend-native/android/gradle/wrapper/gradle-wrapper.properties
+frontend-native/.firebase/*
