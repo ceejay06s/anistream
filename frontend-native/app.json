@@ -2,12 +2,11 @@
   "expo": {
     "name": "AniStream",
     "slug": "anistream-native",
-    "version": "1.0.0",
+    "version": "2.0.4",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "anistream",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": false,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -32,7 +31,8 @@
       "googleServicesFile": "./google-services.json"
     },
     "androidStatusBar": {
-      "hidden": true,
+      "barStyle": "light-content",
+      "backgroundColor": "#00000000",
       "translucent": true
     },
     "androidNavigationBar": {
@@ -48,7 +48,19 @@
       "expo-router",
       "expo-video",
       "expo-font",
-      "expo-updates"
+      "expo-updates",
+      [
+        "expo-notifications",
+        {
+          "color": "#e50914"
+        }
+      ],
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.797841167253-tl8v6hm1dg1lof6qmterms3hl077bb8g"
+        }
+      ]
     ],
     "runtimeVersion": {
       "policy": "appVersion"

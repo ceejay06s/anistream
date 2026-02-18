@@ -4,7 +4,7 @@ import { userNotificationService } from './userNotificationService';
 
 // Lazy initialization to avoid module load order issues
 function getDb() {
-  if (Platform.OS !== 'web' || !app) {
+  if (!app) {
     return null;
   }
   const { getFirestore } = require('firebase/firestore');
@@ -12,7 +12,7 @@ function getDb() {
 }
 
 function getStorage() {
-  if (Platform.OS !== 'web' || !app) {
+  if (!app) {
     return null;
   }
   const { getStorage } = require('firebase/storage');
@@ -127,6 +127,35 @@ export const communityService = {
     } catch (err) {
       console.error('Failed to fetch posts:', err);
       return this.getMockPosts();
+    }
+  },
+
+  async getPostsByAnime(animeId: string, limitCount: number = 50): Promise<Post[]> {
+    const db = getDb();
+    if (!db) {
+      // Return mock posts filtered by anime ID
+      return this.getMockPosts().filter(p => p.animeId === animeId);
+    }
+
+    try {
+      const { collection, query, orderBy, where, limit, getDocs } = require('firebase/firestore');
+      const q = query(
+        collection(db, 'posts'),
+        where('animeId', '==', animeId),
+        orderBy('createdAt', 'desc'),
+        limit(limitCount)
+      );
+
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map((doc: any) => ({
+        id: doc.id,
+        likes: [],
+        commentCount: 0,
+        ...doc.data(),
+      }));
+    } catch (err) {
+      console.error('Failed to fetch posts by anime:', err);
+      return [];
     }
   },
 

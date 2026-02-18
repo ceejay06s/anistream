@@ -7,6 +7,7 @@ import {
   FlatList,
   Image,
   TouchableOpacity,
+  Pressable,
   ActivityIndicator,
   Platform,
   Dimensions,
@@ -22,6 +23,7 @@ import { animeApi, Anime } from '@/services/api';
 import { exploreRoutes, routeDisplayNames, ExploreRoute } from '@/data/meta';
 import { newsService, NewsItem } from '@/services/newsService';
 import { getProxiedImageUrl } from '@/utils/imageProxy';
+import { watchHistoryService, WatchHistoryEntry } from '@/services/watchHistoryService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const BANNER_HEIGHT = Platform.OS === 'web' ? Math.min(SCREEN_HEIGHT * 0.7, 600) : 350;
@@ -60,6 +62,7 @@ export default function HomeScreen() {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loadingNews, setLoadingNews] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [recentlyWatched, setRecentlyWatched] = useState<WatchHistoryEntry[]>([]);
 
   // Clean up Expo Router internal params from URL on web
   useEffect(() => {
@@ -80,7 +83,17 @@ export default function HomeScreen() {
   useEffect(() => {
     loadAllCategories();
     loadNews();
+    loadRecentlyWatched();
   }, []);
+
+  const loadRecentlyWatched = async () => {
+    try {
+      const history = await watchHistoryService.getRecentlyWatched(10);
+      setRecentlyWatched(history);
+    } catch (err) {
+      console.error('Failed to load recently watched:', err);
+    }
+  };
 
   const loadNews = async () => {
     try {
@@ -257,26 +270,33 @@ export default function HomeScreen() {
   );
 
   const renderAnimeCard = ({ item }: { item: Anime }) => (
-    <TouchableOpacity
-      style={styles.animeCard}
+    <Pressable
+      style={({ pressed, hovered }: any) => [
+        styles.animeCard,
+        (hovered || pressed) && styles.animeCardHovered,
+      ]}
       onPress={() => handleAnimePress(item)}
-      activeOpacity={0.7}
     >
-      <Image
-        source={{ uri: getProxiedImageUrl(item.poster) || '' }}
-        style={styles.animePoster}
-        resizeMode="cover"
-      />
-      <View style={styles.animeInfo}>
-        <Text style={styles.animeTitle} numberOfLines={2}>
-          {item.name}
-        </Text>
-        {item.type && <Text style={styles.animeType}>{item.type}</Text>}
-        {item.rating && (
-          <Text style={styles.animeRating}>★ {item.rating}</Text>
-        )}
-      </View>
-    </TouchableOpacity>
+      {({ pressed, hovered }: any) => (
+        <>
+          <Image
+            source={{ uri: getProxiedImageUrl(item.poster) || '' }}
+            style={styles.animePoster}
+            resizeMode="cover"
+          />
+          {(hovered || pressed) && (
+            <LinearGradient
+              colors={['transparent', 'rgba(0,0,0,0.9)']}
+              style={styles.animeCardOverlay}
+            >
+              <Text style={styles.animeCardTitle} numberOfLines={2}>
+                {item.name}
+              </Text>
+            </LinearGradient>
+          )}
+        </>
+      )}
+    </Pressable>
   );
 
   const renderCategory = (category: CategoryData) => {
@@ -430,6 +450,63 @@ export default function HomeScreen() {
           </View>
         )}
 
+        {/* Continue Watching Section - Netflix Style */}
+        {recentlyWatched.length > 0 && (
+          <View style={styles.continueWatchingSection}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Continue Watching</Text>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.continueWatchingListContent}
+            >
+              {recentlyWatched.map((entry) => (
+                <TouchableOpacity
+                  key={`continue-${entry.animeId}-${entry.episodeNumber}`}
+                  style={styles.continueWatchingCard}
+                  onPress={() => router.push({
+                    pathname: '/watch/[id]',
+                    params: { id: entry.animeId, ep: entry.episodeNumber },
+                  })}
+                  activeOpacity={0.8}
+                >
+                  <Image
+                    source={{ uri: getProxiedImageUrl(entry.animePoster || '') || '' }}
+                    style={styles.continueWatchingPoster}
+                    resizeMode="cover"
+                  />
+                  <LinearGradient
+                    colors={['transparent', 'rgba(0,0,0,0.9)']}
+                    style={styles.continueWatchingGradient}
+                  />
+                  <View style={styles.continueWatchingOverlay}>
+                    <View style={styles.continueWatchingPlayIcon}>
+                      <Ionicons name="play-circle" size={32} color="#fff" />
+                    </View>
+                    <View style={styles.continueWatchingTextOverlay}>
+                      <Text style={styles.continueWatchingTitle} numberOfLines={1}>
+                        {entry.animeName}
+                      </Text>
+                      <Text style={styles.continueWatchingEpisode}>
+                        E{entry.episodeNumber} · {watchHistoryService.formatTime(entry.timestamp)} left
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.continueWatchingProgress}>
+                    <View
+                      style={[
+                        styles.continueWatchingProgressBar,
+                        { width: `${Math.min(95, (entry.timestamp / (entry.duration || 1400)) * 100)}%` },
+                      ]}
+                    />
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
         {/* Category Sections - Netflix style overlap */}
         <View style={styles.categoriesContainer}>
           {categories.map(renderCategory)}
@@ -454,6 +531,12 @@ export default function HomeScreen() {
               style={styles.appLogo}
               resizeMode="contain"
             />
+            <TouchableOpacity
+              style={styles.headerSearchButton}
+              onPress={() => router.push('/(tabs)/search')}
+            >
+              <Ionicons name="search" size={24} color="#fff" />
+            </TouchableOpacity>
           </View>
         </SafeAreaView>
       </LinearGradient>
@@ -482,12 +565,16 @@ const styles = StyleSheet.create({
   appHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: Platform.OS === 'web' ? 48 : 12,
     paddingVertical: Platform.OS === 'web' ? 16 : 8,
   },
   appLogo: {
     width: Platform.OS === 'web' ? 160 : 140,
     height: Platform.OS === 'web' ? 48 : 40,
+  },
+  headerSearchButton: {
+    padding: 8,
   },
   centered: {
     flex: 1,
@@ -625,9 +712,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#e50914',
     width: 24,
   },
-  // Categories container - overlaps hero slightly for Netflix effect
+  // Categories container
   categoriesContainer: {
-    marginTop: Platform.OS === 'web' ? -60 : -30,
+    marginTop: Platform.OS === 'web' ? -60 : 0,
     position: 'relative',
     zIndex: 1,
   },
@@ -653,7 +740,7 @@ const styles = StyleSheet.create({
   },
   // Section styles
   section: {
-    marginBottom: Platform.OS === 'web' ? 32 : 24,
+    marginBottom: Platform.OS === 'web' ? 32 : 28,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -692,10 +779,11 @@ const styles = StyleSheet.create({
     }),
   },
   animeCard: {
-    width: Platform.OS === 'web' ? 180 : 130,
-    marginHorizontal: 4,
-    borderRadius: 4,
+    width: Platform.OS === 'web' ? 150 : 105,
+    marginHorizontal: Platform.OS === 'web' ? 4 : 3,
+    borderRadius: 6,
     overflow: 'hidden',
+    position: 'relative',
     ...Platform.select({
       web: {
         transition: 'transform 0.2s ease',
@@ -704,30 +792,34 @@ const styles = StyleSheet.create({
       default: {},
     }),
   },
+  animeCardHovered: {
+    transform: [{ scale: 1.04 }],
+    zIndex: 10,
+  },
   animePoster: {
     width: '100%',
     aspectRatio: 2 / 3,
     backgroundColor: '#1a1a1a',
-    borderRadius: 4,
+    borderRadius: 6,
   },
-  animeInfo: {
-    paddingTop: 6,
-    paddingHorizontal: 2,
+  animeCardOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '50%',
+    justifyContent: 'flex-end',
+    padding: 8,
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 6,
   },
-  animeTitle: {
-    fontSize: Platform.OS === 'web' ? 13 : 12,
-    fontWeight: '500',
-    color: '#e5e5e5',
-    marginBottom: 2,
-  },
-  animeType: {
-    fontSize: 11,
-    color: '#777',
-  },
-  animeRating: {
-    fontSize: 11,
-    color: '#46d369',
-    marginTop: 2,
+  animeCardTitle: {
+    color: '#fff',
+    fontSize: Platform.OS === 'web' ? 12 : 10,
+    fontWeight: '600',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   // News styles
   newsList: {
@@ -776,5 +868,82 @@ const styles = StyleSheet.create({
   newsTime: {
     color: '#666',
     fontSize: 11,
+  },
+  // Continue Watching Styles - Netflix Style
+  continueWatchingSection: {
+    marginTop: 40,
+    marginBottom: 80,
+    paddingBottom: 16,
+    backgroundColor: '#000',
+  },
+  continueWatchingListContent: {
+    paddingHorizontal: Platform.OS === 'web' ? 42 : 8,
+    gap: 10,
+  },
+  continueWatchingCard: {
+    width: Platform.OS === 'web' ? 280 : 200,
+    aspectRatio: 16 / 9,
+    borderRadius: 6,
+    overflow: 'hidden',
+    backgroundColor: '#1a1a1a',
+    position: 'relative',
+  },
+  continueWatchingPoster: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#222',
+  },
+  continueWatchingGradient: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '60%',
+  },
+  continueWatchingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  continueWatchingPlayIcon: {
+    opacity: 0.9,
+  },
+  continueWatchingTextOverlay: {
+    position: 'absolute',
+    bottom: 8,
+    left: 10,
+    right: 10,
+  },
+  continueWatchingProgress: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 4,
+    backgroundColor: 'rgba(80, 80, 80, 0.8)',
+  },
+  continueWatchingProgressBar: {
+    height: '100%',
+    backgroundColor: '#e50914',
+  },
+  continueWatchingTitle: {
+    color: '#fff',
+    fontSize: Platform.OS === 'web' ? 14 : 13,
+    fontWeight: '600',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  continueWatchingEpisode: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: Platform.OS === 'web' ? 12 : 11,
+    marginTop: 2,
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
 });

@@ -29,6 +29,13 @@ export interface VideoPlayerProps {
   onBack?: () => void;
   // Callback to get current time for clipping
   onCurrentTimeChange?: (time: number) => void;
+  // Episode navigation
+  onPrevious?: () => void;
+  onNext?: () => void;
+  hasPrevious?: boolean;
+  hasNext?: boolean;
+  // Resume playback from timestamp
+  initialTime?: number;
 }
 
 export function VideoPlayer({
@@ -40,6 +47,11 @@ export function VideoPlayer({
   subtitleTracks = [],
   onRequestNewSource,
   onCurrentTimeChange,
+  onPrevious,
+  onNext,
+  hasPrevious = false,
+  hasNext = false,
+  initialTime,
 }: VideoPlayerProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +59,7 @@ export function VideoPlayer({
   const [isLocked, setIsLocked] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
+  const hasSeekToInitial = useRef(false);
   const [currentSubtitle, setCurrentSubtitle] = useState<string | null>(null);
   const [showSubtitleMenu, setShowSubtitleMenu] = useState(false);
   const timeUpdateRef = useRef<NodeJS.Timeout | null>(null);
@@ -67,6 +80,11 @@ export function VideoPlayer({
       if (status.status === 'readyToPlay') {
         setIsLoading(false);
         setError(null);
+        // Seek to initial time if provided (for resume functionality)
+        if (initialTime && initialTime > 0 && !hasSeekToInitial.current) {
+          hasSeekToInitial.current = true;
+          player.seekBy(initialTime);
+        }
         onReady?.();
       } else if (status.status === 'loading') {
         setIsLoading(true);
@@ -292,6 +310,28 @@ export function VideoPlayer({
         </TouchableOpacity>
       </Modal>
 
+      {/* Episode navigation buttons */}
+      {(hasPrevious || hasNext) && !isLocked && (
+        <View style={styles.episodeNavContainer}>
+          <TouchableOpacity
+            style={[styles.episodeNavButton, !hasPrevious && styles.episodeNavButtonDisabled]}
+            onPress={hasPrevious ? onPrevious : undefined}
+            disabled={!hasPrevious}
+          >
+            <Ionicons name="play-skip-back" size={20} color={hasPrevious ? '#fff' : '#666'} />
+            <Text style={[styles.episodeNavText, !hasPrevious && styles.episodeNavTextDisabled]}>Prev</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.episodeNavButton, !hasNext && styles.episodeNavButtonDisabled]}
+            onPress={hasNext ? onNext : undefined}
+            disabled={!hasNext}
+          >
+            <Text style={[styles.episodeNavText, !hasNext && styles.episodeNavTextDisabled]}>Next</Text>
+            <Ionicons name="play-skip-forward" size={20} color={hasNext ? '#fff' : '#666'} />
+          </TouchableOpacity>
+        </View>
+      )}
+
       {isLoading && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color="#e50914" />
@@ -429,5 +469,35 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 14,
     fontStyle: 'italic',
+  },
+  episodeNavContainer: {
+    position: 'absolute',
+    bottom: 60,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    pointerEvents: 'box-none',
+  },
+  episodeNavButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    gap: 6,
+  },
+  episodeNavButtonDisabled: {
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+  },
+  episodeNavText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  episodeNavTextDisabled: {
+    color: '#666',
   },
 });

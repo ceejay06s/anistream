@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Platform } from 'react-native';
 import { API_BASE_URL, StreamingData, StreamingSource } from '../services/api';
 
 export interface StreamStatus {
@@ -117,21 +116,20 @@ export function useStreamSocket(): UseStreamSocketResult {
 
             case 'sources':
               if (message.data) {
-                // Proxy M3U8 URLs for web
+                // Proxy M3U8 URLs through backend for all platforms
+                // Web needs this for CORS, mobile needs it because some servers block direct access
                 let sources = message.data.sources || [];
-                if (Platform.OS === 'web') {
-                  sources = sources.map((source: StreamingSource) => {
-                    if (source.isM3U8 && source.url) {
-                      const proxyUrl = `${API_BASE_URL}/api/streaming/proxy?url=${encodeURIComponent(source.url)}`;
-                      return { ...source, url: proxyUrl };
-                    }
-                    return source;
-                  });
-                }
+                sources = sources.map((source: StreamingSource) => {
+                  if (source.isM3U8 && source.url) {
+                    const proxyUrl = `${API_BASE_URL}/api/streaming/proxy?url=${encodeURIComponent(source.url)}`;
+                    return { ...source, url: proxyUrl };
+                  }
+                  return source;
+                });
 
-                // Proxy subtitle track URLs for web to avoid CORS issues
+                // Proxy subtitle track URLs for all platforms
                 let tracks = message.data.tracks || [];
-                if (Platform.OS === 'web' && tracks.length > 0) {
+                if (tracks.length > 0) {
                   tracks = tracks.map((track: { url: string; lang: string }) => {
                     if (track.url) {
                       const proxyUrl = `${API_BASE_URL}/api/streaming/proxy?url=${encodeURIComponent(track.url)}`;

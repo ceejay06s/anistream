@@ -23,6 +23,13 @@ export interface VideoPlayerProps {
   onBack?: () => void;
   // Callback to get current time for clipping
   onCurrentTimeChange?: (time: number) => void;
+  // Episode navigation
+  onPrevious?: () => void;
+  onNext?: () => void;
+  hasPrevious?: boolean;
+  hasNext?: boolean;
+  // Resume playback
+  initialTime?: number;
 }
 
 export function VideoPlayer({
@@ -39,10 +46,16 @@ export function VideoPlayer({
   title,
   onBack,
   onCurrentTimeChange,
+  onPrevious,
+  onNext,
+  hasPrevious,
+  hasNext,
+  initialTime,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const hasSeekToInitial = useRef(false);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -252,6 +265,7 @@ export function VideoPlayer({
         console.log('HLS manifest parsed');
         setIsLoading(false);
         onReady?.();
+
         if (autoPlay) {
           video.play().catch((e) => {
             console.log('Autoplay prevented:', e);
@@ -344,7 +358,22 @@ export function VideoPlayer({
         hlsRef.current = null;
       }
     };
-  }, [source, autoPlay, onError, onReady, useIframe, retryCount, handleTimeUpdate]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source, autoPlay, useIframe, retryCount]);
+
+  // Reset seek state when source changes
+  useEffect(() => {
+    hasSeekToInitial.current = false;
+  }, [source]);
+
+  // Handle initial seek separately to avoid re-creating HLS
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video && initialTime && initialTime > 0 && !hasSeekToInitial.current && video.readyState >= 1) {
+      hasSeekToInitial.current = true;
+      video.currentTime = initialTime;
+    }
+  }, [initialTime]);
 
   // Iframe fallback - use hianime.to directly
   if (useIframe && animeId) {
@@ -434,6 +463,10 @@ export function VideoPlayer({
             title={title}
             episodeInfo={episodeNumber ? `Episode ${episodeNumber}` : undefined}
             onBack={onBack}
+            onPrevious={onPrevious}
+            onNext={onNext}
+            hasPrevious={hasPrevious}
+            hasNext={hasNext}
           />
         )}
         {isLoading && (
@@ -469,7 +502,7 @@ const videoStyles: React.CSSProperties = {
   width: '100%',
   height: '100%',
   backgroundColor: '#000',
-  objectFit: 'initial',
+  objectFit: 'contain',
 };
 
 const styles = StyleSheet.create({

@@ -9,6 +9,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+const isWeb = Platform.OS === 'web';
+
 export interface SubtitleTrack {
   url: string;
   lang: string;
@@ -44,6 +46,11 @@ export interface VideoControlsProps {
   title?: string;
   episodeInfo?: string;
   onBack?: () => void;
+  // Episode navigation (for mobile)
+  onPrevious?: () => void;
+  onNext?: () => void;
+  hasPrevious?: boolean;
+  hasNext?: boolean;
 }
 
 export function VideoControls({
@@ -69,11 +76,19 @@ export function VideoControls({
   title,
   episodeInfo,
   onBack,
+  onPrevious,
+  onNext,
+  hasPrevious,
+  hasNext,
 }: VideoControlsProps) {
   const [showControls, setShowControls] = useState(true);
   const [showSubtitleMenu, setShowSubtitleMenu] = useState(false);
   const [showSubtitleSettings, setShowSubtitleSettings] = useState(false);
-  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
+  const [showVolumeSlider, setShowVolumeSlider] = useState(isWeb); // Always show on web
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+  const [isHoveringProgress, setIsHoveringProgress] = useState(false);
+  const [hoverTime, setHoverTime] = useState<number | null>(null);
+  const [hoverPosition, setHoverPosition] = useState(0);
   const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
@@ -132,6 +147,68 @@ export function VideoControls({
     onVolumeChange(percentage);
   };
 
+  const handleProgressHover = (e: any) => {
+    if (!isWeb) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const percentage = x / rect.width;
+    setHoverTime(percentage * duration);
+    setHoverPosition(x);
+  };
+
+  // Keyboard shortcuts for web
+  useEffect(() => {
+    if (!isWeb) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if typing in an input
+      if ((e.target as HTMLElement).tagName === 'INPUT') return;
+
+      switch (e.key) {
+        case ' ':
+        case 'k':
+          e.preventDefault();
+          onPlayPause();
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          onSeek(currentTime - 5);
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          onSeek(currentTime + 5);
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          onVolumeChange(Math.min(1, volume + 0.1));
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          onVolumeChange(Math.max(0, volume - 0.1));
+          break;
+        case 'f':
+          e.preventDefault();
+          onToggleFullscreen();
+          break;
+        case 'm':
+          e.preventDefault();
+          onVolumeChange(volume === 0 ? 1 : 0);
+          break;
+        case 'j':
+          e.preventDefault();
+          onSeek(currentTime - 10);
+          break;
+        case 'l':
+          e.preventDefault();
+          onSeek(currentTime + 10);
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isWeb, currentTime, volume, onPlayPause, onSeek, onVolumeChange, onToggleFullscreen]);
+
   // If locked, only show unlock button
   if (isLocked) {
     return (
@@ -157,6 +234,269 @@ export function VideoControls({
     );
   }
 
+  // YouTube-style layout for web/PC
+  if (isWeb) {
+    return (
+      <Animated.View
+        style={[styles.controlsOverlay, styles.youtubeOverlay, { opacity: fadeAnim }]}
+        // @ts-ignore - web only events
+        onMouseMove={resetHideTimer}
+        onMouseEnter={() => setShowControls(true)}
+      >
+        {/* Gradient overlay at bottom */}
+        <div style={youtubeStyles.gradient} />
+
+        {/* Click area for play/pause */}
+        <TouchableOpacity
+          style={styles.youtubeClickArea}
+          onPress={onPlayPause}
+          activeOpacity={1}
+        />
+
+        {/* Center play button (shows briefly on play/pause) */}
+        {!isPlaying && (
+          <View style={styles.youtubeCenterPlay}>
+            <TouchableOpacity style={styles.youtubeBigPlayButton} onPress={onPlayPause}>
+              <Ionicons name="play" size={48} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Settings/Subtitle menu */}
+        {showSettingsMenu && (
+          <View style={styles.youtubeSettingsMenu}>
+            <Text style={styles.youtubeMenuTitle}>Settings</Text>
+
+            {/* Subtitles section */}
+            <TouchableOpacity
+              style={styles.youtubeMenuItem}
+              onPress={() => {
+                setShowSettingsMenu(false);
+                setShowSubtitleMenu(true);
+              }}
+            >
+              <Ionicons name="text" size={18} color="#fff" />
+              <Text style={styles.youtubeMenuItemText}>Subtitles</Text>
+              <Text style={styles.youtubeMenuItemValue}>
+                {currentSubtitle ? subtitleTracks.find(t => t.url === currentSubtitle)?.lang || 'On' : 'Off'}
+              </Text>
+              <Ionicons name="chevron-forward" size={16} color="#888" />
+            </TouchableOpacity>
+
+            {/* Playback speed placeholder */}
+            <TouchableOpacity style={styles.youtubeMenuItem}>
+              <Ionicons name="speedometer" size={18} color="#fff" />
+              <Text style={styles.youtubeMenuItemText}>Playback speed</Text>
+              <Text style={styles.youtubeMenuItemValue}>Normal</Text>
+              <Ionicons name="chevron-forward" size={16} color="#888" />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Subtitle selection menu */}
+        {showSubtitleMenu && (
+          <View style={styles.youtubeSettingsMenu}>
+            <TouchableOpacity
+              style={styles.youtubeMenuBack}
+              onPress={() => {
+                setShowSubtitleMenu(false);
+                setShowSettingsMenu(true);
+              }}
+            >
+              <Ionicons name="arrow-back" size={18} color="#fff" />
+              <Text style={styles.youtubeMenuTitle}>Subtitles</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.youtubeSubtitleItem, !currentSubtitle && styles.youtubeSubtitleItemActive]}
+              onPress={() => {
+                onSubtitleChange(null);
+                setShowSubtitleMenu(false);
+              }}
+            >
+              {!currentSubtitle && <Ionicons name="checkmark" size={16} color="#fff" style={{ marginRight: 8 }} />}
+              <Text style={styles.youtubeSubtitleText}>Off</Text>
+            </TouchableOpacity>
+
+            {subtitleTracks.map((track, index) => (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  styles.youtubeSubtitleItem,
+                  currentSubtitle === track.url && styles.youtubeSubtitleItemActive,
+                ]}
+                onPress={() => {
+                  onSubtitleChange(track.url);
+                  setShowSubtitleMenu(false);
+                }}
+              >
+                {currentSubtitle === track.url && (
+                  <Ionicons name="checkmark" size={16} color="#fff" style={{ marginRight: 8 }} />
+                )}
+                <Text style={styles.youtubeSubtitleText}>
+                  {track.label || track.lang || `Track ${index + 1}`}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* Bottom controls container */}
+        <View style={styles.youtubeBottomContainer}>
+          {/* Progress bar - full width YouTube style */}
+          <div
+            style={{
+              ...youtubeStyles.progressWrapper,
+              height: isHoveringProgress ? 5 : 3,
+            }}
+            onMouseEnter={() => setIsHoveringProgress(true)}
+            onMouseLeave={() => {
+              setIsHoveringProgress(false);
+              setHoverTime(null);
+            }}
+            onMouseMove={handleProgressHover}
+            onClick={handleProgressClick}
+          >
+            {/* Hover time preview */}
+            {hoverTime !== null && isHoveringProgress && (
+              <div
+                style={{
+                  ...youtubeStyles.hoverPreview,
+                  left: hoverPosition,
+                }}
+              >
+                {formatTime(hoverTime)}
+              </div>
+            )}
+
+            {/* Buffer bar */}
+            <div
+              style={{
+                ...youtubeStyles.progressBar,
+                ...youtubeStyles.progressBuffered,
+                width: `${(buffered / duration) * 100}%`,
+              }}
+            />
+
+            {/* Progress bar */}
+            <div
+              style={{
+                ...youtubeStyles.progressBar,
+                ...youtubeStyles.progressFilled,
+                width: `${(currentTime / duration) * 100}%`,
+              }}
+            />
+
+            {/* Scrubber */}
+            {isHoveringProgress && (
+              <div
+                style={{
+                  ...youtubeStyles.scrubber,
+                  left: `${(currentTime / duration) * 100}%`,
+                }}
+              />
+            )}
+          </div>
+
+          {/* Controls row */}
+          <View style={styles.youtubeControlsRow}>
+            {/* Left controls */}
+            <View style={styles.youtubeLeftControls}>
+              {/* Play/Pause */}
+              <TouchableOpacity style={styles.youtubeButton} onPress={onPlayPause}>
+                <Ionicons name={isPlaying ? 'pause' : 'play'} size={24} color="#fff" />
+              </TouchableOpacity>
+
+              {/* Next button */}
+              {hasNext && (
+                <TouchableOpacity style={styles.youtubeButton} onPress={onNext}>
+                  <Ionicons name="play-skip-forward" size={20} color="#fff" />
+                </TouchableOpacity>
+              )}
+
+              {/* Volume */}
+              <View style={styles.youtubeVolumeContainer}>
+                <TouchableOpacity
+                  style={styles.youtubeButton}
+                  onPress={() => onVolumeChange(volume === 0 ? 1 : 0)}
+                >
+                  <Ionicons
+                    name={volume === 0 ? 'volume-mute' : volume < 0.5 ? 'volume-low' : 'volume-high'}
+                    size={22}
+                    color="#fff"
+                  />
+                </TouchableOpacity>
+                <div
+                  style={youtubeStyles.volumeSlider}
+                  onClick={handleVolumeClick}
+                >
+                  <div style={youtubeStyles.volumeTrack}>
+                    <div
+                      style={{
+                        ...youtubeStyles.volumeFilled,
+                        width: `${volume * 100}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              </View>
+
+              {/* Time */}
+              <Text style={styles.youtubeTime}>
+                {formatTime(currentTime)} / {formatTime(duration)}
+              </Text>
+            </View>
+
+            {/* Right controls */}
+            <View style={styles.youtubeRightControls}>
+              {/* Subtitles button */}
+              <TouchableOpacity
+                style={[styles.youtubeButton, currentSubtitle && styles.youtubeButtonActive]}
+                onPress={() => {
+                  setShowSubtitleMenu(!showSubtitleMenu);
+                  setShowSettingsMenu(false);
+                }}
+              >
+                <Ionicons name="text" size={20} color={currentSubtitle ? '#fff' : '#ccc'} />
+                {currentSubtitle && <View style={styles.youtubeSubtitleIndicator} />}
+              </TouchableOpacity>
+
+              {/* Settings button */}
+              <TouchableOpacity
+                style={styles.youtubeButton}
+                onPress={() => {
+                  setShowSettingsMenu(!showSettingsMenu);
+                  setShowSubtitleMenu(false);
+                }}
+              >
+                <Ionicons name="settings-sharp" size={20} color="#fff" />
+              </TouchableOpacity>
+
+              {/* Picture in Picture */}
+              <TouchableOpacity
+                style={styles.youtubeButton}
+                onPress={() => {
+                  const video = videoRef.current;
+                  if (video && 'requestPictureInPicture' in video) {
+                    (video as any).requestPictureInPicture().catch(console.error);
+                  }
+                }}
+              >
+                <Ionicons name="browsers-outline" size={20} color="#fff" />
+              </TouchableOpacity>
+
+              {/* Fullscreen */}
+              <TouchableOpacity style={styles.youtubeButton} onPress={onToggleFullscreen}>
+                <Ionicons name={isFullscreen ? 'contract' : 'expand'} size={22} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Animated.View>
+    );
+  }
+
+  // Mobile layout (original)
   return (
     <Animated.View
       style={[styles.controlsOverlay, { opacity: fadeAnim }]}
@@ -697,4 +1037,221 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: '#fff',
   },
+
+  // YouTube-style web controls
+  youtubeOverlay: {
+    backgroundColor: 'transparent',
+  },
+  youtubeClickArea: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 48,
+  },
+  youtubeCenterPlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  youtubeBigPlayButton: {
+    width: 68,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  youtubeBottomContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+  },
+  youtubeControlsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    height: 40,
+  },
+  youtubeLeftControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  youtubeRightControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  youtubeButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 20,
+  },
+  youtubeButtonActive: {
+    position: 'relative',
+  },
+  youtubeSubtitleIndicator: {
+    position: 'absolute',
+    bottom: 6,
+    width: 16,
+    height: 3,
+    backgroundColor: '#f00',
+    borderRadius: 2,
+  },
+  youtubeVolumeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  youtubeTime: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '500',
+    marginLeft: 8,
+    fontVariant: ['tabular-nums'],
+  },
+  youtubeSettingsMenu: {
+    position: 'absolute',
+    bottom: 56,
+    right: 12,
+    backgroundColor: 'rgba(28, 28, 28, 0.95)',
+    borderRadius: 12,
+    padding: 8,
+    minWidth: 250,
+    zIndex: 100,
+  },
+  youtubeMenuTitle: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    padding: 8,
+    paddingBottom: 4,
+  },
+  youtubeMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: 6,
+    gap: 12,
+  },
+  youtubeMenuItemText: {
+    color: '#fff',
+    fontSize: 14,
+    flex: 1,
+  },
+  youtubeMenuItemValue: {
+    color: '#aaa',
+    fontSize: 13,
+  },
+  youtubeMenuBack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 8,
+    paddingBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    marginBottom: 4,
+  },
+  youtubeSubtitleItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    paddingLeft: 32,
+    borderRadius: 6,
+  },
+  youtubeSubtitleItemActive: {
+    paddingLeft: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  youtubeSubtitleText: {
+    color: '#fff',
+    fontSize: 14,
+  },
 });
+
+// YouTube-style CSS for web
+const youtubeStyles: Record<string, React.CSSProperties> = {
+  gradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 100,
+    background: 'linear-gradient(transparent, rgba(0, 0, 0, 0.7))',
+    pointerEvents: 'none',
+  },
+  progressWrapper: {
+    position: 'relative',
+    width: '100%',
+    cursor: 'pointer',
+    marginBottom: 8,
+    transition: 'height 0.1s',
+  },
+  progressBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    height: '100%',
+    borderRadius: 2,
+  },
+  progressBuffered: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  progressFilled: {
+    backgroundColor: '#f00',
+    zIndex: 1,
+  },
+  scrubber: {
+    position: 'absolute',
+    top: '50%',
+    width: 13,
+    height: 13,
+    borderRadius: '50%',
+    backgroundColor: '#f00',
+    transform: 'translate(-50%, -50%)',
+    zIndex: 2,
+  },
+  hoverPreview: {
+    position: 'absolute',
+    bottom: 16,
+    transform: 'translateX(-50%)',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    color: '#fff',
+    padding: '4px 8px',
+    borderRadius: 4,
+    fontSize: 12,
+    fontWeight: '500',
+    pointerEvents: 'none',
+    zIndex: 10,
+  },
+  volumeSlider: {
+    width: 52,
+    height: 20,
+    display: 'flex',
+    alignItems: 'center',
+    cursor: 'pointer',
+    marginLeft: 4,
+  },
+  volumeTrack: {
+    width: '100%',
+    height: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 2,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  volumeFilled: {
+    height: '100%',
+    backgroundColor: '#fff',
+  },
+};

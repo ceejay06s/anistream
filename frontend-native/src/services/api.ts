@@ -1,5 +1,4 @@
-import axios from 'axios';
-import { Platform } from 'react-native';
+import axios, { AxiosError } from 'axios';
 
 // Use environment variable for production, fallback to localhost for development
 const getBaseUrl = () => {
@@ -22,7 +21,42 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 15000,
 });
+
+// Retry logic for failed requests
+const MAX_RETRIES = 2;
+const RETRY_DELAY = 1000;
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError) => {
+    const config = error.config as any;
+
+    // Don't retry if no config or already retried max times
+    if (!config || config._retryCount >= MAX_RETRIES) {
+      return Promise.reject(error);
+    }
+
+    // Only retry on 500 errors or network errors
+    const shouldRetry =
+      error.response?.status === 500 ||
+      error.response?.status === 502 ||
+      error.response?.status === 503 ||
+      !error.response;
+
+    if (!shouldRetry) {
+      return Promise.reject(error);
+    }
+
+    config._retryCount = (config._retryCount || 0) + 1;
+
+    // Wait before retrying
+    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * config._retryCount));
+
+    return api(config);
+  }
+);
 
 export interface Anime {
   id: string;
@@ -172,28 +206,27 @@ export const streamingApi = {
     });
     const data = response.data.data || { sources: [] };
 
-    // On web, proxy URLs through backend to handle CORS
-    if (Platform.OS === 'web') {
-      // Proxy video sources
-      if (data.sources) {
-        data.sources = data.sources.map((source: StreamingSource) => {
-          if (source.isM3U8 && source.url) {
-            const proxyUrl = `${API_BASE_URL}/api/streaming/proxy?url=${encodeURIComponent(source.url)}`;
-            return { ...source, url: proxyUrl };
-          }
-          return source;
-        });
-      }
-      // Proxy subtitle tracks
-      if (data.tracks) {
-        data.tracks = data.tracks.map((track: { url: string; lang: string }) => {
-          if (track.url) {
-            const proxyUrl = `${API_BASE_URL}/api/streaming/proxy?url=${encodeURIComponent(track.url)}`;
-            return { ...track, url: proxyUrl };
-          }
-          return track;
-        });
-      }
+    // Proxy URLs through backend to handle CORS and required headers
+    // This is needed for both web (CORS) and mobile (some servers block direct access)
+    // Proxy video sources
+    if (data.sources) {
+      data.sources = data.sources.map((source: StreamingSource) => {
+        if (source.isM3U8 && source.url) {
+          const proxyUrl = `${API_BASE_URL}/api/streaming/proxy?url=${encodeURIComponent(source.url)}`;
+          return { ...source, url: proxyUrl };
+        }
+        return source;
+      });
+    }
+    // Proxy subtitle tracks
+    if (data.tracks) {
+      data.tracks = data.tracks.map((track: { url: string; lang: string }) => {
+        if (track.url) {
+          const proxyUrl = `${API_BASE_URL}/api/streaming/proxy?url=${encodeURIComponent(track.url)}`;
+          return { ...track, url: proxyUrl };
+        }
+        return track;
+      });
     }
 
     return data;

@@ -15,10 +15,31 @@ const firebaseConfig = {
 };
 
 const { initializeApp } = require('firebase/app');
-const { getAuth } = require('firebase/auth');
 
 app = initializeApp(firebaseConfig);
-auth = getAuth(app);
+
+// Initialize auth with persistence
+if (Platform.OS === 'web') {
+  const { getAuth } = require('firebase/auth');
+  auth = getAuth(app);
+} else {
+  // Mobile: Use AsyncStorage for session persistence
+  // Use try-catch to handle cases where auth is already initialized (hot reload, etc.)
+  const { initializeAuth, getReactNativePersistence, getAuth } = require('firebase/auth');
+  const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+  try {
+    auth = initializeAuth(app, {
+      persistence: getReactNativePersistence(AsyncStorage),
+    });
+  } catch (error: any) {
+    // Auth already initialized, just get the existing instance
+    if (error.code === 'auth/already-initialized') {
+      auth = getAuth(app);
+    } else {
+      throw error;
+    }
+  }
+}
 
 if (Platform.OS === 'web') {
   const { getAnalytics, isSupported } = require('firebase/analytics');

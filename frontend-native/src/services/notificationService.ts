@@ -80,7 +80,10 @@ export const notificationService = {
     if (Platform.OS !== 'web') {
       try {
         const Notifications = require('expo-notifications');
-        const token = await Notifications.getExpoPushTokenAsync();
+        const Constants = require('expo-constants');
+        // Get projectId from app config or use the hardcoded one for EAS builds
+        const projectId = Constants.default?.expoConfig?.extra?.eas?.projectId || '1450dbd9-07d7-4a77-ba56-622510e6acfb';
+        const token = await Notifications.getExpoPushTokenAsync({ projectId });
         return token.data;
       } catch (err) {
         console.error('Failed to get Expo push token:', err);
@@ -99,8 +102,8 @@ export const notificationService = {
     }
 
     const token = await this.getFCMToken();
-    if (token && Platform.OS === 'web' && app) {
-      // Save token to Firestore for the user
+    if (token && app) {
+      // Save token to Firestore for the user (all platforms)
       try {
         const { getFirestore, doc, setDoc } = require('firebase/firestore');
         const db = getFirestore(app);
@@ -109,7 +112,7 @@ export const notificationService = {
           platform: Platform.OS,
           updatedAt: Date.now(),
         });
-        console.log('Push token registered');
+        console.log('Push token registered for', Platform.OS);
       } catch (err) {
         console.error('Failed to save push token:', err);
       }

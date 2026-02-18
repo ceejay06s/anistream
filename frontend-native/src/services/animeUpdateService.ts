@@ -6,7 +6,7 @@ import { userNotificationService } from './userNotificationService';
 
 // Lazy initialization
 function getDb() {
-  if (Platform.OS !== 'web' || !app) {
+  if (!app) {
     return null;
   }
   const { getFirestore } = require('firebase/firestore');
