@@ -4,7 +4,7 @@ import { userNotificationService } from './userNotificationService';
 
 // Lazy initialization to avoid module load order issues
 function getDb() {
-  if (Platform.OS !== 'web' || !app) {
+  if (!app) {
     return null;
   }
   const { getFirestore } = require('firebase/firestore');
@@ -12,7 +12,7 @@ function getDb() {
 }
 
 function getStorage() {
-  if (Platform.OS !== 'web' || !app) {
+  if (!app) {
     return null;
   }
   const { getStorage } = require('firebase/storage');

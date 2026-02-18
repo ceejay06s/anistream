@@ -65,13 +65,21 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="watchlist"
+        options={{
+          title: 'Watch List',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="bookmark-outline" size={22} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="community"
         options={{
           title: 'Community',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="chatbubbles-outline" size={22} color={color} />
           ),
-          href: user ? '/community' : null, // Hide tab if not logged in
         }}
       />
       <Tabs.Screen

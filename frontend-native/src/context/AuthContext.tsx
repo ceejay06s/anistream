@@ -26,6 +26,7 @@ interface AuthContextType {
   deleteAccount: () => Promise<void>;
   reauthenticate: (email: string, password: string) => Promise<void>;
   setPassword: (password: string) => Promise<void>;
+  sendPasswordReset: (email: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -85,6 +86,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     const { signOut: firebaseSignOut } = require('firebase/auth');
     await firebaseSignOut(auth);
+  };
+
+  const sendPasswordReset = async (email: string) => {
+    if (!auth) {
+      throw new Error('Auth not available');
+    }
+    const { sendPasswordResetEmail } = require('firebase/auth');
+    await sendPasswordResetEmail(auth, email);
   };
 
   const signInWithGoogle = async () => {
@@ -241,6 +250,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       deleteAccount,
       reauthenticate,
       setPassword,
+      sendPasswordReset,
     }}>
       {children}
     </AuthContext.Provider>

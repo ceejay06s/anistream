@@ -58,6 +58,7 @@ export default function ProfileScreen() {
     deleteAccount,
     reauthenticate,
     setPassword,
+    sendPasswordReset,
   } = useAuth();
 
   const [authMode, setAuthMode] = useState<AuthMode>('passwordless');
@@ -249,6 +250,30 @@ export default function ProfileScreen() {
       setPasswordInput('');
     } catch (err: any) {
       setError(err.message || 'An error occurred');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setError('Please enter your email address first');
+      return;
+    }
+    setError('');
+    setSuccess('');
+    setSubmitting(true);
+    try {
+      await sendPasswordReset(email);
+      setSuccess('Password reset email sent! Check your inbox.');
+    } catch (err: any) {
+      if (err.code === 'auth/user-not-found') {
+        setError('No account found with this email address');
+      } else if (err.code === 'auth/invalid-email') {
+        setError('Please enter a valid email address');
+      } else {
+        setError(err.message || 'Failed to send reset email');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -828,88 +853,9 @@ export default function ProfileScreen() {
   );
 
 
-  // Bug Report Modal
-  const BugReportModal = () => (
-    <Modal visible={showBugReport} animationType="slide" transparent statusBarTranslucent hardwareAccelerated>
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Report a Bug</Text>
-            <TouchableOpacity onPress={() => setShowBugReport(false)}>
-              <Ionicons name="close" size={24} color="#fff" />
-            </TouchableOpacity>
-          </View>
-          <View style={styles.modalBody}>
-            <Text style={styles.bugReportLabel}>Describe the issue:</Text>
-            <TextInput
-              style={styles.bugReportInput}
-              multiline
-              numberOfLines={6}
-              placeholder="Please describe the bug in detail..."
-              placeholderTextColor="#666"
-              value={bugReportText}
-              onChangeText={setBugReportText}
-            />
-            <TouchableOpacity style={styles.submitBugButton} onPress={handleBugReport}>
-              <Text style={styles.submitBugButtonText}>Send Report</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
+  // Bug Report Modal - rendered inline to prevent TextInput issues
 
-  // Change Email Modal
-  const ChangeEmailModal = () => (
-    <Modal visible={showChangeEmail} animationType="slide" transparent statusBarTranslucent hardwareAccelerated onRequestClose={() => setShowChangeEmail(false)}>
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Change Email</Text>
-            <TouchableOpacity onPress={() => setShowChangeEmail(false)}>
-              <Ionicons name="close" size={24} color="#fff" />
-            </TouchableOpacity>
-          </View>
-          <View style={styles.modalBody}>
-            <Text style={styles.inputLabel}>Current Email</Text>
-            <Text style={styles.currentValueText}>{user?.email || 'No email'}</Text>
-            <Text style={styles.inputLabel}>New Email</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Enter new email"
-              placeholderTextColor="#666"
-              value={newEmail}
-              onChangeText={setNewEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-            />
-            <Text style={styles.inputLabel}>Current Password</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Enter your password to verify"
-              placeholderTextColor="#666"
-              value={currentPassword}
-              onChangeText={setCurrentPassword}
-              secureTextEntry
-            />
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
-            {success ? <Text style={styles.successText}>{success}</Text> : null}
-            <TouchableOpacity
-              style={[styles.modalButton, updatingAccount && styles.modalButtonDisabled]}
-              onPress={handleChangeEmail}
-              disabled={updatingAccount}
-            >
-              {updatingAccount ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.modalButtonText}>Update Email</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
+  // Change Email Modal - rendered inline to prevent TextInput issues
 
   // Change Password Modal
   const ChangePasswordModal = () => (
@@ -1311,9 +1257,91 @@ export default function ProfileScreen() {
   if (user) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
+        {/* FAQ Modal */}
         <FAQModal />
-        <BugReportModal />
-        <ChangeEmailModal />
+
+        {/* Bug Report Modal - Inline to prevent TextInput glitches */}
+        <Modal visible={showBugReport} animationType="slide" transparent statusBarTranslucent hardwareAccelerated onRequestClose={() => setShowBugReport(false)}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Report a Bug</Text>
+                <TouchableOpacity onPress={() => setShowBugReport(false)}>
+                  <Ionicons name="close" size={24} color="#fff" />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.modalBody}>
+                <Text style={styles.bugReportLabel}>Describe the issue:</Text>
+                <TextInput
+                  key="bug-report-input"
+                  style={styles.bugReportInput}
+                  multiline
+                  numberOfLines={6}
+                  placeholder="Please describe the bug in detail..."
+                  placeholderTextColor="#666"
+                  value={bugReportText}
+                  onChangeText={setBugReportText}
+                />
+                <TouchableOpacity style={styles.submitBugButton} onPress={handleBugReport}>
+                  <Text style={styles.submitBugButtonText}>Send Report</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Change Email Modal - Inline to prevent TextInput glitches */}
+        <Modal visible={showChangeEmail} animationType="slide" transparent statusBarTranslucent hardwareAccelerated onRequestClose={() => setShowChangeEmail(false)}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Change Email</Text>
+                <TouchableOpacity onPress={() => setShowChangeEmail(false)}>
+                  <Ionicons name="close" size={24} color="#fff" />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.modalBody}>
+                <Text style={styles.inputLabel}>Current Email</Text>
+                <Text style={styles.currentValueText}>{user?.email || 'No email'}</Text>
+                <Text style={styles.inputLabel}>New Email</Text>
+                <TextInput
+                  key="new-email-input"
+                  style={styles.modalInput}
+                  placeholder="Enter new email"
+                  placeholderTextColor="#666"
+                  value={newEmail}
+                  onChangeText={setNewEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                />
+                <Text style={styles.inputLabel}>Current Password</Text>
+                <TextInput
+                  key="email-password-input"
+                  style={styles.modalInput}
+                  placeholder="Enter your password to verify"
+                  placeholderTextColor="#666"
+                  value={currentPassword}
+                  onChangeText={setCurrentPassword}
+                  secureTextEntry
+                />
+                {error ? <Text style={styles.errorText}>{error}</Text> : null}
+                {success ? <Text style={styles.successText}>{success}</Text> : null}
+                <TouchableOpacity
+                  style={[styles.modalButton, updatingAccount && styles.modalButtonDisabled]}
+                  onPress={handleChangeEmail}
+                  disabled={updatingAccount}
+                >
+                  {updatingAccount ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.modalButtonText}>Update Email</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
         <ChangePasswordModal />
         <SetPasswordModal />
         <UpdateProfileModal />
@@ -1595,7 +1623,7 @@ export default function ProfileScreen() {
                 <Text style={styles.signOutTextFull}>Sign Out</Text>
               </TouchableOpacity>
 
-              <Text style={styles.versionText}>AniStream v1.0.0</Text>
+              <Text style={styles.versionText}>AniStream v2.0.4</Text>
             </View>
           )}
         </ScrollView>
@@ -1607,7 +1635,36 @@ export default function ProfileScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <FAQModal />
-      <BugReportModal />
+
+      {/* Bug Report Modal - Inline to prevent TextInput glitches */}
+      <Modal visible={showBugReport} animationType="slide" transparent statusBarTranslucent hardwareAccelerated onRequestClose={() => setShowBugReport(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Report a Bug</Text>
+              <TouchableOpacity onPress={() => setShowBugReport(false)}>
+                <Ionicons name="close" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.modalBody}>
+              <Text style={styles.bugReportLabel}>Describe the issue:</Text>
+              <TextInput
+                key="bug-report-input-login"
+                style={styles.bugReportInput}
+                multiline
+                numberOfLines={6}
+                placeholder="Please describe the bug in detail..."
+                placeholderTextColor="#666"
+                value={bugReportText}
+                onChangeText={setBugReportText}
+              />
+              <TouchableOpacity style={styles.submitBugButton} onPress={handleBugReport}>
+                <Text style={styles.submitBugButtonText}>Send Report</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
@@ -1681,6 +1738,17 @@ export default function ProfileScreen() {
                 secureTextEntry
               />
             </View>
+          )}
+
+          {/* Forgot Password Link - only show on login */}
+          {authMode === 'login' && (
+            <TouchableOpacity
+              style={styles.forgotPasswordButton}
+              onPress={handleForgotPassword}
+              disabled={submitting}
+            >
+              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+            </TouchableOpacity>
           )}
 
           {/* Submit Button */}
@@ -2097,7 +2165,7 @@ const styles = StyleSheet.create({
       left: 0,
       right: 0,
       bottom: 0,
-      zIndex: 1000,
+      zIndex: 9999,
     }),
   },
   modalContent: {
@@ -2624,5 +2692,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: 'rgba(229, 9, 20, 0.2)',
+  },
+  forgotPasswordButton: {
+    alignSelf: 'flex-end',
+    marginTop: -8,
+    marginBottom: 8,
+  },
+  forgotPasswordText: {
+    color: '#e50914',
+    fontSize: 14,
   },
 });
