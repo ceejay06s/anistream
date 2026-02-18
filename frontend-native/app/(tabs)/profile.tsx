@@ -715,7 +715,7 @@ export default function ProfileScreen() {
 
   // FAQ Modal
   const FAQModal = () => (
-    <Modal visible={showFAQ} animationType="slide" transparent>
+    <Modal visible={showFAQ} animationType="slide" transparent statusBarTranslucent hardwareAccelerated>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
@@ -830,7 +830,7 @@ export default function ProfileScreen() {
 
   // Bug Report Modal
   const BugReportModal = () => (
-    <Modal visible={showBugReport} animationType="slide" transparent>
+    <Modal visible={showBugReport} animationType="slide" transparent statusBarTranslucent hardwareAccelerated>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
@@ -861,7 +861,7 @@ export default function ProfileScreen() {
 
   // Change Email Modal
   const ChangeEmailModal = () => (
-    <Modal visible={showChangeEmail} animationType="slide" transparent onRequestClose={() => setShowChangeEmail(false)}>
+    <Modal visible={showChangeEmail} animationType="slide" transparent statusBarTranslucent hardwareAccelerated onRequestClose={() => setShowChangeEmail(false)}>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
@@ -913,7 +913,7 @@ export default function ProfileScreen() {
 
   // Change Password Modal
   const ChangePasswordModal = () => (
-    <Modal visible={showChangePassword} animationType="slide" transparent onRequestClose={() => setShowChangePassword(false)}>
+    <Modal visible={showChangePassword} animationType="slide" transparent statusBarTranslucent hardwareAccelerated onRequestClose={() => setShowChangePassword(false)}>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
@@ -971,7 +971,7 @@ export default function ProfileScreen() {
 
   // Set Password Modal (for users who signed in with Google)
   const SetPasswordModal = () => (
-    <Modal visible={showSetPassword} animationType="slide" transparent onRequestClose={() => setShowSetPassword(false)}>
+    <Modal visible={showSetPassword} animationType="slide" transparent statusBarTranslucent hardwareAccelerated onRequestClose={() => setShowSetPassword(false)}>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
@@ -1030,7 +1030,7 @@ export default function ProfileScreen() {
 
   // Update Profile Modal
   const UpdateProfileModal = () => (
-    <Modal visible={showUpdateProfile} animationType="slide" transparent onRequestClose={() => {
+    <Modal visible={showUpdateProfile} animationType="slide" transparent statusBarTranslucent hardwareAccelerated onRequestClose={() => {
       handleRemovePhoto();
       setShowUpdateProfile(false);
     }}>
@@ -1156,7 +1156,7 @@ export default function ProfileScreen() {
 
   // Delete Account Modal
   const DeleteAccountModal = () => (
-    <Modal visible={showDeleteAccount} animationType="slide" transparent onRequestClose={() => setShowDeleteAccount(false)}>
+    <Modal visible={showDeleteAccount} animationType="slide" transparent statusBarTranslucent hardwareAccelerated onRequestClose={() => setShowDeleteAccount(false)}>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
@@ -1223,7 +1223,7 @@ export default function ProfileScreen() {
     const unreadCount = notifications.filter(n => !n.read).length;
 
     return (
-      <Modal visible={showNotifications} animationType="slide" transparent onRequestClose={() => setShowNotifications(false)}>
+      <Modal visible={showNotifications} animationType="slide" transparent statusBarTranslucent hardwareAccelerated onRequestClose={() => setShowNotifications(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -2091,6 +2091,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.8)',
     justifyContent: 'flex-end',
+    ...(Platform.OS === 'web' && {
+      position: 'fixed' as any,
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 1000,
+    }),
   },
   modalContent: {
     backgroundColor: '#1a1a1a',

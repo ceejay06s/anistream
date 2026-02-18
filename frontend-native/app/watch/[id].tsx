@@ -12,6 +12,7 @@ import {
   FlatList,
   Image,
   KeyboardAvoidingView,
+  useWindowDimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -102,19 +103,54 @@ export default function WatchScreen() {
   const currentServer = wsStatus.currentServer;
   const serverIndex = wsStatus.serverIndex;
   const totalServers = wsStatus.totalServers;
-  const iframeFallback = wsStatus.iframeFallback;
   const fromCache = wsStatus.fromCache;
 
-  // State for iframe mode
-  const [useIframe, setUseIframe] = useState(false);
+  // Timeout state for auto-retry with 30-second limit
+  const [retryTimedOut, setRetryTimedOut] = useState(false);
+  const [retryElapsed, setRetryElapsed] = useState(0);
+  const retryStartTimeRef = useRef<number | null>(null);
+  const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Auto-switch to iframe if we get iframe fallback and no sources
+  // Start/stop retry timer based on loading state
   useEffect(() => {
-    if (iframeFallback && !selectedSource && !loading) {
-      console.log('Auto-switching to iframe fallback');
-      setUseIframe(true);
+    if (loading && !selectedSource) {
+      // Start the retry timer
+      retryStartTimeRef.current = Date.now();
+      setRetryTimedOut(false);
+      setRetryElapsed(0);
+
+      retryTimerRef.current = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - (retryStartTimeRef.current || Date.now())) / 1000);
+        setRetryElapsed(elapsed);
+
+        if (elapsed >= 30) {
+          // Timeout reached - stop trying
+          setRetryTimedOut(true);
+          if (retryTimerRef.current) {
+            clearInterval(retryTimerRef.current);
+            retryTimerRef.current = null;
+          }
+        }
+      }, 1000);
+    } else {
+      // Stop the timer when not loading or source found
+      if (retryTimerRef.current) {
+        clearInterval(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+      if (selectedSource) {
+        setRetryTimedOut(false);
+        setRetryElapsed(0);
+      }
     }
-  }, [iframeFallback, selectedSource, loading]);
+
+    return () => {
+      if (retryTimerRef.current) {
+        clearInterval(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+    };
+  }, [loading, selectedSource]);
 
   // Load episodes list for navigation
   useEffect(() => {
@@ -229,12 +265,9 @@ export default function WatchScreen() {
     if (!id) return;
     try {
       setLoadingPosts(true);
-      const allPosts = await communityService.getPosts(50);
-      // Filter posts for this anime (episode-specific filtering can be added later)
-      const episodePosts = allPosts.filter(
-        post => post.animeId === id
-      );
-      setPosts(episodePosts);
+      // Fetch posts for this specific anime
+      const animePosts = await communityService.getPostsByAnime(id, 50);
+      setPosts(animePosts);
     } catch (err) {
       console.error('Failed to load posts:', err);
     } finally {
@@ -526,346 +559,480 @@ export default function WatchScreen() {
     );
   }
 
-  return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView style={styles.scrollView}>
-        {/* Header - only show on native (web has controls embedded in player) */}
-        {Platform.OS !== 'web' && (
-          <View style={styles.header}>
-            <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-              <Ionicons name="arrow-back" size={24} color="#fff" />
-              <Text style={styles.backText}>Back</Text>
-            </TouchableOpacity>
-            <Text style={styles.episodeTitle}>Episode {episodeNumber}</Text>
-          </View>
-        )}
+  const isWeb = Platform.OS === 'web';
+  const { width: windowWidth } = useWindowDimensions();
+  // Desktop layout only for wide screens (>1024px)
+  const isDesktopWeb = isWeb && windowWidth > 1024;
 
-        {/* Resume prompt */}
-        {showResumePrompt && resumeTimestamp && (
-          <View style={styles.resumePrompt}>
-            <View style={styles.resumePromptContent}>
-              <Ionicons name="play-circle-outline" size={24} color="#e50914" />
-              <Text style={styles.resumePromptText}>
-                Resume from {watchHistoryService.formatTime(resumeTimestamp)}?
-              </Text>
-            </View>
-            <View style={styles.resumePromptActions}>
-              <TouchableOpacity style={styles.resumeButton} onPress={handleResumeYes}>
-                <Text style={styles.resumeButtonText}>Resume</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.restartButton} onPress={handleResumeNo}>
-                <Text style={styles.restartButtonText}>Start Over</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {/* Video Player */}
-        <View style={styles.playerContainer}>
-          {loading ? (
-            // Loading state - contained within video area
-            <View style={styles.videoLoadingContainer}>
-              <ActivityIndicator size="large" color="#e50914" />
-              <Text style={styles.videoLoadingText}>Loading video...</Text>
-              {retryMessage && (
-                <Text style={styles.videoLoadingMessage}>{retryMessage}</Text>
-              )}
-            </View>
-          ) : useIframe && iframeFallback ? (
-            // Iframe fallback player
-            <View style={styles.iframeContainer}>
-              {Platform.OS === 'web' ? (
-                <iframe
-                  src={iframeFallback}
-                  style={{ width: '100%', height: '100%', border: 'none' }}
-                  allowFullScreen
-                  allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
-                />
-              ) : (
-                <Text style={styles.iframeNotice}>
-                  Iframe playback only available on web.{'\n'}
-                  Please try again later or use web version.
-                </Text>
-              )}
-              <View style={styles.iframeBanner}>
-                <Text style={styles.iframeBannerText}>Playing via HiAnime (iframe fallback)</Text>
-                <TouchableOpacity
-                  style={styles.tryAgainButton}
-                  onPress={() => {
-                    setUseIframe(false);
-                    loadSources();
-                  }}
-                >
-                  <Text style={styles.tryAgainText}>Try Direct Stream</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : selectedSource ? (
-            <VideoPlayer
-              source={selectedSource.url}
-              autoPlay={true}
-              onError={(err) => console.error('Player error:', err)}
-              onReady={() => {
-                console.log('Player ready');
-              }}
-              animeId={id}
-              episodeNumber={episodeNumber}
-              fullEpisodeId={fullEpisodeId}
-              subtitleTracks={streamingData?.tracks?.map(t => ({
-                url: t.url,
-                lang: t.lang,
-                label: t.lang,
-              })) || []}
-              onRequestNewSource={handleRequestNewSource}
-              title={id?.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
-              onBack={handleBack}
-              onCurrentTimeChange={setCurrentVideoTime}
-              onPrevious={handlePreviousEpisode}
-              onNext={handleNextEpisode}
-              hasPrevious={hasPreviousEpisode}
-              hasNext={hasNextEpisode}
-              initialTime={resumeTimestamp || undefined}
+  // Render main content section (video details + community) - for LEFT side on desktop
+  const renderMainContent = () => (
+    <>
+      {/* Episode Navigation - quick prev/next buttons */}
+      {episodes.length > 1 && (
+        <View style={[styles.episodeNavSection, isDesktopWeb && styles.episodeNavSectionWeb]}>
+          <TouchableOpacity
+            style={[styles.episodeNavButton, !hasPreviousEpisode && styles.episodeNavButtonDisabled]}
+            onPress={handlePreviousEpisode}
+            disabled={!hasPreviousEpisode}
+          >
+            <Ionicons
+              name="play-skip-back"
+              size={20}
+              color={hasPreviousEpisode ? '#fff' : '#444'}
             />
-          ) : iframeFallback ? (
-            // Show button to switch to iframe
-            <View style={styles.noSourceContainer}>
-              <Text style={styles.noSourceText}>Direct streaming unavailable</Text>
-              <TouchableOpacity
-                style={styles.useIframeButton}
-                onPress={() => setUseIframe(true)}
-              >
-                <Text style={styles.useIframeText}>Use Iframe Player</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
-        </View>
+            <Text style={[styles.episodeNavText, !hasPreviousEpisode && styles.episodeNavTextDisabled]}>
+              Previous
+            </Text>
+          </TouchableOpacity>
 
-        {/* Episode Navigation */}
-        {episodes.length > 1 && (
-          <View style={styles.episodeNavSection}>
-            <TouchableOpacity
-              style={[styles.episodeNavButton, !hasPreviousEpisode && styles.episodeNavButtonDisabled]}
-              onPress={handlePreviousEpisode}
-              disabled={!hasPreviousEpisode}
-            >
-              <Ionicons
-                name="play-skip-back"
-                size={20}
-                color={hasPreviousEpisode ? '#fff' : '#444'}
-              />
-              <Text style={[styles.episodeNavText, !hasPreviousEpisode && styles.episodeNavTextDisabled]}>
-                Previous
-              </Text>
-            </TouchableOpacity>
-
-            <View style={styles.episodeIndicator}>
-              <Text style={styles.episodeIndicatorText}>
-                EP {currentEpNumber} / {episodes.length}
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              style={[styles.episodeNavButton, !hasNextEpisode && styles.episodeNavButtonDisabled]}
-              onPress={handleNextEpisode}
-              disabled={!hasNextEpisode}
-            >
-              <Text style={[styles.episodeNavText, !hasNextEpisode && styles.episodeNavTextDisabled]}>
-                Next
-              </Text>
-              <Ionicons
-                name="play-skip-forward"
-                size={20}
-                color={hasNextEpisode ? '#fff' : '#444'}
-              />
-            </TouchableOpacity>
+          <View style={styles.episodeIndicator}>
+            <Text style={styles.episodeIndicatorText}>
+              EP {currentEpNumber} / {episodes.length}
+            </Text>
           </View>
-        )}
 
-        {/* Sub/Dub Toggle */}
-        <View style={styles.categorySection}>
-          <Text style={styles.qualityLabel}>Audio:</Text>
+          <TouchableOpacity
+            style={[styles.episodeNavButton, !hasNextEpisode && styles.episodeNavButtonDisabled]}
+            onPress={handleNextEpisode}
+            disabled={!hasNextEpisode}
+          >
+            <Text style={[styles.episodeNavText, !hasNextEpisode && styles.episodeNavTextDisabled]}>
+              Next
+            </Text>
+            <Ionicons
+              name="play-skip-forward"
+              size={20}
+              color={hasNextEpisode ? '#fff' : '#444'}
+            />
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Sub/Dub Toggle */}
+      <View style={[styles.categorySection, isDesktopWeb && styles.categorySectionWeb]}>
+        <Text style={styles.qualityLabel}>Audio:</Text>
+        <View style={styles.qualityOptions}>
+          <TouchableOpacity
+            style={[
+              styles.categoryButton,
+              category === 'sub' && styles.categoryButtonActive,
+            ]}
+            onPress={() => setCategory('sub')}
+          >
+            <Text
+              style={[
+                styles.qualityText,
+                category === 'sub' && styles.qualityTextActive,
+              ]}
+            >
+              SUB
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.categoryButton,
+              category === 'dub' && styles.categoryButtonActive,
+            ]}
+            onPress={() => setCategory('dub')}
+          >
+            <Text
+              style={[
+                styles.qualityText,
+                category === 'dub' && styles.qualityTextActive,
+              ]}
+            >
+              DUB
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Quality Selector */}
+      {streamingData && streamingData.sources.length > 1 && (
+        <View style={[styles.qualitySection, isDesktopWeb && styles.qualitySectionWeb]}>
+          <Text style={styles.qualityLabel}>Quality:</Text>
           <View style={styles.qualityOptions}>
-            <TouchableOpacity
-              style={[
-                styles.categoryButton,
-                category === 'sub' && styles.categoryButtonActive,
-              ]}
-              onPress={() => setCategory('sub')}
-            >
-              <Text
+            {streamingData.sources.map((source, index) => (
+              <TouchableOpacity
+                key={index}
                 style={[
-                  styles.qualityText,
-                  category === 'sub' && styles.qualityTextActive,
+                  styles.qualityButton,
+                  selectedSource?.url === source.url && styles.qualityButtonActive,
                 ]}
+                onPress={() => handleQualityChange(source)}
               >
-                SUB
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.categoryButton,
-                category === 'dub' && styles.categoryButtonActive,
-              ]}
-              onPress={() => setCategory('dub')}
-            >
-              <Text
-                style={[
-                  styles.qualityText,
-                  category === 'dub' && styles.qualityTextActive,
-                ]}
-              >
-                DUB
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Quality Selector */}
-        {streamingData && streamingData.sources.length > 1 && (
-          <View style={styles.qualitySection}>
-            <Text style={styles.qualityLabel}>Quality:</Text>
-            <View style={styles.qualityOptions}>
-              {streamingData.sources.map((source, index) => (
-                <TouchableOpacity
-                  key={index}
+                <Text
                   style={[
-                    styles.qualityButton,
-                    selectedSource?.url === source.url && styles.qualityButtonActive,
+                    styles.qualityText,
+                    selectedSource?.url === source.url && styles.qualityTextActive,
                   ]}
-                  onPress={() => handleQualityChange(source)}
                 >
-                  <Text
-                    style={[
-                      styles.qualityText,
-                      selectedSource?.url === source.url && styles.qualityTextActive,
-                    ]}
-                  >
-                    {source.quality}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {/* Episode Info */}
-        <View style={styles.infoSection}>
-          <Text style={styles.infoLabel}>Now Playing</Text>
-          <Text style={styles.infoText}>Episode {episodeNumber} ({category.toUpperCase()})</Text>
-          <Text style={styles.streamType}>
-            {useWebSocket ? 'WebSocket' : 'REST'} • Server: {currentServer?.toUpperCase() || 'HD-1'}
-            {selectedSource?.isM3U8 ? ' • HLS' : ''}
-            {fromCache ? ' • Cached' : totalServers > 0 ? ` (${serverIndex + 1}/${totalServers})` : ''}
-          </Text>
-          {retryMessage && (
-            <Text style={styles.retryingText}>{retryMessage}</Text>
-          )}
-        </View>
-
-        {/* Community Section */}
-        <View style={styles.communitySection}>
-          <View style={styles.communityHeader}>
-            <Text style={styles.communityTitle}>Community</Text>
-            <View style={styles.communityActions}>
-              <TouchableOpacity
-                style={styles.clipButton}
-                onPress={handleClipScene}
-              >
-                <Ionicons name="videocam" size={18} color="#fff" />
-                <Text style={styles.clipButtonText}>Clip Scene</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.postButton}
-                onPress={() => {
-                  if (showPostModal) return;
-                  setClippedTimestamp(null);
-                  setNewPostContent('');
-                  setShowPostModal(true);
-                }}
-              >
-                <Ionicons name="create-outline" size={18} color="#fff" />
-                <Text style={styles.postButtonText}>Post</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.commentButton}
-                onPress={async () => {
-                  setSelectedPost(null);
-                  await loadComments();
-                  setShowCommentsModal(true);
-                }}
-              >
-                <Ionicons name="chatbubbles-outline" size={18} color="#fff" />
-                <Text style={styles.commentButtonText}>
-                  Comments {comments.length > 0 && `(${comments.length})`}
+                  {source.quality}
                 </Text>
               </TouchableOpacity>
-            </View>
+            ))}
           </View>
+        </View>
+      )}
 
-          {/* Posts List */}
-          {loadingPosts ? (
-            <ActivityIndicator size="small" color="#e50914" style={styles.loadingIndicator} />
-          ) : posts.length > 0 ? (
-            <FlatList
-              data={posts}
-              keyExtractor={(item) => item.id}
-              scrollEnabled={false}
-              renderItem={({ item }) => (
-                <View style={styles.postItem}>
-                  <View style={styles.postHeader}>
-                    {item.userPhoto ? (
-                      <Image source={{ uri: item.userPhoto }} style={styles.postAvatar} />
-                    ) : (
-                      <View style={styles.postAvatarPlaceholder}>
-                        <Ionicons name="person" size={16} color="#888" />
-                      </View>
-                    )}
-                    <View style={styles.postHeaderText}>
-                      <Text style={styles.postUserName}>{item.userName}</Text>
-                      <Text style={styles.postTime}>{communityService.formatTimeAgo(item.createdAt)}</Text>
+      {/* Episode Info */}
+      <View style={[styles.infoSection, isDesktopWeb && styles.infoSectionWeb]}>
+        <Text style={styles.infoLabel}>Now Playing</Text>
+        <Text style={styles.infoText}>Episode {episodeNumber} ({category.toUpperCase()})</Text>
+        <Text style={styles.streamType}>
+          {useWebSocket ? 'WebSocket' : 'REST'} • Server: {currentServer?.toUpperCase() || 'HD-1'}
+          {selectedSource?.isM3U8 ? ' • HLS' : ''}
+          {fromCache ? ' • Cached' : totalServers > 0 ? ` (${serverIndex + 1}/${totalServers})` : ''}
+        </Text>
+        {retryMessage && (
+          <Text style={styles.retryingText}>{retryMessage}</Text>
+        )}
+      </View>
+
+      {/* Community Section */}
+      <View style={[styles.communitySection, isDesktopWeb && styles.communitySectionWeb]}>
+        <View style={styles.communityHeader}>
+          <Text style={styles.communityTitle}>Community</Text>
+          <View style={[styles.communityActions, isDesktopWeb && styles.communityActionsWeb]}>
+            <TouchableOpacity
+              style={styles.clipButton}
+              onPress={handleClipScene}
+            >
+              <Ionicons name="videocam" size={18} color="#fff" />
+              <Text style={styles.clipButtonText}>Clip Scene</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.postButton}
+              onPress={() => {
+                if (showPostModal) return;
+                setClippedTimestamp(null);
+                setNewPostContent('');
+                setShowPostModal(true);
+              }}
+            >
+              <Ionicons name="create-outline" size={18} color="#fff" />
+              <Text style={styles.postButtonText}>Post</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.commentButton}
+              onPress={async () => {
+                setSelectedPost(null);
+                await loadComments();
+                setShowCommentsModal(true);
+              }}
+            >
+              <Ionicons name="chatbubbles-outline" size={18} color="#fff" />
+              <Text style={styles.commentButtonText}>
+                Comments {comments.length > 0 && `(${comments.length})`}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Posts List */}
+        {loadingPosts ? (
+          <ActivityIndicator size="small" color="#e50914" style={styles.loadingIndicator} />
+        ) : posts.length > 0 ? (
+          <FlatList
+            data={posts}
+            keyExtractor={(item) => item.id}
+            scrollEnabled={false}
+            renderItem={({ item }) => (
+              <View style={styles.postItem}>
+                <View style={styles.postHeader}>
+                  {item.userPhoto ? (
+                    <Image source={{ uri: item.userPhoto }} style={styles.postAvatar} />
+                  ) : (
+                    <View style={styles.postAvatarPlaceholder}>
+                      <Ionicons name="person" size={16} color="#888" />
                     </View>
-                  </View>
-                  <Text style={styles.postContent}>{item.content}</Text>
-                  {item.animeName && (
-                    <Text style={styles.postAnime}>📺 {item.animeName}</Text>
                   )}
-                  <View style={styles.postFooter}>
-                    <TouchableOpacity
-                      style={styles.postAction}
-                      onPress={async () => {
-                        if (user) {
-                          await communityService.toggleLike(user.uid, item.id);
-                          loadEpisodePosts();
-                        }
-                      }}
-                    >
-                      <Ionicons
-                        name={user && item.likes.includes(user.uid) ? 'heart' : 'heart-outline'}
-                        size={18}
-                        color={user && item.likes.includes(user.uid) ? '#e50914' : '#888'}
-                      />
-                      <Text style={styles.postActionText}>{item.likes.length}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.postAction}
-                      onPress={async () => {
-                        setSelectedPost(item);
-                        await loadComments(item.id);
-                        setShowCommentsModal(true);
-                      }}
-                    >
-                      <Ionicons name="chatbubble-outline" size={18} color="#888" />
-                      <Text style={styles.postActionText}>{item.commentCount}</Text>
-                    </TouchableOpacity>
+                  <View style={styles.postHeaderText}>
+                    <Text style={styles.postUserName}>{item.userName}</Text>
+                    <Text style={styles.postTime}>{communityService.formatTimeAgo(item.createdAt)}</Text>
                   </View>
                 </View>
-              )}
-            />
-          ) : (
-            <Text style={styles.noPostsText}>No posts yet. Be the first to share your thoughts!</Text>
+                <Text style={styles.postContent}>{item.content}</Text>
+                {item.animeName && (
+                  <Text style={styles.postAnime}>📺 {item.animeName}</Text>
+                )}
+                <View style={styles.postFooter}>
+                  <TouchableOpacity
+                    style={styles.postAction}
+                    onPress={async () => {
+                      if (user) {
+                        await communityService.toggleLike(user.uid, item.id);
+                        loadEpisodePosts();
+                      }
+                    }}
+                  >
+                    <Ionicons
+                      name={user && item.likes.includes(user.uid) ? 'heart' : 'heart-outline'}
+                      size={18}
+                      color={user && item.likes.includes(user.uid) ? '#e50914' : '#888'}
+                    />
+                    <Text style={styles.postActionText}>{item.likes.length}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.postAction}
+                    onPress={async () => {
+                      setSelectedPost(item);
+                      await loadComments(item.id);
+                      setShowCommentsModal(true);
+                    }}
+                  >
+                    <Ionicons name="chatbubble-outline" size={18} color="#888" />
+                    <Text style={styles.postActionText}>{item.commentCount}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          />
+        ) : (
+          <Text style={styles.noPostsText}>No posts yet. Be the first to share your thoughts!</Text>
+        )}
+      </View>
+    </>
+  );
+
+  // Render sidebar content (episode list + recommendations) - for RIGHT side on desktop
+  const renderSidebar = () => (
+    <>
+      {/* Episode List */}
+      <View style={styles.sidebarSection}>
+        <Text style={styles.sidebarTitle}>Episodes</Text>
+        {episodesLoading ? (
+          <ActivityIndicator size="small" color="#e50914" />
+        ) : (
+          <ScrollView style={styles.episodeList} nestedScrollEnabled>
+            {episodes.map((ep) => (
+              <TouchableOpacity
+                key={ep.episodeId}
+                style={[
+                  styles.episodeItem,
+                  ep.number === currentEpNumber && styles.episodeItemActive,
+                ]}
+                onPress={() => navigateToEpisode(ep)}
+              >
+                <Text
+                  style={[
+                    styles.episodeNumber,
+                    ep.number === currentEpNumber && styles.episodeNumberActive,
+                  ]}
+                >
+                  EP {ep.number}
+                </Text>
+                {ep.title && (
+                  <Text
+                    style={[
+                      styles.episodeItemTitle,
+                      ep.number === currentEpNumber && styles.episodeItemTitleActive,
+                    ]}
+                    numberOfLines={2}
+                  >
+                    {ep.title}
+                  </Text>
+                )}
+                {ep.number === currentEpNumber && (
+                  <Ionicons name="play-circle" size={20} color="#e50914" />
+                )}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
+      </View>
+
+      {/* Recommendations */}
+      {animeInfo?.relatedAnimes && animeInfo.relatedAnimes.length > 0 && (
+        <View style={styles.sidebarSection}>
+          <Text style={styles.sidebarTitle}>Related</Text>
+          <ScrollView style={styles.recommendationList} nestedScrollEnabled>
+            {animeInfo.relatedAnimes.slice(0, 10).map((related: any) => (
+              <TouchableOpacity
+                key={related.id}
+                style={styles.recommendationItem}
+                onPress={() => router.push({
+                  pathname: '/detail/[id]',
+                  params: { id: related.id },
+                })}
+              >
+                {related.poster && (
+                  <Image
+                    source={{ uri: related.poster }}
+                    style={styles.recommendationPoster}
+                  />
+                )}
+                <View style={styles.recommendationInfo}>
+                  <Text style={styles.recommendationTitle} numberOfLines={2}>
+                    {related.name}
+                  </Text>
+                  {related.type && (
+                    <Text style={styles.recommendationType}>{related.type}</Text>
+                  )}
+                </View>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+    </>
+  );
+
+  // Render mobile details section (all content stacked)
+  const renderDetailsSection = () => (
+    <>
+      {renderMainContent()}
+    </>
+  );
+
+  // Render video player section
+  const renderVideoPlayer = () => (
+    <View style={[styles.playerContainer, isDesktopWeb && styles.playerContainerWeb]}>
+      {retryTimedOut && !selectedSource ? (
+        // Timeout error state
+        <View style={styles.timeoutContainer}>
+          <Ionicons name="cloud-offline-outline" size={48} color="#e50914" />
+          <Text style={styles.timeoutText}>Could not find a working server</Text>
+          <Text style={styles.timeoutSubtext}>All servers failed to respond</Text>
+          <TouchableOpacity
+            style={styles.retryServerButton}
+            onPress={() => {
+              setRetryTimedOut(false);
+              setRetryElapsed(0);
+              retryStartTimeRef.current = null;
+              if (useWebSocket) {
+                wsRetry();
+              } else {
+                loadSources();
+              }
+            }}
+          >
+            <Ionicons name="refresh" size={20} color="#fff" />
+            <Text style={styles.retryServerButtonText}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
+      ) : loading && !selectedSource ? (
+        // Loading state with retry progress
+        <View style={styles.videoLoadingContainer}>
+          <ActivityIndicator size="large" color="#e50914" />
+          <Text style={styles.videoLoadingText}>Finding working server...</Text>
+          {retryMessage && (
+            <Text style={styles.videoLoadingMessage}>{retryMessage}</Text>
+          )}
+          {retryElapsed > 0 && (
+            <Text style={styles.retryCounterText}>
+              Trying servers... {retryElapsed}s / 30s
+            </Text>
+          )}
+          {totalServers > 0 && (
+            <Text style={styles.serverProgressText}>
+              Server {serverIndex + 1} of {totalServers}
+            </Text>
           )}
         </View>
-      </ScrollView>
+      ) : selectedSource ? (
+        <VideoPlayer
+          source={selectedSource.url}
+          autoPlay={true}
+          onError={(err) => console.error('Player error:', err)}
+          onReady={() => {
+            console.log('Player ready');
+          }}
+          animeId={id}
+          episodeNumber={episodeNumber}
+          fullEpisodeId={fullEpisodeId}
+          subtitleTracks={streamingData?.tracks?.map(t => ({
+            url: t.url,
+            lang: t.lang,
+            label: t.lang,
+          })) || []}
+          onRequestNewSource={handleRequestNewSource}
+          title={id?.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+          onBack={handleBack}
+          onCurrentTimeChange={setCurrentVideoTime}
+          onPrevious={handlePreviousEpisode}
+          onNext={handleNextEpisode}
+          hasPrevious={hasPreviousEpisode}
+          hasNext={hasNextEpisode}
+          initialTime={resumeTimestamp || undefined}
+        />
+      ) : (
+        // No source available - show error
+        <View style={styles.noSourceContainer}>
+          <Ionicons name="videocam-off-outline" size={48} color="#666" />
+          <Text style={styles.noSourceText}>No video source available</Text>
+          <TouchableOpacity
+            style={styles.retryServerButton}
+            onPress={() => {
+              if (useWebSocket) {
+                wsRetry();
+              } else {
+                loadSources();
+              }
+            }}
+          >
+            <Ionicons name="refresh" size={20} color="#fff" />
+            <Text style={styles.retryServerButtonText}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Header - only show on native (web has controls embedded in player) */}
+      {!isWeb && (
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="#fff" />
+            <Text style={styles.backText}>Back</Text>
+          </TouchableOpacity>
+          <Text style={styles.episodeTitle}>Episode {episodeNumber}</Text>
+        </View>
+      )}
+
+      {/* Resume prompt - show above layout on both platforms */}
+      {showResumePrompt && resumeTimestamp && (
+        <View style={[styles.resumePrompt, isDesktopWeb && styles.resumePromptWeb]}>
+          <View style={styles.resumePromptContent}>
+            <Ionicons name="play-circle-outline" size={24} color="#e50914" />
+            <Text style={styles.resumePromptText}>
+              Resume from {watchHistoryService.formatTime(resumeTimestamp)}?
+            </Text>
+          </View>
+          <View style={styles.resumePromptActions}>
+            <TouchableOpacity style={styles.resumeButton} onPress={handleResumeYes}>
+              <Text style={styles.resumeButtonText}>Resume</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.restartButton} onPress={handleResumeNo}>
+              <Text style={styles.restartButtonText}>Start Over</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Desktop Web: Side-by-side layout (3:1 ratio) */}
+      {isDesktopWeb ? (
+        <View style={styles.webLayout}>
+          {/* Left side - Video Player + Details + Community (75%) */}
+          <ScrollView style={styles.webMainSection}>
+            {renderVideoPlayer()}
+            {renderMainContent()}
+          </ScrollView>
+
+          {/* Right side - Episode List + Recommendations (25%) */}
+          <View style={styles.webSidebarSection}>
+            {renderSidebar()}
+          </View>
+        </View>
+      ) : (
+        // Mobile/Tablet/Narrow web: Stacked layout
+        <ScrollView style={styles.scrollView}>
+          {renderVideoPlayer()}
+          {renderDetailsSection()}
+        </ScrollView>
+      )}
 
       {/* Create Post Modal */}
       <Modal
@@ -1078,6 +1245,53 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
     paddingHorizontal: 20,
+  },
+  retryCounterText: {
+    color: '#e50914',
+    marginTop: 12,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  serverProgressText: {
+    color: '#666',
+    marginTop: 4,
+    fontSize: 12,
+  },
+  timeoutContainer: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    backgroundColor: '#111',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  timeoutText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  timeoutSubtext: {
+    color: '#888',
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  retryServerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#e50914',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 20,
+  },
+  retryServerButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   categorySection: {
     padding: 16,
@@ -1403,6 +1617,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.8)',
     justifyContent: 'flex-end',
+    ...(Platform.OS === 'web' && {
+      position: 'fixed' as any,
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 1000,
+    }),
   },
   modalContent: {
     backgroundColor: '#1a1a1a',
@@ -1593,5 +1815,134 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '500',
+  },
+  // Web desktop layout styles (3:1 ratio)
+  webLayout: {
+    flex: 1,
+    flexDirection: 'row' as const,
+    gap: 16,
+    padding: 16,
+  },
+  webMainSection: {
+    flex: 3,
+    minWidth: 0,
+  },
+  webSidebarSection: {
+    flex: 1,
+    minWidth: 280,
+    maxWidth: 400,
+    backgroundColor: '#0a0a0a',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1a1a1a',
+    maxHeight: '100%',
+  },
+  playerContainerWeb: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  resumePromptWeb: {
+    marginHorizontal: 16,
+    marginTop: 8,
+  },
+  episodeNavSectionWeb: {
+    paddingHorizontal: 0,
+    borderBottomWidth: 0,
+  },
+  categorySectionWeb: {
+    paddingHorizontal: 0,
+  },
+  qualitySectionWeb: {
+    paddingHorizontal: 0,
+  },
+  infoSectionWeb: {
+    paddingHorizontal: 0,
+  },
+  communitySectionWeb: {
+    paddingHorizontal: 0,
+    borderTopWidth: 0,
+  },
+  communityActionsWeb: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+  },
+  // Sidebar styles
+  sidebarSection: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1a1a1a',
+  },
+  sidebarTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  episodeList: {
+    maxHeight: 300,
+  },
+  episodeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    backgroundColor: '#111',
+    borderRadius: 8,
+    marginBottom: 8,
+    gap: 10,
+  },
+  episodeItemActive: {
+    backgroundColor: '#1a1a1a',
+    borderWidth: 1,
+    borderColor: '#e50914',
+  },
+  episodeNumber: {
+    color: '#888',
+    fontSize: 13,
+    fontWeight: '600',
+    minWidth: 45,
+  },
+  episodeNumberActive: {
+    color: '#e50914',
+  },
+  episodeItemTitle: {
+    flex: 1,
+    color: '#888',
+    fontSize: 12,
+  },
+  episodeItemTitleActive: {
+    color: '#fff',
+  },
+  recommendationList: {
+    maxHeight: 400,
+  },
+  recommendationItem: {
+    flexDirection: 'row',
+    padding: 8,
+    backgroundColor: '#111',
+    borderRadius: 8,
+    marginBottom: 8,
+    gap: 10,
+  },
+  recommendationPoster: {
+    width: 50,
+    height: 70,
+    borderRadius: 4,
+    backgroundColor: '#222',
+  },
+  recommendationInfo: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  recommendationTitle: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  recommendationType: {
+    color: '#888',
+    fontSize: 11,
+    marginTop: 4,
   },
 });
