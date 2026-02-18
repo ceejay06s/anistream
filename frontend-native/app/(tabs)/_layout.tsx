@@ -58,19 +58,13 @@ export default function TabLayout() {
       <Tabs.Screen
         name="search"
         options={{
-          title: 'Search',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="search-outline" size={22} color={color} />
-          ),
+          href: null,
         }}
       />
       <Tabs.Screen
         name="watchlist"
         options={{
-          title: 'Watch List',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="bookmark-outline" size={22} color={color} />
-          ),
+          href: null,
         }}
       />
       <Tabs.Screen

@@ -9,6 +9,7 @@
     "web": "expo start --web",
     "build:web": "npx expo export --platform web",
     "deploy:web": "npx expo export --platform web && eas deploy --platform web",
+    "deploy:firebase": "npx expo export --platform web && firebase deploy --only hosting",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"

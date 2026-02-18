@@ -7,6 +7,7 @@ import {
   FlatList,
   Image,
   TouchableOpacity,
+  Pressable,
   ActivityIndicator,
   Platform,
   Dimensions,
@@ -269,17 +270,33 @@ export default function HomeScreen() {
   );
 
   const renderAnimeCard = ({ item }: { item: Anime }) => (
-    <TouchableOpacity
-      style={styles.animeCard}
+    <Pressable
+      style={({ pressed, hovered }: any) => [
+        styles.animeCard,
+        (hovered || pressed) && styles.animeCardHovered,
+      ]}
       onPress={() => handleAnimePress(item)}
-      activeOpacity={0.8}
     >
-      <Image
-        source={{ uri: getProxiedImageUrl(item.poster) || '' }}
-        style={styles.animePoster}
-        resizeMode="cover"
-      />
-    </TouchableOpacity>
+      {({ pressed, hovered }: any) => (
+        <>
+          <Image
+            source={{ uri: getProxiedImageUrl(item.poster) || '' }}
+            style={styles.animePoster}
+            resizeMode="cover"
+          />
+          {(hovered || pressed) && (
+            <LinearGradient
+              colors={['transparent', 'rgba(0,0,0,0.9)']}
+              style={styles.animeCardOverlay}
+            >
+              <Text style={styles.animeCardTitle} numberOfLines={2}>
+                {item.name}
+              </Text>
+            </LinearGradient>
+          )}
+        </>
+      )}
+    </Pressable>
   );
 
   const renderCategory = (category: CategoryData) => {
@@ -514,6 +531,12 @@ export default function HomeScreen() {
               style={styles.appLogo}
               resizeMode="contain"
             />
+            <TouchableOpacity
+              style={styles.headerSearchButton}
+              onPress={() => router.push('/(tabs)/search')}
+            >
+              <Ionicons name="search" size={24} color="#fff" />
+            </TouchableOpacity>
           </View>
         </SafeAreaView>
       </LinearGradient>
@@ -542,12 +565,16 @@ const styles = StyleSheet.create({
   appHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: Platform.OS === 'web' ? 48 : 12,
     paddingVertical: Platform.OS === 'web' ? 16 : 8,
   },
   appLogo: {
     width: Platform.OS === 'web' ? 160 : 140,
     height: Platform.OS === 'web' ? 48 : 40,
+  },
+  headerSearchButton: {
+    padding: 8,
   },
   centered: {
     flex: 1,
@@ -756,6 +783,7 @@ const styles = StyleSheet.create({
     marginHorizontal: Platform.OS === 'web' ? 4 : 3,
     borderRadius: 6,
     overflow: 'hidden',
+    position: 'relative',
     ...Platform.select({
       web: {
         transition: 'transform 0.2s ease',
@@ -764,11 +792,34 @@ const styles = StyleSheet.create({
       default: {},
     }),
   },
+  animeCardHovered: {
+    transform: [{ scale: 1.04 }],
+    zIndex: 10,
+  },
   animePoster: {
     width: '100%',
     aspectRatio: 2 / 3,
     backgroundColor: '#1a1a1a',
     borderRadius: 6,
+  },
+  animeCardOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '50%',
+    justifyContent: 'flex-end',
+    padding: 8,
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 6,
+  },
+  animeCardTitle: {
+    color: '#fff',
+    fontSize: Platform.OS === 'web' ? 12 : 10,
+    fontWeight: '600',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   // News styles
   newsList: {

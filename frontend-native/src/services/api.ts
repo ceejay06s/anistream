@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 
 // Use environment variable for production, fallback to localhost for development
 const getBaseUrl = () => {
@@ -21,7 +21,42 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 15000,
 });
+
+// Retry logic for failed requests
+const MAX_RETRIES = 2;
+const RETRY_DELAY = 1000;
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError) => {
+    const config = error.config as any;
+
+    // Don't retry if no config or already retried max times
+    if (!config || config._retryCount >= MAX_RETRIES) {
+      return Promise.reject(error);
+    }
+
+    // Only retry on 500 errors or network errors
+    const shouldRetry =
+      error.response?.status === 500 ||
+      error.response?.status === 502 ||
+      error.response?.status === 503 ||
+      !error.response;
+
+    if (!shouldRetry) {
+      return Promise.reject(error);
+    }
+
+    config._retryCount = (config._retryCount || 0) + 1;
+
+    // Wait before retrying
+    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * config._retryCount));
+
+    return api(config);
+  }
+);
 
 export interface Anime {
   id: string;

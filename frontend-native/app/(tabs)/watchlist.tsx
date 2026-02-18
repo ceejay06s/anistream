@@ -86,6 +86,7 @@ export default function WatchlistScreen() {
 
   const renderAnimeItem = ({ item }: { item: SavedAnime }) => (
     <TouchableOpacity
+      key={item.animeId}
       style={styles.animeCard}
       onPress={() => router.push(`/detail/${item.animeId}`)}
       activeOpacity={0.7}
@@ -165,6 +166,7 @@ export default function WatchlistScreen() {
             const isActive = collectionTab === item;
             return (
               <TouchableOpacity
+                key={item}
                 style={[styles.tab, isActive && styles.tabActive]}
                 onPress={() => setCollectionTab(item)}
               >
