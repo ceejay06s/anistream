@@ -714,7 +714,6 @@ const styles = StyleSheet.create({
   // Section styles
   section: {
     marginBottom: Platform.OS === 'web' ? 32 : 28,
-    marginTop: Platform.OS === 'web' ? 0 : 20,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -821,9 +820,8 @@ const styles = StyleSheet.create({
   },
   // Continue Watching Styles - Netflix Style
   continueWatchingSection: {
-    marginTop: Platform.OS === 'web' ? -40 : 0,
-    marginBottom: Platform.OS === 'web' ? 24 : 40,
-    paddingTop: Platform.OS === 'web' ? 0 : 16,
+    marginTop: 40,
+    marginBottom: 80,
     paddingBottom: 16,
     backgroundColor: '#000',
   },
