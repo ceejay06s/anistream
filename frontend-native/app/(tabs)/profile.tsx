@@ -1385,40 +1385,77 @@ export default function ProfileScreen() {
         <DeleteAccountModal />
 
         <ScrollView>
-          {/* Profile Header */}
-          <View style={styles.profileHeader}>
-            <View style={styles.profileHeaderTop}>
-              <View style={styles.avatarContainer}>
-                {user.photoURL ? (
-                  <Image source={{ uri: user.photoURL }} style={styles.avatar} />
-                ) : (
-                  <Ionicons name="person-circle" size={80} color="#e50914" />
-                )}
+          {/* Netflix-style Profile Header */}
+          <View style={styles.netflixHeader}>
+            <View style={styles.netflixHeaderTop}>
+              <Text style={styles.netflixHeaderTitle}>Profile</Text>
+              <View style={styles.netflixHeaderActions}>
+                <NotificationBell onPress={() => setShowNotifications(true)} />
+                <TouchableOpacity style={styles.signOutIcon} onPress={handleSignOut}>
+                  <Ionicons name="log-out-outline" size={24} color="#fff" />
+                </TouchableOpacity>
               </View>
-              <NotificationBell onPress={() => setShowNotifications(true)} />
             </View>
-            <Text style={styles.userName}>{user.displayName || 'User'}</Text>
-            <Text style={styles.userEmail}>{user.email}</Text>
+
+            {/* Netflix-style Avatar with Edit Button */}
+            <TouchableOpacity
+              style={styles.netflixAvatarContainer}
+              onPress={() => {
+                setNewDisplayName(user?.displayName || '');
+                setSelectedPhotoFile(null);
+                setPhotoPreview(null);
+                setIsDragging(false);
+                setShowUpdateProfile(true);
+              }}
+              activeOpacity={0.8}
+            >
+              {user.photoURL ? (
+                <Image source={{ uri: user.photoURL }} style={styles.netflixAvatar} />
+              ) : (
+                <View style={styles.netflixAvatarPlaceholder}>
+                  <Ionicons name="person" size={60} color="#fff" />
+                </View>
+              )}
+              <View style={styles.netflixEditBadge}>
+                <Ionicons name="pencil" size={14} color="#fff" />
+              </View>
+            </TouchableOpacity>
+
+            <Text style={styles.netflixUserName}>{user.displayName || 'User'}</Text>
+            <Text style={styles.netflixUserEmail}>{user.email}</Text>
+
+            {/* Manage Profile Button */}
+            <TouchableOpacity
+              style={styles.manageProfileButton}
+              onPress={() => {
+                setNewDisplayName(user?.displayName || '');
+                setSelectedPhotoFile(null);
+                setPhotoPreview(null);
+                setIsDragging(false);
+                setShowUpdateProfile(true);
+              }}
+            >
+              <Ionicons name="pencil-outline" size={16} color="#fff" />
+              <Text style={styles.manageProfileButtonText}>Manage Profile</Text>
+            </TouchableOpacity>
           </View>
 
-          {/* Tab Switcher */}
-          <View style={styles.tabSwitcher}>
+          {/* Netflix-style Tab Switcher */}
+          <View style={styles.netflixTabSwitcher}>
             <TouchableOpacity
-              style={[styles.tabButton, profileTab === 'saved' && styles.tabButtonActive]}
+              style={[styles.netflixTab, profileTab === 'saved' && styles.netflixTabActive]}
               onPress={() => setProfileTab('saved')}
             >
-              <Ionicons name="bookmark" size={18} color={profileTab === 'saved' ? '#e50914' : '#888'} />
-              <Text style={[styles.tabButtonText, profileTab === 'saved' && styles.tabButtonTextActive]}>
-                Saved
+              <Text style={[styles.netflixTabText, profileTab === 'saved' && styles.netflixTabTextActive]}>
+                My List
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.tabButton, profileTab === 'settings' && styles.tabButtonActive]}
+              style={[styles.netflixTab, profileTab === 'settings' && styles.netflixTabActive]}
               onPress={() => setProfileTab('settings')}
             >
-              <Ionicons name="settings" size={18} color={profileTab === 'settings' ? '#e50914' : '#888'} />
-              <Text style={[styles.tabButtonText, profileTab === 'settings' && styles.tabButtonTextActive]}>
-                Settings
+              <Text style={[styles.netflixTabText, profileTab === 'settings' && styles.netflixTabTextActive]}>
+                Account
               </Text>
             </TouchableOpacity>
           </View>
@@ -1493,40 +1530,83 @@ export default function ProfileScreen() {
             </View>
           )}
 
-          {/* Settings Tab */}
+          {/* Settings Tab - Netflix Style */}
           {profileTab === 'settings' && (
-            <View style={styles.tabContent}>
-              {/* Notifications */}
-              <View style={styles.settingsSection}>
-                <Text style={styles.settingsSectionTitle}>Notifications</Text>
-                <View style={styles.settingRow}>
-                  <View style={styles.settingInfo}>
-                    <Ionicons name="notifications-outline" size={22} color="#fff" />
+            <View style={styles.netflixAccountContent}>
+              {/* Account Settings Card */}
+              <View style={styles.netflixCard}>
+                <View style={styles.netflixCardHeader}>
+                  <Text style={styles.netflixCardTitle}>Account Settings</Text>
+                </View>
+                <TouchableOpacity style={styles.netflixCardRow} onPress={() => {
+                  setNewEmail('');
+                  setCurrentPassword('');
+                  setShowChangeEmail(true);
+                }}>
+                  <View style={styles.netflixCardRowLeft}>
+                    <View style={styles.netflixIconCircle}>
+                      <Ionicons name="mail" size={18} color="#fff" />
+                    </View>
                     <View>
-                      <Text style={styles.settingText}>Anime Updates</Text>
-                      <Text style={styles.settingSubtext}>Get notified when new episodes are released</Text>
+                      <Text style={styles.netflixCardRowTitle}>Email</Text>
+                      <Text style={styles.netflixCardRowSubtitle}>{user?.email || 'No email set'}</Text>
                     </View>
                   </View>
-                  {registeringNotifications ? (
-                    <ActivityIndicator size="small" color="#e50914" />
-                  ) : (
-                    <Switch
-                      value={notificationsEnabled}
-                      onValueChange={handleNotificationToggle}
-                      trackColor={{ false: '#333', true: '#e50914' }}
-                      thumbColor="#fff"
-                    />
-                  )}
-                </View>
+                  <Ionicons name="chevron-forward" size={20} color="#666" />
+                </TouchableOpacity>
+                {user?.hasPassword ? (
+                  <TouchableOpacity style={styles.netflixCardRow} onPress={() => {
+                    setCurrentPassword('');
+                    setNewPassword('');
+                    setConfirmPassword('');
+                    setShowChangePassword(true);
+                  }}>
+                    <View style={styles.netflixCardRowLeft}>
+                      <View style={styles.netflixIconCircle}>
+                        <Ionicons name="lock-closed" size={18} color="#fff" />
+                      </View>
+                      <View>
+                        <Text style={styles.netflixCardRowTitle}>Password</Text>
+                        <Text style={styles.netflixCardRowSubtitle}>Change your password</Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color="#666" />
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity style={styles.netflixCardRow} onPress={() => {
+                    setNewSetPassword('');
+                    setConfirmSetPassword('');
+                    setError('');
+                    setShowSetPassword(true);
+                  }}>
+                    <View style={styles.netflixCardRowLeft}>
+                      <View style={[styles.netflixIconCircle, { backgroundColor: '#e50914' }]}>
+                        <Ionicons name="lock-open" size={18} color="#fff" />
+                      </View>
+                      <View>
+                        <Text style={[styles.netflixCardRowTitle, { color: '#e50914' }]}>Set Password</Text>
+                        <Text style={styles.netflixCardRowSubtitle}>Enable email/password sign in</Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color="#666" />
+                  </TouchableOpacity>
+                )}
               </View>
 
-              {/* Playback */}
-              <View style={styles.settingsSection}>
-                <Text style={styles.settingsSectionTitle}>Playback</Text>
-                <View style={styles.settingRow}>
-                  <View style={styles.settingInfo}>
-                    <Ionicons name="play-circle-outline" size={22} color="#fff" />
-                    <Text style={styles.settingText}>Auto-play Next Episode</Text>
+              {/* Playback Settings Card */}
+              <View style={styles.netflixCard}>
+                <View style={styles.netflixCardHeader}>
+                  <Text style={styles.netflixCardTitle}>Playback Settings</Text>
+                </View>
+                <View style={styles.netflixCardRowSwitch}>
+                  <View style={styles.netflixCardRowLeft}>
+                    <View style={styles.netflixIconCircle}>
+                      <Ionicons name="play" size={18} color="#fff" />
+                    </View>
+                    <View>
+                      <Text style={styles.netflixCardRowTitle}>Auto-play Next Episode</Text>
+                      <Text style={styles.netflixCardRowSubtitle}>Automatically play the next episode</Text>
+                    </View>
                   </View>
                   <Switch
                     value={autoPlayEnabled}
@@ -1546,120 +1626,52 @@ export default function ProfileScreen() {
                 </View>
               </View>
 
-              {/* Account Management */}
-              <View style={styles.settingsSection}>
-                <Text style={styles.settingsSectionTitle}>Account</Text>
-                <TouchableOpacity style={styles.settingRowButton} onPress={() => {
-                  setNewEmail('');
-                  setCurrentPassword('');
-                  setShowChangeEmail(true);
-                }}>
-                  <View style={styles.settingInfo}>
-                    <Ionicons name="mail-outline" size={22} color="#fff" />
+              {/* Notifications Card */}
+              <View style={styles.netflixCard}>
+                <View style={styles.netflixCardHeader}>
+                  <Text style={styles.netflixCardTitle}>Notifications</Text>
+                </View>
+                <View style={styles.netflixCardRowSwitch}>
+                  <View style={styles.netflixCardRowLeft}>
+                    <View style={styles.netflixIconCircle}>
+                      <Ionicons name="notifications" size={18} color="#fff" />
+                    </View>
                     <View>
-                      <Text style={styles.settingText}>Change Email</Text>
-                      <Text style={styles.settingSubtext}>{user?.email || 'No email set'}</Text>
+                      <Text style={styles.netflixCardRowTitle}>Anime Updates</Text>
+                      <Text style={styles.netflixCardRowSubtitle}>Get notified when new episodes release</Text>
                     </View>
                   </View>
-                  <Ionicons name="chevron-forward" size={20} color="#666" />
-                </TouchableOpacity>
-                {user?.hasPassword ? (
-                  <TouchableOpacity style={styles.settingRowButton} onPress={() => {
-                    setCurrentPassword('');
-                    setNewPassword('');
-                    setConfirmPassword('');
-                    setShowChangePassword(true);
-                  }}>
-                    <View style={styles.settingInfo}>
-                      <Ionicons name="lock-closed-outline" size={22} color="#fff" />
-                      <Text style={styles.settingText}>Change Password</Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={20} color="#666" />
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity style={styles.settingRowButton} onPress={() => {
-                    setNewSetPassword('');
-                    setConfirmSetPassword('');
-                    setError('');
-                    setShowSetPassword(true);
-                  }}>
-                    <View style={styles.settingInfo}>
-                      <Ionicons name="lock-open-outline" size={22} color="#e50914" />
-                      <View>
-                        <Text style={[styles.settingText, { color: '#e50914' }]}>Set Password</Text>
-                        <Text style={styles.settingSubtext}>Enable email/password sign in</Text>
-                      </View>
-                    </View>
-                    <Ionicons name="chevron-forward" size={20} color="#666" />
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity style={styles.settingRowButton} onPress={() => {
-                  setNewDisplayName(user?.displayName || '');
-                  setSelectedPhotoFile(null);
-                  setPhotoPreview(null);
-                  setIsDragging(false);
-                  setShowUpdateProfile(true);
-                }}>
-                  <View style={styles.settingInfo}>
-                    <Ionicons name="person-outline" size={22} color="#fff" />
-                    <View>
-                      <Text style={styles.settingText}>Update Profile</Text>
-                      <Text style={styles.settingSubtext}>Name: {user?.displayName || 'Not set'}</Text>
-                    </View>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color="#666" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.settingRowButton} onPress={() => {
-                  setCurrentPassword('');
-                  setShowDeleteAccount(true);
-                }}>
-                  <View style={styles.settingInfo}>
-                    <Ionicons name="trash-outline" size={22} color="#e50914" />
-                    <Text style={[styles.settingText, { color: '#e50914' }]}>Delete Account</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color="#666" />
-                </TouchableOpacity>
+                  {registeringNotifications ? (
+                    <ActivityIndicator size="small" color="#e50914" />
+                  ) : (
+                    <Switch
+                      value={notificationsEnabled}
+                      onValueChange={handleNotificationToggle}
+                      trackColor={{ false: '#333', true: '#e50914' }}
+                      thumbColor="#fff"
+                    />
+                  )}
+                </View>
               </View>
 
-              {/* Support */}
-              <View style={styles.settingsSection}>
-                <Text style={styles.settingsSectionTitle}>Support</Text>
-                <TouchableOpacity style={styles.settingRowButton} onPress={() => setShowFAQ(true)}>
-                  <View style={styles.settingInfo}>
-                    <Ionicons name="help-circle-outline" size={22} color="#fff" />
-                    <Text style={styles.settingText}>FAQ</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color="#666" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.settingRowButton} onPress={() => router.push('/policy')}>
-                  <View style={styles.settingInfo}>
-                    <Ionicons name="document-text-outline" size={22} color="#fff" />
-                    <Text style={styles.settingText}>Privacy Policy</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color="#666" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.settingRowButton} onPress={() => router.push('/terms')}>
-                  <View style={styles.settingInfo}>
-                    <Ionicons name="document-text-outline" size={22} color="#fff" />
-                    <Text style={styles.settingText}>Terms of Service</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color="#666" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.settingRowButton} onPress={() => setShowBugReport(true)}>
-                  <View style={styles.settingInfo}>
-                    <Ionicons name="bug-outline" size={22} color="#fff" />
-                    <Text style={styles.settingText}>Report a Bug</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color="#666" />
-                </TouchableOpacity>
+              {/* App & Support Card */}
+              <View style={styles.netflixCard}>
+                <View style={styles.netflixCardHeader}>
+                  <Text style={styles.netflixCardTitle}>App & Support</Text>
+                </View>
                 <TouchableOpacity
-                  style={styles.settingRowButton}
+                  style={styles.netflixCardRow}
                   onPress={handleCheckForUpdate}
                   disabled={checkingUpdate}
                 >
-                  <View style={styles.settingInfo}>
-                    <Ionicons name="cloud-download-outline" size={22} color="#fff" />
-                    <Text style={styles.settingText}>Check for Update</Text>
+                  <View style={styles.netflixCardRowLeft}>
+                    <View style={styles.netflixIconCircle}>
+                      <Ionicons name="cloud-download" size={18} color="#fff" />
+                    </View>
+                    <View>
+                      <Text style={styles.netflixCardRowTitle}>Check for Update</Text>
+                      <Text style={styles.netflixCardRowSubtitle}>Version 2.0.4</Text>
+                    </View>
                   </View>
                   {checkingUpdate ? (
                     <ActivityIndicator size="small" color="#e50914" />
@@ -1668,19 +1680,85 @@ export default function ProfileScreen() {
                   )}
                 </TouchableOpacity>
                 {updateStatus && (
-                  <View style={styles.updateStatusContainer}>
-                    <Text style={styles.updateStatusText}>{updateStatus}</Text>
+                  <View style={styles.netflixUpdateStatus}>
+                    <Text style={styles.netflixUpdateStatusText}>{updateStatus}</Text>
                   </View>
                 )}
+                <TouchableOpacity style={styles.netflixCardRow} onPress={() => setShowFAQ(true)}>
+                  <View style={styles.netflixCardRowLeft}>
+                    <View style={styles.netflixIconCircle}>
+                      <Ionicons name="help-circle" size={18} color="#fff" />
+                    </View>
+                    <Text style={styles.netflixCardRowTitle}>FAQ</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#666" />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.netflixCardRow} onPress={() => setShowBugReport(true)}>
+                  <View style={styles.netflixCardRowLeft}>
+                    <View style={styles.netflixIconCircle}>
+                      <Ionicons name="bug" size={18} color="#fff" />
+                    </View>
+                    <Text style={styles.netflixCardRowTitle}>Report a Bug</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#666" />
+                </TouchableOpacity>
               </View>
 
-              {/* Sign Out */}
-              <TouchableOpacity style={styles.signOutButtonFull} onPress={handleSignOut}>
-                <Ionicons name="log-out-outline" size={22} color="#e50914" />
-                <Text style={styles.signOutTextFull}>Sign Out</Text>
-              </TouchableOpacity>
+              {/* Legal Card */}
+              <View style={styles.netflixCard}>
+                <View style={styles.netflixCardHeader}>
+                  <Text style={styles.netflixCardTitle}>Legal</Text>
+                </View>
+                <TouchableOpacity style={styles.netflixCardRow} onPress={() => router.push('/policy')}>
+                  <View style={styles.netflixCardRowLeft}>
+                    <View style={styles.netflixIconCircle}>
+                      <Ionicons name="shield-checkmark" size={18} color="#fff" />
+                    </View>
+                    <Text style={styles.netflixCardRowTitle}>Privacy Policy</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#666" />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.netflixCardRow} onPress={() => router.push('/terms')}>
+                  <View style={styles.netflixCardRowLeft}>
+                    <View style={styles.netflixIconCircle}>
+                      <Ionicons name="document-text" size={18} color="#fff" />
+                    </View>
+                    <Text style={styles.netflixCardRowTitle}>Terms of Service</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#666" />
+                </TouchableOpacity>
+              </View>
 
-              <Text style={styles.versionText}>AniStream v2.0.4</Text>
+              {/* Danger Zone Card */}
+              <View style={[styles.netflixCard, styles.netflixCardDanger]}>
+                <View style={styles.netflixCardHeader}>
+                  <Text style={[styles.netflixCardTitle, { color: '#e50914' }]}>Danger Zone</Text>
+                </View>
+                <TouchableOpacity style={styles.netflixCardRow} onPress={() => {
+                  setCurrentPassword('');
+                  setShowDeleteAccount(true);
+                }}>
+                  <View style={styles.netflixCardRowLeft}>
+                    <View style={[styles.netflixIconCircle, { backgroundColor: '#e50914' }]}>
+                      <Ionicons name="trash" size={18} color="#fff" />
+                    </View>
+                    <View>
+                      <Text style={[styles.netflixCardRowTitle, { color: '#e50914' }]}>Delete Account</Text>
+                      <Text style={styles.netflixCardRowSubtitle}>Permanently delete your account and data</Text>
+                    </View>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#e50914" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.netflixFooter}>
+                <Image
+                  source={require('../../assets/logo-w-text.png')}
+                  style={styles.netflixFooterLogo}
+                  resizeMode="contain"
+                />
+                <Text style={styles.netflixFooterText}>Made with love for anime fans</Text>
+              </View>
             </View>
           )}
         </ScrollView>
@@ -2769,5 +2847,208 @@ const styles = StyleSheet.create({
   forgotPasswordText: {
     color: '#e50914',
     fontSize: 14,
+  },
+  // Netflix-style Profile Header
+  netflixHeader: {
+    alignItems: 'center',
+    paddingTop: 16,
+    paddingBottom: 24,
+    paddingHorizontal: 16,
+  },
+  netflixHeaderTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: 20,
+  },
+  netflixHeaderTitle: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  netflixHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  signOutIcon: {
+    padding: 4,
+  },
+  netflixAvatarContainer: {
+    position: 'relative',
+    marginBottom: 16,
+  },
+  netflixAvatar: {
+    width: 100,
+    height: 100,
+    borderRadius: 8,
+    backgroundColor: '#333',
+  },
+  netflixAvatarPlaceholder: {
+    width: 100,
+    height: 100,
+    borderRadius: 8,
+    backgroundColor: '#333',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  netflixEditBadge: {
+    position: 'absolute',
+    bottom: -6,
+    right: -6,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#000',
+  },
+  netflixUserName: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  netflixUserEmail: {
+    color: '#888',
+    fontSize: 14,
+    marginBottom: 16,
+  },
+  manageProfileButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#666',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 4,
+  },
+  manageProfileButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  // Netflix-style Tab Switcher
+  netflixTabSwitcher: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+    marginBottom: 16,
+  },
+  netflixTab: {
+    flex: 1,
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  netflixTabActive: {
+    borderBottomColor: '#e50914',
+  },
+  netflixTabText: {
+    color: '#888',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  netflixTabTextActive: {
+    color: '#fff',
+  },
+  // Netflix Account Content
+  netflixAccountContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 32,
+  },
+  netflixCard: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 8,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  netflixCardDanger: {
+    borderWidth: 1,
+    borderColor: 'rgba(229, 9, 20, 0.3)',
+  },
+  netflixCardHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2a2a2a',
+  },
+  netflixCardTitle: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  netflixCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2a2a2a',
+  },
+  netflixCardRowSwitch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2a2a2a',
+  },
+  netflixCardRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  netflixIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#333',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  netflixCardRowTitle: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  netflixCardRowSubtitle: {
+    color: '#888',
+    fontSize: 13,
+    marginTop: 2,
+  },
+  netflixUpdateStatus: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(229, 9, 20, 0.1)',
+  },
+  netflixUpdateStatusText: {
+    color: '#e50914',
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  netflixFooter: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+  netflixFooterLogo: {
+    width: 120,
+    height: 40,
+    marginBottom: 12,
+  },
+  netflixFooterText: {
+    color: '#444',
+    fontSize: 12,
   },
 });
