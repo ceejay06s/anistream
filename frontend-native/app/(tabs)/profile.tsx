@@ -28,6 +28,7 @@ import { verifyRecaptchaToken } from '@/services/recaptchaService';
 import { uploadProfilePhoto } from '@/services/profileService';
 import { userNotificationService, UserNotification } from '@/services/userNotificationService';
 import { NotificationBell } from '@/components/NotificationBell';
+import * as Updates from 'expo-updates';
 
 type AuthMode = 'login' | 'signup' | 'passwordless';
 type ProfileTab = 'saved' | 'settings';
@@ -108,6 +109,42 @@ export default function ProfileScreen() {
   const [isDragging, setIsDragging] = useState(false);
   const [updatingAccount, setUpdatingAccount] = useState(false);
   const profilePhotoInputRef = useRef<HTMLInputElement>(null);
+
+  // Update states
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<string | null>(null);
+
+  const handleCheckForUpdate = async () => {
+    if (Platform.OS === 'web') {
+      setUpdateStatus('Updates are automatic on web. Refresh the page to get the latest version.');
+      setTimeout(() => setUpdateStatus(null), 3000);
+      return;
+    }
+
+    setCheckingUpdate(true);
+    setUpdateStatus(null);
+
+    try {
+      const update = await Updates.checkForUpdateAsync();
+      if (update.isAvailable) {
+        setUpdateStatus('Downloading update...');
+        await Updates.fetchUpdateAsync();
+        setUpdateStatus('Update downloaded! Restarting...');
+        setTimeout(async () => {
+          await Updates.reloadAsync();
+        }, 1000);
+      } else {
+        setUpdateStatus('You have the latest version!');
+        setTimeout(() => setUpdateStatus(null), 3000);
+      }
+    } catch (error: any) {
+      console.error('Update check failed:', error);
+      setUpdateStatus('Failed to check for updates');
+      setTimeout(() => setUpdateStatus(null), 3000);
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
 
   // Load saved anime and settings when user logs in
   useEffect(() => {
@@ -1615,6 +1652,26 @@ export default function ProfileScreen() {
                   </View>
                   <Ionicons name="chevron-forward" size={20} color="#666" />
                 </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.settingRowButton}
+                  onPress={handleCheckForUpdate}
+                  disabled={checkingUpdate}
+                >
+                  <View style={styles.settingInfo}>
+                    <Ionicons name="cloud-download-outline" size={22} color="#fff" />
+                    <Text style={styles.settingText}>Check for Update</Text>
+                  </View>
+                  {checkingUpdate ? (
+                    <ActivityIndicator size="small" color="#e50914" />
+                  ) : (
+                    <Ionicons name="chevron-forward" size={20} color="#666" />
+                  )}
+                </TouchableOpacity>
+                {updateStatus && (
+                  <View style={styles.updateStatusContainer}>
+                    <Text style={styles.updateStatusText}>{updateStatus}</Text>
+                  </View>
+                )}
               </View>
 
               {/* Sign Out */}
@@ -2133,6 +2190,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 24,
     marginBottom: 32,
+  },
+  updateStatusContainer: {
+    backgroundColor: 'rgba(229, 9, 20, 0.1)',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  updateStatusText: {
+    color: '#e50914',
+    fontSize: 13,
+    textAlign: 'center',
   },
   // Guest Section
   guestSection: {

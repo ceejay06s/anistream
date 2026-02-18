@@ -847,10 +847,12 @@ const styles = StyleSheet.create({
   },
   // Continue Watching Styles
   continueWatchingSection: {
-    marginTop: Platform.OS === 'web' ? -40 : -20,
-    marginBottom: Platform.OS === 'web' ? 16 : 8,
+    marginTop: Platform.OS === 'web' ? -40 : 0,
+    marginBottom: Platform.OS === 'web' ? 24 : 16,
+    paddingTop: Platform.OS === 'web' ? 0 : 16,
     position: 'relative',
     zIndex: 2,
+    backgroundColor: '#000',
   },
   continueWatchingCard: {
     width: Platform.OS === 'web' ? 200 : 150,
