@@ -149,19 +149,22 @@ export default function HomeScreen() {
       homeCategories.map(route => getCached(`category:${route}`, () => animeApi.getByCategory(route)))
     );
 
+    // Compute spotlight data synchronously before calling setCategories
+    // (setCategories updater runs lazily at render time, so mutations inside it won't be visible below)
     let spotlightData: Anime[] = [];
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled' && homeCategories[index] === 'top-airing' && result.value.length > 0) {
+        spotlightData = result.value.slice(0, 5);
+      }
+    });
+
     setCategories(prev => {
       const updated = [...prev];
       results.forEach((result, index) => {
-        const route = homeCategories[index];
         if (result.status === 'fulfilled') {
-          const data = result.value;
-          if (route === 'top-airing' && data.length > 0) {
-            spotlightData = data.slice(0, 5);
-          }
-          updated[index] = { ...updated[index], anime: data.slice(0, 15), loading: false, error: null };
+          updated[index] = { ...updated[index], anime: result.value.slice(0, 15), loading: false, error: null };
         } else {
-          console.error(`Failed to load ${route}:`, result.reason);
+          console.error(`Failed to load ${homeCategories[index]}:`, result.reason);
           updated[index] = { ...updated[index], loading: false, error: 'Failed to load' };
         }
       });
