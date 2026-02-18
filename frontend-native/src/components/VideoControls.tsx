@@ -22,6 +22,11 @@ export interface SubtitleSettings {
   backgroundColor: 'transparent' | 'semi' | 'solid';
 }
 
+export interface PlayerSource {
+  url: string;
+  quality: string;
+}
+
 export interface VideoControlsProps {
   videoRef: React.RefObject<HTMLVideoElement>;
   isPlaying: boolean;
@@ -51,6 +56,12 @@ export interface VideoControlsProps {
   onNext?: () => void;
   hasPrevious?: boolean;
   hasNext?: boolean;
+  // Audio & quality
+  category?: 'sub' | 'dub';
+  onCategoryChange?: (cat: 'sub' | 'dub') => void;
+  sources?: PlayerSource[];
+  selectedSourceUrl?: string;
+  onQualityChange?: (source: PlayerSource) => void;
 }
 
 export function VideoControls({
@@ -80,12 +91,20 @@ export function VideoControls({
   onNext,
   hasPrevious,
   hasNext,
+  category,
+  onCategoryChange,
+  sources,
+  selectedSourceUrl,
+  onQualityChange,
 }: VideoControlsProps) {
   const [showControls, setShowControls] = useState(true);
   const [showSubtitleMenu, setShowSubtitleMenu] = useState(false);
   const [showSubtitleSettings, setShowSubtitleSettings] = useState(false);
   const [showVolumeSlider, setShowVolumeSlider] = useState(isWeb); // Always show on web
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+  const [showAudioMenu, setShowAudioMenu] = useState(false);
+  const [showQualityMenu, setShowQualityMenu] = useState(false);
+  const [showPlayerSettings, setShowPlayerSettings] = useState(false); // mobile settings panel
   const [isHoveringProgress, setIsHoveringProgress] = useState(false);
   const [hoverTime, setHoverTime] = useState<number | null>(null);
   const [hoverPosition, setHoverPosition] = useState(0);
@@ -262,18 +281,43 @@ export function VideoControls({
           </View>
         )}
 
-        {/* Settings/Subtitle menu */}
+        {/* Settings menu */}
         {showSettingsMenu && (
           <View style={styles.youtubeSettingsMenu}>
             <Text style={styles.youtubeMenuTitle}>Settings</Text>
 
-            {/* Subtitles section */}
+            {/* Audio (Sub/Dub) */}
+            {onCategoryChange && (
+              <TouchableOpacity
+                style={styles.youtubeMenuItem}
+                onPress={() => { setShowSettingsMenu(false); setShowAudioMenu(true); }}
+              >
+                <Ionicons name="headset" size={18} color="#fff" />
+                <Text style={styles.youtubeMenuItemText}>Audio</Text>
+                <Text style={styles.youtubeMenuItemValue}>{category === 'dub' ? 'DUB' : 'SUB'}</Text>
+                <Ionicons name="chevron-forward" size={16} color="#888" />
+              </TouchableOpacity>
+            )}
+
+            {/* Quality */}
+            {sources && sources.length > 1 && onQualityChange && (
+              <TouchableOpacity
+                style={styles.youtubeMenuItem}
+                onPress={() => { setShowSettingsMenu(false); setShowQualityMenu(true); }}
+              >
+                <Ionicons name="film" size={18} color="#fff" />
+                <Text style={styles.youtubeMenuItemText}>Quality</Text>
+                <Text style={styles.youtubeMenuItemValue}>
+                  {sources.find(s => s.url === selectedSourceUrl)?.quality || 'Auto'}
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color="#888" />
+              </TouchableOpacity>
+            )}
+
+            {/* Subtitles */}
             <TouchableOpacity
               style={styles.youtubeMenuItem}
-              onPress={() => {
-                setShowSettingsMenu(false);
-                setShowSubtitleMenu(true);
-              }}
+              onPress={() => { setShowSettingsMenu(false); setShowSubtitleMenu(true); }}
             >
               <Ionicons name="text" size={18} color="#fff" />
               <Text style={styles.youtubeMenuItemText}>Subtitles</Text>
@@ -282,14 +326,46 @@ export function VideoControls({
               </Text>
               <Ionicons name="chevron-forward" size={16} color="#888" />
             </TouchableOpacity>
+          </View>
+        )}
 
-            {/* Playback speed placeholder */}
-            <TouchableOpacity style={styles.youtubeMenuItem}>
-              <Ionicons name="speedometer" size={18} color="#fff" />
-              <Text style={styles.youtubeMenuItemText}>Playback speed</Text>
-              <Text style={styles.youtubeMenuItemValue}>Normal</Text>
-              <Ionicons name="chevron-forward" size={16} color="#888" />
+        {/* Audio menu */}
+        {showAudioMenu && (
+          <View style={styles.youtubeSettingsMenu}>
+            <TouchableOpacity style={styles.youtubeMenuBack} onPress={() => { setShowAudioMenu(false); setShowSettingsMenu(true); }}>
+              <Ionicons name="arrow-back" size={18} color="#fff" />
+              <Text style={styles.youtubeMenuTitle}>Audio</Text>
             </TouchableOpacity>
+            {(['sub', 'dub'] as const).map((cat) => (
+              <TouchableOpacity
+                key={cat}
+                style={[styles.youtubeSubtitleItem, category === cat && styles.youtubeSubtitleItemActive]}
+                onPress={() => { onCategoryChange?.(cat); setShowAudioMenu(false); }}
+              >
+                {category === cat && <Ionicons name="checkmark" size={16} color="#fff" style={{ marginRight: 8 }} />}
+                <Text style={styles.youtubeSubtitleText}>{cat.toUpperCase()}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* Quality menu */}
+        {showQualityMenu && sources && (
+          <View style={styles.youtubeSettingsMenu}>
+            <TouchableOpacity style={styles.youtubeMenuBack} onPress={() => { setShowQualityMenu(false); setShowSettingsMenu(true); }}>
+              <Ionicons name="arrow-back" size={18} color="#fff" />
+              <Text style={styles.youtubeMenuTitle}>Quality</Text>
+            </TouchableOpacity>
+            {sources.map((src, i) => (
+              <TouchableOpacity
+                key={i}
+                style={[styles.youtubeSubtitleItem, selectedSourceUrl === src.url && styles.youtubeSubtitleItemActive]}
+                onPress={() => { onQualityChange?.(src); setShowQualityMenu(false); }}
+              >
+                {selectedSourceUrl === src.url && <Ionicons name="checkmark" size={16} color="#fff" style={{ marginRight: 8 }} />}
+                <Text style={styles.youtubeSubtitleText}>{src.quality}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
         )}
 
@@ -298,10 +374,7 @@ export function VideoControls({
           <View style={styles.youtubeSettingsMenu}>
             <TouchableOpacity
               style={styles.youtubeMenuBack}
-              onPress={() => {
-                setShowSubtitleMenu(false);
-                setShowSettingsMenu(true);
-              }}
+              onPress={() => { setShowSubtitleMenu(false); setShowSettingsMenu(true); }}
             >
               <Ionicons name="arrow-back" size={18} color="#fff" />
               <Text style={styles.youtubeMenuTitle}>Subtitles</Text>
@@ -309,10 +382,7 @@ export function VideoControls({
 
             <TouchableOpacity
               style={[styles.youtubeSubtitleItem, !currentSubtitle && styles.youtubeSubtitleItemActive]}
-              onPress={() => {
-                onSubtitleChange(null);
-                setShowSubtitleMenu(false);
-              }}
+              onPress={() => { onSubtitleChange(null); setShowSubtitleMenu(false); }}
             >
               {!currentSubtitle && <Ionicons name="checkmark" size={16} color="#fff" style={{ marginRight: 8 }} />}
               <Text style={styles.youtubeSubtitleText}>Off</Text>
@@ -325,10 +395,7 @@ export function VideoControls({
                   styles.youtubeSubtitleItem,
                   currentSubtitle === track.url && styles.youtubeSubtitleItemActive,
                 ]}
-                onPress={() => {
-                  onSubtitleChange(track.url);
-                  setShowSubtitleMenu(false);
-                }}
+                onPress={() => { onSubtitleChange(track.url); setShowSubtitleMenu(false); }}
               >
                 {currentSubtitle === track.url && (
                   <Ionicons name="checkmark" size={16} color="#fff" style={{ marginRight: 8 }} />
@@ -535,10 +602,20 @@ export function VideoControls({
           {/* Subtitle button */}
           <TouchableOpacity
             style={[styles.controlButton, styles.ccButton]}
-            onPress={() => setShowSubtitleMenu(!showSubtitleMenu)}
+            onPress={() => { setShowSubtitleMenu(!showSubtitleMenu); setShowPlayerSettings(false); }}
           >
             <Text style={[styles.ccText, currentSubtitle && styles.ccTextActive]}>CC</Text>
           </TouchableOpacity>
+
+          {/* Settings button (audio + quality) */}
+          {(onCategoryChange || (sources && sources.length > 1)) && (
+            <TouchableOpacity
+              style={styles.controlButton}
+              onPress={() => { setShowPlayerSettings(!showPlayerSettings); setShowSubtitleMenu(false); }}
+            >
+              <Ionicons name="settings-outline" size={20} color="#fff" />
+            </TouchableOpacity>
+          )}
 
           {/* Orientation lock */}
           <TouchableOpacity
@@ -664,6 +741,53 @@ export function VideoControls({
               </TouchableOpacity>
             ))}
           </View>
+        </View>
+      )}
+
+      {/* Player settings panel (audio + quality) */}
+      {showPlayerSettings && (
+        <View style={styles.subtitleMenu}>
+          <Text style={styles.subtitleMenuTitle}>Settings</Text>
+
+          {/* Audio */}
+          {onCategoryChange && (
+            <>
+              <Text style={styles.settingsLabel}>Audio</Text>
+              <View style={styles.settingsRow}>
+                {(['sub', 'dub'] as const).map((cat) => (
+                  <TouchableOpacity
+                    key={cat}
+                    style={[styles.settingsButton, category === cat && styles.settingsButtonActive]}
+                    onPress={() => { onCategoryChange(cat); setShowPlayerSettings(false); }}
+                  >
+                    <Text style={[styles.settingsButtonText, category === cat && styles.settingsButtonTextActive]}>
+                      {cat.toUpperCase()}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          )}
+
+          {/* Quality */}
+          {sources && sources.length > 1 && onQualityChange && (
+            <>
+              <Text style={styles.settingsLabel}>Quality</Text>
+              <View style={styles.settingsRow}>
+                {sources.map((src, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    style={[styles.settingsButton, selectedSourceUrl === src.url && styles.settingsButtonActive]}
+                    onPress={() => { onQualityChange(src); setShowPlayerSettings(false); }}
+                  >
+                    <Text style={[styles.settingsButtonText, selectedSourceUrl === src.url && styles.settingsButtonTextActive]}>
+                      {src.quality}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          )}
         </View>
       )}
 

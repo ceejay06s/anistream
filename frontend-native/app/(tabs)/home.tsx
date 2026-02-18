@@ -149,19 +149,22 @@ export default function HomeScreen() {
       homeCategories.map(route => getCached(`category:${route}`, () => animeApi.getByCategory(route)))
     );
 
+    // Compute spotlight data synchronously before calling setCategories
+    // (setCategories updater runs lazily at render time, so mutations inside it won't be visible below)
     let spotlightData: Anime[] = [];
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled' && homeCategories[index] === 'top-airing' && result.value.length > 0) {
+        spotlightData = result.value.slice(0, 5);
+      }
+    });
+
     setCategories(prev => {
       const updated = [...prev];
       results.forEach((result, index) => {
-        const route = homeCategories[index];
         if (result.status === 'fulfilled') {
-          const data = result.value;
-          if (route === 'top-airing' && data.length > 0) {
-            spotlightData = data.slice(0, 5);
-          }
-          updated[index] = { ...updated[index], anime: data.slice(0, 15), loading: false, error: null };
+          updated[index] = { ...updated[index], anime: result.value.slice(0, 15), loading: false, error: null };
         } else {
-          console.error(`Failed to load ${route}:`, result.reason);
+          console.error(`Failed to load ${homeCategories[index]}:`, result.reason);
           updated[index] = { ...updated[index], loading: false, error: 'Failed to load' };
         }
       });
@@ -330,7 +333,7 @@ export default function HomeScreen() {
     }
 
     return (
-      <View key={category.route} style={styles.section}>
+      <View key={category.route} style={styles.section} onStartShouldSetResponder={() => true}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>{category.title}</Text>
           <TouchableOpacity onPress={() => handleSeeAll(category.route)}>
@@ -490,7 +493,7 @@ export default function HomeScreen() {
       >
         {/* Hero Carousel Banner */}
         {spotlightAnime.length > 0 && (
-          <View style={styles.bannerContainer}>
+          <View style={styles.bannerContainer} onStartShouldSetResponder={() => true}>
             <FlatList
               ref={carouselRef}
               data={spotlightAnime}
@@ -517,7 +520,7 @@ export default function HomeScreen() {
 
         {/* Continue Watching Section - Netflix Style */}
         {recentlyWatched.length > 0 && (
-          <View style={styles.continueWatchingSection}>
+          <View style={styles.continueWatchingSection} onStartShouldSetResponder={() => true}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Continue Watching</Text>
             </View>

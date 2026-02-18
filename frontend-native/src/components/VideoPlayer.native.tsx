@@ -11,6 +11,11 @@ export interface SubtitleTrack {
   label?: string;
 }
 
+export interface PlayerSource {
+  url: string;
+  quality: string;
+}
+
 export interface VideoPlayerProps {
   source: string;
   autoPlay?: boolean;
@@ -36,6 +41,12 @@ export interface VideoPlayerProps {
   hasNext?: boolean;
   // Resume playback from timestamp
   initialTime?: number;
+  // Audio & quality
+  category?: 'sub' | 'dub';
+  onCategoryChange?: (cat: 'sub' | 'dub') => void;
+  sources?: PlayerSource[];
+  selectedSourceUrl?: string;
+  onQualityChange?: (source: PlayerSource) => void;
 }
 
 export function VideoPlayer({
@@ -52,6 +63,11 @@ export function VideoPlayer({
   hasPrevious = false,
   hasNext = false,
   initialTime,
+  category,
+  onCategoryChange,
+  sources,
+  selectedSourceUrl,
+  onQualityChange,
 }: VideoPlayerProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,6 +78,7 @@ export function VideoPlayer({
   const hasSeekToInitial = useRef(false);
   const [currentSubtitle, setCurrentSubtitle] = useState<string | null>(null);
   const [showSubtitleMenu, setShowSubtitleMenu] = useState(false);
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const timeUpdateRef = useRef<NodeJS.Timeout | null>(null);
 
   const player = useVideoPlayer(source, (player) => {
@@ -233,6 +250,16 @@ export function VideoPlayer({
         subtitleUrl={currentSubtitle}
       />
 
+      {/* Settings button (audio + quality) */}
+      {(onCategoryChange || (sources && sources.length > 1)) && (
+        <TouchableOpacity
+          style={styles.settingsButton}
+          onPress={() => setShowSettingsMenu(true)}
+        >
+          <Ionicons name="settings-outline" size={20} color="#fff" />
+        </TouchableOpacity>
+      )}
+
       {/* Subtitle selector button */}
       {subtitleTracks.length > 0 && (
         <TouchableOpacity
@@ -246,6 +273,64 @@ export function VideoPlayer({
           />
         </TouchableOpacity>
       )}
+
+      {/* Settings modal (audio + quality) */}
+      <Modal
+        visible={showSettingsMenu}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSettingsMenu(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowSettingsMenu(false)}
+        >
+          <View style={styles.subtitleMenuContainer}>
+            <Text style={styles.subtitleMenuTitle}>Settings</Text>
+            <ScrollView style={styles.subtitleList}>
+              {/* Audio */}
+              {onCategoryChange && (
+                <>
+                  <Text style={styles.settingsSectionLabel}>Audio</Text>
+                  <View style={styles.settingsRow}>
+                    {(['sub', 'dub'] as const).map((cat) => (
+                      <TouchableOpacity
+                        key={cat}
+                        style={[styles.settingsOption, category === cat && styles.settingsOptionActive]}
+                        onPress={() => { onCategoryChange(cat); setShowSettingsMenu(false); }}
+                      >
+                        <Text style={[styles.settingsOptionText, category === cat && styles.settingsOptionTextActive]}>
+                          {cat.toUpperCase()}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </>
+              )}
+              {/* Quality */}
+              {sources && sources.length > 1 && onQualityChange && (
+                <>
+                  <Text style={styles.settingsSectionLabel}>Quality</Text>
+                  <View style={styles.settingsRow}>
+                    {sources.map((src, i) => (
+                      <TouchableOpacity
+                        key={i}
+                        style={[styles.settingsOption, selectedSourceUrl === src.url && styles.settingsOptionActive]}
+                        onPress={() => { onQualityChange(src); setShowSettingsMenu(false); }}
+                      >
+                        <Text style={[styles.settingsOptionText, selectedSourceUrl === src.url && styles.settingsOptionTextActive]}>
+                          {src.quality}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </>
+              )}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Subtitle selection modal */}
       <Modal
@@ -425,6 +510,49 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  settingsButton: {
+    position: 'absolute',
+    top: 12,
+    right: 60,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  settingsSectionLabel: {
+    color: '#888',
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    marginTop: 12,
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  settingsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  settingsOption: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  settingsOptionActive: {
+    backgroundColor: '#e50914',
+  },
+  settingsOptionText: {
+    color: '#ccc',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  settingsOptionTextActive: {
+    color: '#fff',
+    fontWeight: '700',
   },
   modalOverlay: {
     flex: 1,

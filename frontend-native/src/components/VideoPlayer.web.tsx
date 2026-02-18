@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { View, StyleSheet, ActivityIndicator, Text, TouchableOpacity } from 'react-native';
 import Hls from 'hls.js';
-import { VideoControls, SubtitleTrack, SubtitleSettings } from './VideoControls';
+import { VideoControls, SubtitleTrack, SubtitleSettings, PlayerSource } from './VideoControls';
 import { SubtitleRenderer } from './SubtitleRenderer';
 
 export interface VideoPlayerProps {
@@ -30,6 +30,12 @@ export interface VideoPlayerProps {
   hasNext?: boolean;
   // Resume playback
   initialTime?: number;
+  // Audio & quality
+  category?: 'sub' | 'dub';
+  onCategoryChange?: (cat: 'sub' | 'dub') => void;
+  sources?: PlayerSource[];
+  selectedSourceUrl?: string;
+  onQualityChange?: (source: PlayerSource) => void;
 }
 
 export function VideoPlayer({
@@ -51,6 +57,11 @@ export function VideoPlayer({
   hasPrevious,
   hasNext,
   initialTime,
+  category,
+  onCategoryChange,
+  sources,
+  selectedSourceUrl,
+  onQualityChange,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -467,6 +478,11 @@ export function VideoPlayer({
             onNext={onNext}
             hasPrevious={hasPrevious}
             hasNext={hasNext}
+            category={category}
+            onCategoryChange={onCategoryChange}
+            sources={sources}
+            selectedSourceUrl={selectedSourceUrl}
+            onQualityChange={onQualityChange}
           />
         )}
         {isLoading && (
