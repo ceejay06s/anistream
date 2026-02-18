@@ -26,6 +26,7 @@ import { getProxiedImageUrl } from '@/utils/imageProxy';
 import { watchHistoryService, WatchHistoryEntry } from '@/services/watchHistoryService';
 import { useAuth } from '@/context/AuthContext';
 import { getCached } from '@/utils/apiCache';
+import { userNotificationService } from '@/services/userNotificationService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const BANNER_HEIGHT = Platform.OS === 'web' ? Math.min(SCREEN_HEIGHT * 0.7, 600) : 350;
@@ -73,6 +74,17 @@ export default function HomeScreen() {
   const [loadingNews, setLoadingNews] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [recentlyWatched, setRecentlyWatched] = useState<WatchHistoryEntry[]>([]);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+
+  // Subscribe to unread notification count
+  useEffect(() => {
+    if (!user) return;
+    const unsubscribe = userNotificationService.subscribeToUnreadCount(
+      user.uid,
+      setUnreadNotifications
+    );
+    return () => unsubscribe();
+  }, [user]);
 
   // Clean up Expo Router internal params from URL on web
   useEffect(() => {
@@ -555,9 +567,16 @@ export default function HomeScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.headerIconButton}
-                onPress={() => router.push('/(tabs)/profile')}
+                onPress={() => router.push('/(tabs)/notifications')}
               >
                 <Ionicons name="notifications-outline" size={22} color="#fff" />
+                {unreadNotifications > 0 && (
+                  <View style={styles.notificationBadge}>
+                    <Text style={styles.notificationBadgeText}>
+                      {unreadNotifications > 99 ? '99+' : unreadNotifications}
+                    </Text>
+                  </View>
+                )}
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.headerAvatarButton}
@@ -616,6 +635,24 @@ const styles = StyleSheet.create({
   },
   headerIconButton: {
     padding: 8,
+    position: 'relative',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#e50914',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 3,
+  },
+  notificationBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '700',
   },
   headerAvatarButton: {
     padding: 4,

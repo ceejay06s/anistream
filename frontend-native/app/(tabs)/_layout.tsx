@@ -68,6 +68,12 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="notifications"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="community"
         options={{
           title: 'Community',
