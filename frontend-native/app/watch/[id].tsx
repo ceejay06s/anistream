@@ -567,110 +567,27 @@ export default function WatchScreen() {
   // Render main content section (video details + community) - for LEFT side on desktop
   const renderMainContent = () => (
     <>
-      {/* Episode Navigation - quick prev/next buttons */}
-      {episodes.length > 1 && (
-        <View style={[styles.episodeNavSection, isDesktopWeb && styles.episodeNavSectionWeb]}>
-          <TouchableOpacity
-            style={[styles.episodeNavButton, !hasPreviousEpisode && styles.episodeNavButtonDisabled]}
-            onPress={handlePreviousEpisode}
-            disabled={!hasPreviousEpisode}
-          >
-            <Ionicons
-              name="play-skip-back"
-              size={20}
-              color={hasPreviousEpisode ? '#fff' : '#444'}
-            />
-            <Text style={[styles.episodeNavText, !hasPreviousEpisode && styles.episodeNavTextDisabled]}>
-              Previous
-            </Text>
-          </TouchableOpacity>
-
-          <View style={styles.episodeIndicator}>
-            <Text style={styles.episodeIndicatorText}>
-              EP {currentEpNumber} / {episodes.length}
-            </Text>
-          </View>
-
-          <TouchableOpacity
-            style={[styles.episodeNavButton, !hasNextEpisode && styles.episodeNavButtonDisabled]}
-            onPress={handleNextEpisode}
-            disabled={!hasNextEpisode}
-          >
-            <Text style={[styles.episodeNavText, !hasNextEpisode && styles.episodeNavTextDisabled]}>
-              Next
-            </Text>
-            <Ionicons
-              name="play-skip-forward"
-              size={20}
-              color={hasNextEpisode ? '#fff' : '#444'}
-            />
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Sub/Dub Toggle */}
-      <View style={[styles.categorySection, isDesktopWeb && styles.categorySectionWeb]}>
-        <Text style={styles.qualityLabel}>Audio:</Text>
-        <View style={styles.qualityOptions}>
-          <TouchableOpacity
-            style={[
-              styles.categoryButton,
-              category === 'sub' && styles.categoryButtonActive,
-            ]}
-            onPress={() => setCategory('sub')}
-          >
-            <Text
-              style={[
-                styles.qualityText,
-                category === 'sub' && styles.qualityTextActive,
-              ]}
-            >
-              SUB
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.categoryButton,
-              category === 'dub' && styles.categoryButtonActive,
-            ]}
-            onPress={() => setCategory('dub')}
-          >
-            <Text
-              style={[
-                styles.qualityText,
-                category === 'dub' && styles.qualityTextActive,
-              ]}
-            >
-              DUB
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Quality Selector */}
-      {streamingData && streamingData.sources.length > 1 && (
-        <View style={[styles.qualitySection, isDesktopWeb && styles.qualitySectionWeb]}>
-          <Text style={styles.qualityLabel}>Quality:</Text>
-          <View style={styles.qualityOptions}>
-            {streamingData.sources.map((source, index) => (
-              <TouchableOpacity
-                key={index}
-                style={[
-                  styles.qualityButton,
-                  selectedSource?.url === source.url && styles.qualityButtonActive,
-                ]}
-                onPress={() => handleQualityChange(source)}
-              >
-                <Text
-                  style={[
-                    styles.qualityText,
-                    selectedSource?.url === source.url && styles.qualityTextActive,
-                  ]}
-                >
-                  {source.quality}
-                </Text>
-              </TouchableOpacity>
-            ))}
+      {/* Anime Info Card */}
+      {animeInfo && (
+        <View style={[styles.animeInfoCard, isDesktopWeb && styles.animeInfoCardWeb]}>
+          {animeInfo.poster && (
+            <Image source={{ uri: animeInfo.poster }} style={styles.animeInfoPoster} />
+          )}
+          <View style={styles.animeInfoDetails}>
+            <Text style={styles.animeInfoName} numberOfLines={2}>{animeInfo.name}</Text>
+            <Text style={styles.animeInfoEpisode}>Episode {episodeNumber}</Text>
+            {animeInfo.genres?.length > 0 && (
+              <Text style={styles.animeInfoGenres} numberOfLines={1}>
+                {animeInfo.genres.slice(0, 3).join(' • ')}
+              </Text>
+            )}
+            {(animeInfo.episodes?.sub || animeInfo.episodes?.dub) && (
+              <Text style={styles.animeInfoEpCount}>
+                {animeInfo.episodes.sub ? `${animeInfo.episodes.sub} eps (SUB)` : ''}
+                {animeInfo.episodes.sub && animeInfo.episodes.dub ? '  ' : ''}
+                {animeInfo.episodes.dub ? `${animeInfo.episodes.dub} eps (DUB)` : ''}
+              </Text>
+            )}
           </View>
         </View>
       )}
@@ -796,16 +713,40 @@ export default function WatchScreen() {
   );
 
   // Render sidebar content (episode list + recommendations) - for RIGHT side on desktop
-  const renderSidebar = () => (
+  const renderSidebar = () => {
+    // 5-episode sliding window centered on current episode
+    const WINDOW = 5;
+    const half = Math.floor(WINDOW / 2); // 2
+    let start = Math.max(0, currentEpisodeIndex - half);
+    let end = start + WINDOW;
+    if (end > episodes.length) {
+      end = episodes.length;
+      start = Math.max(0, end - WINDOW);
+    }
+    const visibleEpisodes = episodes.slice(start, end);
+
+    return (
     <>
       {/* Episode List */}
       <View style={styles.sidebarSection}>
-        <Text style={styles.sidebarTitle}>Episodes</Text>
+        <Text style={styles.sidebarTitle}>
+          Episodes {episodes.length > 0 ? `(${currentEpNumber} / ${episodes.length})` : ''}
+        </Text>
         {episodesLoading ? (
           <ActivityIndicator size="small" color="#e50914" />
         ) : (
-          <ScrollView style={styles.episodeList} nestedScrollEnabled>
-            {episodes.map((ep) => (
+          <View>
+            {/* Show previous ep hint */}
+            {start > 0 && (
+              <TouchableOpacity
+                style={styles.episodeWindowNav}
+                onPress={() => navigateToEpisode(episodes[start - 1])}
+              >
+                <Ionicons name="chevron-up" size={14} color="#666" />
+                <Text style={styles.episodeWindowNavText}>EP {episodes[start - 1].number}</Text>
+              </TouchableOpacity>
+            )}
+            {visibleEpisodes.map((ep) => (
               <TouchableOpacity
                 key={ep.episodeId}
                 style={[
@@ -828,7 +769,7 @@ export default function WatchScreen() {
                       styles.episodeItemTitle,
                       ep.number === currentEpNumber && styles.episodeItemTitleActive,
                     ]}
-                    numberOfLines={2}
+                    numberOfLines={1}
                   >
                     {ep.title}
                   </Text>
@@ -838,7 +779,17 @@ export default function WatchScreen() {
                 )}
               </TouchableOpacity>
             ))}
-          </ScrollView>
+            {/* Show next ep hint */}
+            {end < episodes.length && (
+              <TouchableOpacity
+                style={styles.episodeWindowNav}
+                onPress={() => navigateToEpisode(episodes[end])}
+              >
+                <Text style={styles.episodeWindowNavText}>EP {episodes[end].number}</Text>
+                <Ionicons name="chevron-down" size={14} color="#666" />
+              </TouchableOpacity>
+            )}
+          </View>
         )}
       </View>
 
@@ -876,7 +827,8 @@ export default function WatchScreen() {
         </View>
       )}
     </>
-  );
+    );
+  };
 
   // Render mobile details section (all content stacked)
   const renderDetailsSection = () => (
@@ -914,6 +866,9 @@ export default function WatchScreen() {
       ) : loading && !selectedSource ? (
         // Loading state with retry progress
         <View style={styles.videoLoadingContainer}>
+          {animeInfo?.name && (
+            <Text style={styles.videoLoadingTitle} numberOfLines={1}>{animeInfo.name}</Text>
+          )}
           <ActivityIndicator size="large" color="#e50914" />
           <Text style={styles.videoLoadingText}>Finding working server...</Text>
           {retryMessage && (
@@ -955,6 +910,11 @@ export default function WatchScreen() {
           hasPrevious={hasPreviousEpisode}
           hasNext={hasNextEpisode}
           initialTime={resumeTimestamp || undefined}
+          category={category}
+          onCategoryChange={setCategory}
+          sources={streamingData?.sources}
+          selectedSourceUrl={selectedSource?.url}
+          onQualityChange={handleQualityChange}
         />
       ) : (
         // No source available - show error
@@ -981,16 +941,18 @@ export default function WatchScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header - only show on native (web has controls embedded in player) */}
-      {!isWeb && (
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#fff" />
-            <Text style={styles.backText}>Back</Text>
-          </TouchableOpacity>
+      {/* Header */}
+      <View style={[styles.header, isDesktopWeb && styles.headerWeb]}>
+        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color="#fff" />
+        </TouchableOpacity>
+        <View style={styles.headerTitleContainer}>
+          {animeInfo?.name ? (
+            <Text style={styles.headerAnimeName} numberOfLines={1}>{animeInfo.name}</Text>
+          ) : null}
           <Text style={styles.episodeTitle}>Episode {episodeNumber}</Text>
         </View>
-      )}
+      </View>
 
       {/* Resume prompt - show above layout on both platforms */}
       {showResumePrompt && resumeTimestamp && (
@@ -1209,18 +1171,25 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  backText: {
-    color: '#fff',
-    fontSize: 16,
+    padding: 4,
   },
   episodeTitle: {
+    color: '#aaa',
+    fontSize: 13,
+  },
+  headerTitleContainer: {
+    flex: 1,
+    gap: 2,
+  },
+  headerAnimeName: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
+  },
+  headerWeb: {
+    paddingHorizontal: 32,
+    borderBottomWidth: 1,
+    borderBottomColor: '#222',
   },
   playerContainer: {
     width: '100%',
@@ -1234,8 +1203,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  videoLoadingText: {
+  videoLoadingTitle: {
     color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 16,
+    textAlign: 'center',
+    paddingHorizontal: 20,
+  },
+  videoLoadingText: {
+    color: '#aaa',
     marginTop: 12,
     fontSize: 14,
   },
@@ -1383,46 +1360,50 @@ const styles = StyleSheet.create({
     marginTop: 12,
     textAlign: 'center',
   },
-  episodeNavSection: {
+  animeInfoCard: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     padding: 16,
     paddingHorizontal: Platform.OS === 'web' ? 32 : 16,
+    gap: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#1a1a1a',
   },
-  episodeNavButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    backgroundColor: '#222',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#333',
+  animeInfoCardWeb: {
+    paddingHorizontal: 0,
   },
-  episodeNavButtonDisabled: {
-    backgroundColor: '#111',
-    borderColor: '#222',
+  animeInfoPoster: {
+    width: 72,
+    height: 100,
+    borderRadius: 6,
+    backgroundColor: '#1a1a1a',
+    flexShrink: 0,
   },
-  episodeNavText: {
+  animeInfoDetails: {
+    flex: 1,
+    gap: 4,
+    paddingTop: 2,
+  },
+  animeInfoName: {
     color: '#fff',
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 16,
+    fontWeight: '700',
+    lineHeight: 22,
   },
-  episodeNavTextDisabled: {
-    color: '#444',
+  animeInfoEpisode: {
+    color: '#e50914',
+    fontSize: 13,
+    fontWeight: '600',
   },
-  episodeIndicator: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-  },
-  episodeIndicatorText: {
+  animeInfoGenres: {
     color: '#888',
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  animeInfoEpCount: {
+    color: '#555',
+    fontSize: 11,
+    marginTop: 4,
   },
   communitySection: {
     padding: 16,
@@ -1800,10 +1781,6 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 8,
   },
-  episodeNavSectionWeb: {
-    paddingHorizontal: 0,
-    borderBottomWidth: 0,
-  },
   categorySectionWeb: {
     paddingHorizontal: 0,
   },
@@ -1833,31 +1810,47 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 12,
   },
-  episodeList: {
-    maxHeight: 300,
+  episodeWindowNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    borderRadius: 6,
+    backgroundColor: '#111',
+    marginBottom: 4,
+  },
+  episodeWindowNavText: {
+    color: '#666',
+    fontSize: 12,
+    fontWeight: '500',
   },
   episodeItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
     backgroundColor: '#111',
     borderRadius: 8,
-    marginBottom: 8,
+    marginBottom: 4,
     gap: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: 'transparent',
   },
   episodeItemActive: {
-    backgroundColor: '#1a1a1a',
-    borderWidth: 1,
-    borderColor: '#e50914',
+    backgroundColor: 'rgba(229, 9, 20, 0.12)',
+    borderLeftWidth: 3,
+    borderLeftColor: '#e50914',
   },
   episodeNumber: {
-    color: '#888',
+    color: '#666',
     fontSize: 13,
     fontWeight: '600',
     minWidth: 45,
   },
   episodeNumberActive: {
     color: '#e50914',
+    fontWeight: '700',
   },
   episodeItemTitle: {
     flex: 1,
@@ -1866,6 +1859,7 @@ const styles = StyleSheet.create({
   },
   episodeItemTitleActive: {
     color: '#fff',
+    fontWeight: '600',
   },
   recommendationList: {
     maxHeight: 400,
