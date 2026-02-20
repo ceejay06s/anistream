@@ -11,7 +11,9 @@ import {
   Modal,
   FlatList,
   Image,
+  ImageBackground,
   KeyboardAvoidingView,
+  useWindowDimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -24,6 +26,7 @@ import { communityService, Post, Comment } from '@/services/communityService';
 import { executeRecaptcha } from '@/utils/recaptcha';
 import { isRecaptchaEnabled, RECAPTCHA_SITE_KEY } from '@/config/recaptcha';
 import { verifyRecaptchaToken } from '@/services/recaptchaService';
+import { watchHistoryService } from '@/services/watchHistoryService';
 
 export default function WatchScreen() {
   const { id, ep, episodeId } = useLocalSearchParams<{ id: string; ep?: string; episodeId?: string }>();
@@ -52,9 +55,12 @@ export default function WatchScreen() {
   const [loadingPosts, setLoadingPosts] = useState(false);
   const [loadingComments, setLoadingComments] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
-  
-  // Ref to prevent modal from reopening immediately after closing
-  const modalClosingRef = useRef(false);
+
+  // Watch history for resume functionality
+  const [resumeTimestamp, setResumeTimestamp] = useState<number | null>(null);
+  const [showResumePrompt, setShowResumePrompt] = useState(false);
+  const lastSavedTimeRef = useRef<number>(0);
+  const saveProgressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Clean up Expo Router internal params from URL on web
   useEffect(() => {
@@ -98,19 +104,54 @@ export default function WatchScreen() {
   const currentServer = wsStatus.currentServer;
   const serverIndex = wsStatus.serverIndex;
   const totalServers = wsStatus.totalServers;
-  const iframeFallback = wsStatus.iframeFallback;
   const fromCache = wsStatus.fromCache;
 
-  // State for iframe mode
-  const [useIframe, setUseIframe] = useState(false);
+  // Timeout state for auto-retry with 30-second limit
+  const [retryTimedOut, setRetryTimedOut] = useState(false);
+  const [retryElapsed, setRetryElapsed] = useState(0);
+  const retryStartTimeRef = useRef<number | null>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Auto-switch to iframe if we get iframe fallback and no sources
+  // Start/stop retry timer based on loading state
   useEffect(() => {
-    if (iframeFallback && !selectedSource && !loading) {
-      console.log('Auto-switching to iframe fallback');
-      setUseIframe(true);
+    if (loading && !selectedSource) {
+      // Start the retry timer
+      retryStartTimeRef.current = Date.now();
+      setRetryTimedOut(false);
+      setRetryElapsed(0);
+
+      retryTimerRef.current = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - (retryStartTimeRef.current || Date.now())) / 1000);
+        setRetryElapsed(elapsed);
+
+        if (elapsed >= 30) {
+          // Timeout reached - stop trying
+          setRetryTimedOut(true);
+          if (retryTimerRef.current) {
+            clearInterval(retryTimerRef.current);
+            retryTimerRef.current = null;
+          }
+        }
+      }, 1000);
+    } else {
+      // Stop the timer when not loading or source found
+      if (retryTimerRef.current) {
+        clearInterval(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+      if (selectedSource) {
+        setRetryTimedOut(false);
+        setRetryElapsed(0);
+      }
     }
-  }, [iframeFallback, selectedSource, loading]);
+
+    return () => {
+      if (retryTimerRef.current) {
+        clearInterval(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+    };
+  }, [loading, selectedSource]);
 
   // Load episodes list for navigation
   useEffect(() => {
@@ -120,6 +161,83 @@ export default function WatchScreen() {
       loadEpisodePosts();
     }
   }, [id, ep]);
+
+  // Load watch history for resume functionality
+  useEffect(() => {
+    if (id && episodeNumber) {
+      loadWatchProgress();
+    }
+    return () => {
+      // Save progress when leaving
+      if (currentVideoTime > 10 && id) {
+        saveWatchProgress(currentVideoTime);
+      }
+      // Clear interval
+      if (saveProgressIntervalRef.current) {
+        clearInterval(saveProgressIntervalRef.current);
+      }
+    };
+  }, [id, episodeNumber]);
+
+  // Auto-save progress every 10 seconds
+  useEffect(() => {
+    if (saveProgressIntervalRef.current) {
+      clearInterval(saveProgressIntervalRef.current);
+    }
+
+    saveProgressIntervalRef.current = setInterval(() => {
+      if (currentVideoTime > 10 && Math.abs(currentVideoTime - lastSavedTimeRef.current) > 5) {
+        saveWatchProgress(currentVideoTime);
+        lastSavedTimeRef.current = currentVideoTime;
+      }
+    }, 10000);
+
+    return () => {
+      if (saveProgressIntervalRef.current) {
+        clearInterval(saveProgressIntervalRef.current);
+      }
+    };
+  }, [currentVideoTime, id, episodeNumber, animeInfo]);
+
+  const loadWatchProgress = async () => {
+    if (!id) return;
+    try {
+      const progress = await watchHistoryService.getProgress(id, episodeNumber);
+      if (progress && progress.timestamp > 30) {
+        // Only show resume if more than 30 seconds in
+        setResumeTimestamp(progress.timestamp);
+        setShowResumePrompt(true);
+      }
+    } catch (err) {
+      console.error('Failed to load watch progress:', err);
+    }
+  };
+
+  const saveWatchProgress = async (time: number) => {
+    if (!id || time < 10) return;
+    try {
+      await watchHistoryService.saveProgress({
+        animeId: id,
+        animeName: animeInfo?.name || id.replace(/-/g, ' '),
+        animePoster: animeInfo?.poster,
+        episodeId: fullEpisodeId,
+        episodeNumber,
+        timestamp: time,
+      });
+    } catch (err) {
+      console.error('Failed to save watch progress:', err);
+    }
+  };
+
+  const handleResumeYes = () => {
+    setShowResumePrompt(false);
+    // The VideoPlayer will handle seeking to resumeTimestamp
+  };
+
+  const handleResumeNo = () => {
+    setResumeTimestamp(null);
+    setShowResumePrompt(false);
+  };
 
   const loadEpisodes = async () => {
     if (!id) return;
@@ -148,12 +266,9 @@ export default function WatchScreen() {
     if (!id) return;
     try {
       setLoadingPosts(true);
-      const allPosts = await communityService.getPosts(50);
-      // Filter posts for this anime (episode-specific filtering can be added later)
-      const episodePosts = allPosts.filter(
-        post => post.animeId === id
-      );
-      setPosts(episodePosts);
+      // Fetch posts for this specific anime
+      const animePosts = await communityService.getPostsByAnime(id, 50);
+      setPosts(animePosts);
     } catch (err) {
       console.error('Failed to load posts:', err);
     } finally {
@@ -184,20 +299,16 @@ export default function WatchScreen() {
   }, []);
 
   const handleClipScene = useCallback(() => {
-    if (modalClosingRef.current || showPostModal) return; // Prevent opening if modal is closing or already open
+    if (showPostModal) return;
     setClippedTimestamp(currentVideoTime);
     setNewPostContent(`Amazing scene at ${formatTime(currentVideoTime)}! 🎬`);
     setShowPostModal(true);
   }, [currentVideoTime, formatTime, showPostModal]);
-  
+
   const handleClosePostModal = useCallback(() => {
-    if (modalClosingRef.current) return; // Prevent multiple close calls
-    modalClosingRef.current = true;
     setShowPostModal(false);
-    // Reset the flag after a short delay to allow modal to fully close
-    setTimeout(() => {
-      modalClosingRef.current = false;
-    }, 400);
+    setNewPostContent('');
+    setClippedTimestamp(null);
   }, []);
   
   // Memoized handler to prevent TextInput cursor issues
@@ -246,14 +357,9 @@ export default function WatchScreen() {
         animeInfo?.name,
         undefined // No media files for now
       );
-      // Clear form and close modal first
-      setNewPostContent('');
-      setClippedTimestamp(null);
+      // Close modal and reload posts
       handleClosePostModal();
-      // Delay reloading posts to allow modal to close smoothly
-      setTimeout(() => {
-        loadEpisodePosts();
-      }, 400);
+      loadEpisodePosts();
     } catch (err: any) {
       console.error('Failed to create post:', err);
       alert(err.message || 'Failed to create post');
@@ -366,12 +472,15 @@ export default function WatchScreen() {
     }
   };
 
-  const handleQualityChange = (source: StreamingSource) => {
+  const handleQualityChange = (source: { url: string; quality: string }) => {
     if (useWebSocket) {
       // For WebSocket, we can't directly set - need to select from streaming data
       // This is a UI-only change since sources are already loaded
     }
-    setRestSelectedSource(source);
+    const matchedSource = restStreamingData?.sources?.find(candidate => candidate.url === source.url);
+    if (matchedSource) {
+      setRestSelectedSource(matchedSource);
+    }
   };
 
   // Get the actual selected source (handling both WS and REST)
@@ -454,335 +563,460 @@ export default function WatchScreen() {
     );
   }
 
-  return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView style={styles.scrollView}>
-        {/* Header - only show on native (web has controls embedded in player) */}
-        {Platform.OS !== 'web' && (
-          <View style={styles.header}>
-            <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-              <Ionicons name="arrow-back" size={24} color="#fff" />
-              <Text style={styles.backText}>Back</Text>
-            </TouchableOpacity>
-            <Text style={styles.episodeTitle}>Episode {episodeNumber}</Text>
-          </View>
-        )}
+  const isWeb = Platform.OS === 'web';
+  const { width: windowWidth } = useWindowDimensions();
+  // Desktop layout only for wide screens (>1024px)
+  const isDesktopWeb = isWeb && windowWidth > 1024;
 
-        {/* Video Player */}
-        <View style={styles.playerContainer}>
-          {loading ? (
-            // Loading state - contained within video area
-            <View style={styles.videoLoadingContainer}>
-              <ActivityIndicator size="large" color="#e50914" />
-              <Text style={styles.videoLoadingText}>Loading video...</Text>
-              {retryMessage && (
-                <Text style={styles.videoLoadingMessage}>{retryMessage}</Text>
-              )}
-            </View>
-          ) : useIframe && iframeFallback ? (
-            // Iframe fallback player
-            <View style={styles.iframeContainer}>
-              {Platform.OS === 'web' ? (
-                <iframe
-                  src={iframeFallback}
-                  style={{ width: '100%', height: '100%', border: 'none' }}
-                  allowFullScreen
-                  allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
-                />
-              ) : (
-                <Text style={styles.iframeNotice}>
-                  Iframe playback only available on web.{'\n'}
-                  Please try again later or use web version.
-                </Text>
-              )}
-              <View style={styles.iframeBanner}>
-                <Text style={styles.iframeBannerText}>Playing via HiAnime (iframe fallback)</Text>
-                <TouchableOpacity
-                  style={styles.tryAgainButton}
-                  onPress={() => {
-                    setUseIframe(false);
-                    loadSources();
-                  }}
-                >
-                  <Text style={styles.tryAgainText}>Try Direct Stream</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : selectedSource ? (
-            <VideoPlayer
-              source={selectedSource.url}
-              autoPlay={true}
-              onError={(err) => console.error('Player error:', err)}
-              onReady={() => {
-                console.log('Player ready');
-              }}
-              animeId={id}
-              episodeNumber={episodeNumber}
-              fullEpisodeId={fullEpisodeId}
-              subtitleTracks={streamingData?.tracks?.map(t => ({
-                url: t.url,
-                lang: t.lang,
-                label: t.lang,
-              })) || []}
-              onRequestNewSource={handleRequestNewSource}
-              title={id?.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
-              onBack={handleBack}
-              onCurrentTimeChange={setCurrentVideoTime}
-            />
-          ) : iframeFallback ? (
-            // Show button to switch to iframe
-            <View style={styles.noSourceContainer}>
-              <Text style={styles.noSourceText}>Direct streaming unavailable</Text>
-              <TouchableOpacity
-                style={styles.useIframeButton}
-                onPress={() => setUseIframe(true)}
-              >
-                <Text style={styles.useIframeText}>Use Iframe Player</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
-        </View>
-
-        {/* Episode Navigation */}
-        {episodes.length > 1 && (
-          <View style={styles.episodeNavSection}>
-            <TouchableOpacity
-              style={[styles.episodeNavButton, !hasPreviousEpisode && styles.episodeNavButtonDisabled]}
-              onPress={handlePreviousEpisode}
-              disabled={!hasPreviousEpisode}
-            >
-              <Ionicons
-                name="play-skip-back"
-                size={20}
-                color={hasPreviousEpisode ? '#fff' : '#444'}
-              />
-              <Text style={[styles.episodeNavText, !hasPreviousEpisode && styles.episodeNavTextDisabled]}>
-                Previous
-              </Text>
-            </TouchableOpacity>
-
-            <View style={styles.episodeIndicator}>
-              <Text style={styles.episodeIndicatorText}>
-                EP {currentEpNumber} / {episodes.length}
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              style={[styles.episodeNavButton, !hasNextEpisode && styles.episodeNavButtonDisabled]}
-              onPress={handleNextEpisode}
-              disabled={!hasNextEpisode}
-            >
-              <Text style={[styles.episodeNavText, !hasNextEpisode && styles.episodeNavTextDisabled]}>
-                Next
-              </Text>
-              <Ionicons
-                name="play-skip-forward"
-                size={20}
-                color={hasNextEpisode ? '#fff' : '#444'}
-              />
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Sub/Dub Toggle */}
-        <View style={styles.categorySection}>
-          <Text style={styles.qualityLabel}>Audio:</Text>
-          <View style={styles.qualityOptions}>
-            <TouchableOpacity
-              style={[
-                styles.categoryButton,
-                category === 'sub' && styles.categoryButtonActive,
-              ]}
-              onPress={() => setCategory('sub')}
-            >
-              <Text
-                style={[
-                  styles.qualityText,
-                  category === 'sub' && styles.qualityTextActive,
-                ]}
-              >
-                SUB
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.categoryButton,
-                category === 'dub' && styles.categoryButtonActive,
-              ]}
-              onPress={() => setCategory('dub')}
-            >
-              <Text
-                style={[
-                  styles.qualityText,
-                  category === 'dub' && styles.qualityTextActive,
-                ]}
-              >
-                DUB
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Quality Selector */}
-        {streamingData && streamingData.sources.length > 1 && (
-          <View style={styles.qualitySection}>
-            <Text style={styles.qualityLabel}>Quality:</Text>
-            <View style={styles.qualityOptions}>
-              {streamingData.sources.map((source, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={[
-                    styles.qualityButton,
-                    selectedSource?.url === source.url && styles.qualityButtonActive,
-                  ]}
-                  onPress={() => handleQualityChange(source)}
-                >
-                  <Text
-                    style={[
-                      styles.qualityText,
-                      selectedSource?.url === source.url && styles.qualityTextActive,
-                    ]}
-                  >
-                    {source.quality}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {/* Episode Info */}
-        <View style={styles.infoSection}>
-          <Text style={styles.infoLabel}>Now Playing</Text>
-          <Text style={styles.infoText}>Episode {episodeNumber} ({category.toUpperCase()})</Text>
-          <Text style={styles.streamType}>
-            {useWebSocket ? 'WebSocket' : 'REST'} • Server: {currentServer?.toUpperCase() || 'HD-1'}
-            {selectedSource?.isM3U8 ? ' • HLS' : ''}
-            {fromCache ? ' • Cached' : totalServers > 0 ? ` (${serverIndex + 1}/${totalServers})` : ''}
-          </Text>
-          {retryMessage && (
-            <Text style={styles.retryingText}>{retryMessage}</Text>
+  // Render main content section (video details + community) - for LEFT side on desktop
+  const renderMainContent = () => (
+    <>
+      {/* Anime Info Card */}
+      {animeInfo && (
+        <View style={[styles.animeInfoCard, isDesktopWeb && styles.animeInfoCardWeb]}>
+          {animeInfo.poster && (
+            <Image source={{ uri: animeInfo.poster }} style={styles.animeInfoPoster} />
           )}
+          <View style={styles.animeInfoDetails}>
+            <Text style={styles.animeInfoName} numberOfLines={2}>{animeInfo.name}</Text>
+            <Text style={styles.animeInfoEpisode}>Episode {episodeNumber}</Text>
+            {animeInfo.genres?.length > 0 && (
+              <Text style={styles.animeInfoGenres} numberOfLines={1}>
+                {animeInfo.genres.slice(0, 3).join(' • ')}
+              </Text>
+            )}
+            {(animeInfo.episodes?.sub || animeInfo.episodes?.dub) && (
+              <Text style={styles.animeInfoEpCount}>
+                {animeInfo.episodes.sub ? `${animeInfo.episodes.sub} eps (SUB)` : ''}
+                {animeInfo.episodes.sub && animeInfo.episodes.dub ? '  ' : ''}
+                {animeInfo.episodes.dub ? `${animeInfo.episodes.dub} eps (DUB)` : ''}
+              </Text>
+            )}
+          </View>
+        </View>
+      )}
+
+      {/* Episode Info */}
+      <View style={[styles.infoSection, isDesktopWeb && styles.infoSectionWeb]}>
+        <Text style={styles.infoLabel}>Now Playing</Text>
+        <Text style={styles.infoText}>Episode {episodeNumber} ({category.toUpperCase()})</Text>
+        <Text style={styles.streamType}>
+          {useWebSocket ? 'WebSocket' : 'REST'} • Server: {currentServer?.toUpperCase() || 'HD-1'}
+          {selectedSource?.isM3U8 ? ' • HLS' : ''}
+          {fromCache ? ' • Cached' : totalServers > 0 ? ` (${serverIndex + 1}/${totalServers})` : ''}
+        </Text>
+        {retryMessage && (
+          <Text style={styles.retryingText}>{retryMessage}</Text>
+        )}
+      </View>
+
+      {/* Community Section */}
+      <View style={[styles.communitySection, isDesktopWeb && styles.communitySectionWeb]}>
+        <View style={styles.communityHeader}>
+          <Text style={styles.communityTitle}>Community</Text>
+          <View style={[styles.communityActions, isDesktopWeb && styles.communityActionsWeb]}>
+            <TouchableOpacity
+              style={styles.clipButton}
+              onPress={handleClipScene}
+            >
+              <Ionicons name="videocam" size={18} color="#fff" />
+              <Text style={styles.clipButtonText}>Clip Scene</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.postButton}
+              onPress={() => {
+                if (showPostModal) return;
+                setClippedTimestamp(null);
+                setNewPostContent('');
+                setShowPostModal(true);
+              }}
+            >
+              <Ionicons name="create-outline" size={18} color="#fff" />
+              <Text style={styles.postButtonText}>Post</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.commentButton}
+              onPress={async () => {
+                setSelectedPost(null);
+                await loadComments();
+                setShowCommentsModal(true);
+              }}
+            >
+              <Ionicons name="chatbubbles-outline" size={18} color="#fff" />
+              <Text style={styles.commentButtonText}>
+                Comments {comments.length > 0 && `(${comments.length})`}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* Community Section */}
-        <View style={styles.communitySection}>
-          <View style={styles.communityHeader}>
-            <Text style={styles.communityTitle}>Community</Text>
-            <View style={styles.communityActions}>
-              <TouchableOpacity
-                style={styles.clipButton}
-                onPress={handleClipScene}
-              >
-                <Ionicons name="videocam" size={18} color="#fff" />
-                <Text style={styles.clipButtonText}>Clip Scene</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.postButton}
-                onPress={() => {
-                  if (modalClosingRef.current || showPostModal) return; // Prevent opening if modal is closing or already open
-                  setClippedTimestamp(null);
-                  setNewPostContent('');
-                  setShowPostModal(true);
-                }}
-              >
-                <Ionicons name="create-outline" size={18} color="#fff" />
-                <Text style={styles.postButtonText}>Post</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.commentButton}
-                onPress={async () => {
-                  setSelectedPost(null);
-                  await loadComments();
-                  setShowCommentsModal(true);
-                }}
-              >
-                <Ionicons name="chatbubbles-outline" size={18} color="#fff" />
-                <Text style={styles.commentButtonText}>
-                  Comments {comments.length > 0 && `(${comments.length})`}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Posts List */}
-          {loadingPosts ? (
-            <ActivityIndicator size="small" color="#e50914" style={styles.loadingIndicator} />
-          ) : posts.length > 0 ? (
-            <FlatList
-              data={posts}
-              keyExtractor={(item) => item.id}
-              scrollEnabled={false}
-              renderItem={({ item }) => (
-                <View style={styles.postItem}>
-                  <View style={styles.postHeader}>
-                    {item.userPhoto ? (
-                      <Image source={{ uri: item.userPhoto }} style={styles.postAvatar} />
-                    ) : (
-                      <View style={styles.postAvatarPlaceholder}>
-                        <Ionicons name="person" size={16} color="#888" />
-                      </View>
-                    )}
-                    <View style={styles.postHeaderText}>
-                      <Text style={styles.postUserName}>{item.userName}</Text>
-                      <Text style={styles.postTime}>{communityService.formatTimeAgo(item.createdAt)}</Text>
+        {/* Posts List */}
+        {loadingPosts ? (
+          <ActivityIndicator size="small" color="#e50914" style={styles.loadingIndicator} />
+        ) : posts.length > 0 ? (
+          <FlatList
+            data={posts}
+            keyExtractor={(item) => item.id}
+            scrollEnabled={false}
+            renderItem={({ item }) => (
+              <View style={styles.postItem}>
+                <View style={styles.postHeader}>
+                  {item.userPhoto ? (
+                    <Image source={{ uri: item.userPhoto }} style={styles.postAvatar} />
+                  ) : (
+                    <View style={styles.postAvatarPlaceholder}>
+                      <Ionicons name="person" size={16} color="#888" />
                     </View>
-                  </View>
-                  <Text style={styles.postContent}>{item.content}</Text>
-                  {item.animeName && (
-                    <Text style={styles.postAnime}>📺 {item.animeName}</Text>
                   )}
-                  <View style={styles.postFooter}>
-                    <TouchableOpacity
-                      style={styles.postAction}
-                      onPress={async () => {
-                        if (user) {
-                          await communityService.toggleLike(user.uid, item.id);
-                          loadEpisodePosts();
-                        }
-                      }}
-                    >
-                      <Ionicons
-                        name={user && item.likes.includes(user.uid) ? 'heart' : 'heart-outline'}
-                        size={18}
-                        color={user && item.likes.includes(user.uid) ? '#e50914' : '#888'}
-                      />
-                      <Text style={styles.postActionText}>{item.likes.length}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.postAction}
-                      onPress={async () => {
-                        setSelectedPost(item);
-                        await loadComments(item.id);
-                        setShowCommentsModal(true);
-                      }}
-                    >
-                      <Ionicons name="chatbubble-outline" size={18} color="#888" />
-                      <Text style={styles.postActionText}>{item.commentCount}</Text>
-                    </TouchableOpacity>
+                  <View style={styles.postHeaderText}>
+                    <Text style={styles.postUserName}>{item.userName}</Text>
+                    <Text style={styles.postTime}>{communityService.formatTimeAgo(item.createdAt)}</Text>
                   </View>
                 </View>
-              )}
-            />
-          ) : (
-            <Text style={styles.noPostsText}>No posts yet. Be the first to share your thoughts!</Text>
-          )}
+                <Text style={styles.postContent}>{item.content}</Text>
+                {item.animeName && (
+                  <Text style={styles.postAnime}>📺 {item.animeName}</Text>
+                )}
+                <View style={styles.postFooter}>
+                  <TouchableOpacity
+                    style={styles.postAction}
+                    onPress={async () => {
+                      if (user) {
+                        await communityService.toggleLike(user.uid, item.id);
+                        loadEpisodePosts();
+                      }
+                    }}
+                  >
+                    <Ionicons
+                      name={user && item.likes.includes(user.uid) ? 'heart' : 'heart-outline'}
+                      size={18}
+                      color={user && item.likes.includes(user.uid) ? '#e50914' : '#888'}
+                    />
+                    <Text style={styles.postActionText}>{item.likes.length}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.postAction}
+                    onPress={async () => {
+                      setSelectedPost(item);
+                      await loadComments(item.id);
+                      setShowCommentsModal(true);
+                    }}
+                  >
+                    <Ionicons name="chatbubble-outline" size={18} color="#888" />
+                    <Text style={styles.postActionText}>{item.commentCount}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          />
+        ) : (
+          <Text style={styles.noPostsText}>No posts yet. Be the first to share your thoughts!</Text>
+        )}
+      </View>
+    </>
+  );
+
+  // Render sidebar content (episode list + recommendations) - for RIGHT side on desktop
+  const renderSidebar = () => {
+    // 5-episode sliding window centered on current episode
+    const WINDOW = 5;
+    const half = Math.floor(WINDOW / 2); // 2
+    let start = Math.max(0, currentEpisodeIndex - half);
+    let end = start + WINDOW;
+    if (end > episodes.length) {
+      end = episodes.length;
+      start = Math.max(0, end - WINDOW);
+    }
+    const visibleEpisodes = episodes.slice(start, end);
+
+    return (
+    <>
+      {/* Episode List */}
+      <View style={styles.sidebarSection}>
+        <Text style={styles.sidebarTitle}>
+          Episodes {episodes.length > 0 ? `(${currentEpNumber} / ${episodes.length})` : ''}
+        </Text>
+        {episodesLoading ? (
+          <ActivityIndicator size="small" color="#e50914" />
+        ) : (
+          <View>
+            {/* Show previous ep hint */}
+            {start > 0 && (
+              <TouchableOpacity
+                style={styles.episodeWindowNav}
+                onPress={() => navigateToEpisode(episodes[start - 1])}
+              >
+                <Ionicons name="chevron-up" size={14} color="#666" />
+                <Text style={styles.episodeWindowNavText}>EP {episodes[start - 1].number}</Text>
+              </TouchableOpacity>
+            )}
+            {visibleEpisodes.map((ep) => (
+              <TouchableOpacity
+                key={ep.episodeId}
+                style={[
+                  styles.episodeItem,
+                  ep.number === currentEpNumber && styles.episodeItemActive,
+                ]}
+                onPress={() => navigateToEpisode(ep)}
+              >
+                <Text
+                  style={[
+                    styles.episodeNumber,
+                    ep.number === currentEpNumber && styles.episodeNumberActive,
+                  ]}
+                >
+                  EP {ep.number}
+                </Text>
+                {ep.title && (
+                  <Text
+                    style={[
+                      styles.episodeItemTitle,
+                      ep.number === currentEpNumber && styles.episodeItemTitleActive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {ep.title}
+                  </Text>
+                )}
+                {ep.number === currentEpNumber && (
+                  <Ionicons name="play-circle" size={20} color="#e50914" />
+                )}
+              </TouchableOpacity>
+            ))}
+            {/* Show next ep hint */}
+            {end < episodes.length && (
+              <TouchableOpacity
+                style={styles.episodeWindowNav}
+                onPress={() => navigateToEpisode(episodes[end])}
+              >
+                <Text style={styles.episodeWindowNavText}>EP {episodes[end].number}</Text>
+                <Ionicons name="chevron-down" size={14} color="#666" />
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+      </View>
+
+      {/* Recommendations */}
+      {animeInfo?.relatedAnime && animeInfo.relatedAnime.length > 0 && (
+        <View style={styles.sidebarSection}>
+          <Text style={styles.sidebarTitle}>Related</Text>
+          <ScrollView style={styles.recommendationList} nestedScrollEnabled>
+            {animeInfo.relatedAnime.slice(0, 10).map((related: any) => (
+              <TouchableOpacity
+                key={related.id}
+                style={styles.recommendationItem}
+                onPress={() => router.push({
+                  pathname: '/detail/[id]',
+                  params: { id: related.id },
+                })}
+              >
+                {related.poster && (
+                  <Image
+                    source={{ uri: related.poster }}
+                    style={styles.recommendationPoster}
+                  />
+                )}
+                <View style={styles.recommendationInfo}>
+                  <Text style={styles.recommendationTitle} numberOfLines={2}>
+                    {related.name}
+                  </Text>
+                  {related.type && (
+                    <Text style={styles.recommendationType}>{related.type}</Text>
+                  )}
+                </View>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
-      </ScrollView>
+      )}
+    </>
+    );
+  };
+
+  // Render mobile details section (all content stacked)
+  const renderDetailsSection = () => (
+    <>
+      {renderMainContent()}
+    </>
+  );
+
+  // Render video player section
+  const renderVideoPlayer = () => (
+    <View style={[styles.playerContainer, isDesktopWeb && styles.playerContainerWeb]}>
+      {retryTimedOut && !selectedSource ? (
+        // Timeout error state
+        <View style={styles.timeoutContainer}>
+          <Ionicons name="cloud-offline-outline" size={48} color="#e50914" />
+          <Text style={styles.timeoutText}>Could not find a working server</Text>
+          <Text style={styles.timeoutSubtext}>All servers failed to respond</Text>
+          <TouchableOpacity
+            style={styles.retryServerButton}
+            onPress={() => {
+              setRetryTimedOut(false);
+              setRetryElapsed(0);
+              retryStartTimeRef.current = null;
+              if (useWebSocket) {
+                wsRetry();
+              } else {
+                loadSources();
+              }
+            }}
+          >
+            <Ionicons name="refresh" size={20} color="#fff" />
+            <Text style={styles.retryServerButtonText}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
+      ) : loading && !selectedSource ? (
+        // Loading state with poster cover
+        <ImageBackground
+          source={animeInfo?.poster ? { uri: animeInfo.poster } : undefined}
+          style={styles.videoLoadingContainer}
+          imageStyle={styles.videoLoadingCoverImage}
+          resizeMode="stretch"
+        >
+          {/* Dark overlay */}
+          <View style={styles.videoLoadingOverlay} />
+          {animeInfo?.name && (
+            <Text style={styles.videoLoadingTitle} numberOfLines={1}>{animeInfo.name}</Text>
+          )}
+          <ActivityIndicator size="large" color="#e50914" />
+          <Text style={styles.videoLoadingText}>Finding working server...</Text>
+          {retryMessage && (
+            <Text style={styles.videoLoadingMessage}>{retryMessage}</Text>
+          )}
+          {retryElapsed > 0 && (
+            <Text style={styles.retryCounterText}>
+              Trying servers... {retryElapsed}s / 30s
+            </Text>
+          )}
+          {totalServers > 0 && (
+            <Text style={styles.serverProgressText}>
+              Server {serverIndex + 1} of {totalServers}
+            </Text>
+          )}
+        </ImageBackground>
+      ) : selectedSource ? (
+        <VideoPlayer
+          source={selectedSource.url}
+          autoPlay={true}
+          onError={(err) => console.error('Player error:', err)}
+          onReady={() => {
+            console.log('Player ready');
+          }}
+          animeId={id}
+          episodeNumber={episodeNumber}
+          fullEpisodeId={fullEpisodeId}
+          subtitleTracks={streamingData?.tracks?.map(t => ({
+            url: t.url,
+            lang: t.lang,
+            label: t.lang,
+          })) || []}
+          onRequestNewSource={handleRequestNewSource}
+          title={id?.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+          onBack={handleBack}
+          onCurrentTimeChange={setCurrentVideoTime}
+          onPrevious={handlePreviousEpisode}
+          onNext={handleNextEpisode}
+          hasPrevious={hasPreviousEpisode}
+          hasNext={hasNextEpisode}
+          initialTime={showResumePrompt ? undefined : (resumeTimestamp || undefined)}
+          category={category}
+          onCategoryChange={setCategory}
+          sources={streamingData?.sources}
+          selectedSourceUrl={selectedSource?.url}
+          onQualityChange={handleQualityChange}
+          intro={streamingData?.intro}
+          outro={streamingData?.outro}
+        />
+      ) : (
+        // No source available - show error
+        <View style={styles.noSourceContainer}>
+          <Ionicons name="videocam-off-outline" size={48} color="#666" />
+          <Text style={styles.noSourceText}>No video source available</Text>
+          <TouchableOpacity
+            style={styles.retryServerButton}
+            onPress={() => {
+              if (useWebSocket) {
+                wsRetry();
+              } else {
+                loadSources();
+              }
+            }}
+          >
+            <Ionicons name="refresh" size={20} color="#fff" />
+            <Text style={styles.retryServerButtonText}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Header */}
+      <View style={[styles.header, isDesktopWeb && styles.headerWeb]}>
+        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color="#fff" />
+        </TouchableOpacity>
+        <View style={styles.headerTitleContainer}>
+          {animeInfo?.name ? (
+            <Text style={styles.headerAnimeName} numberOfLines={1}>{animeInfo.name}</Text>
+          ) : null}
+          <Text style={styles.episodeTitle}>Episode {episodeNumber}</Text>
+        </View>
+      </View>
+
+      {/* Resume prompt - show above layout on both platforms */}
+      {showResumePrompt && resumeTimestamp && (
+        <View style={[styles.resumePrompt, isDesktopWeb && styles.resumePromptWeb]}>
+          <View style={styles.resumePromptContent}>
+            <Ionicons name="play-circle-outline" size={24} color="#e50914" />
+            <Text style={styles.resumePromptText}>
+              Resume from {watchHistoryService.formatTime(resumeTimestamp)}?
+            </Text>
+          </View>
+          <View style={styles.resumePromptActions}>
+            <TouchableOpacity style={styles.resumeButton} onPress={handleResumeYes}>
+              <Text style={styles.resumeButtonText}>Resume</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.restartButton} onPress={handleResumeNo}>
+              <Text style={styles.restartButtonText}>Start Over</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Desktop Web: Side-by-side layout (3:1 ratio) */}
+      {isDesktopWeb ? (
+        <View style={styles.webLayout}>
+          {/* Left side - Video Player + Details + Community (75%) */}
+          <ScrollView style={styles.webMainSection}>
+            {renderVideoPlayer()}
+            {renderMainContent()}
+          </ScrollView>
+
+          {/* Right side - Episode List + Recommendations (25%) */}
+          <View style={styles.webSidebarSection}>
+            {renderSidebar()}
+          </View>
+        </View>
+      ) : (
+        // Mobile/Tablet/Narrow web: Stacked layout
+        <ScrollView style={styles.scrollView}>
+          {renderVideoPlayer()}
+          {renderDetailsSection()}
+        </ScrollView>
+      )}
 
       {/* Create Post Modal */}
       <Modal
-        visible={showPostModal && !modalClosingRef.current}
+        visible={showPostModal}
         transparent
         animationType="slide"
         onRequestClose={handleClosePostModal}
-        onDismiss={() => {
-          // Ensure state is clean when modal is dismissed
-          if (!showPostModal) {
-            setNewPostContent('');
-            setClippedTimestamp(null);
-          }
-        }}
+        statusBarTranslucent
+        hardwareAccelerated
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -835,6 +1069,8 @@ export default function WatchScreen() {
         transparent
         animationType="slide"
         onRequestClose={() => setShowCommentsModal(false)}
+        statusBarTranslucent
+        hardwareAccelerated
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -948,18 +1184,25 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  backText: {
-    color: '#fff',
-    fontSize: 16,
+    padding: 4,
   },
   episodeTitle: {
+    color: '#aaa',
+    fontSize: 13,
+  },
+  headerTitleContainer: {
+    flex: 1,
+    gap: 2,
+  },
+  headerAnimeName: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
+  },
+  headerWeb: {
+    paddingHorizontal: 32,
+    borderBottomWidth: 1,
+    borderBottomColor: '#222',
   },
   playerContainer: {
     width: '100%',
@@ -972,9 +1215,25 @@ const styles = StyleSheet.create({
     backgroundColor: '#111',
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
+  },
+  videoLoadingCoverImage: {
+    opacity: 0.4,
+  },
+  videoLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+  },
+  videoLoadingTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 16,
+    textAlign: 'center',
+    paddingHorizontal: 20,
   },
   videoLoadingText: {
-    color: '#fff',
+    color: '#aaa',
     marginTop: 12,
     fontSize: 14,
   },
@@ -984,6 +1243,53 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
     paddingHorizontal: 20,
+  },
+  retryCounterText: {
+    color: '#e50914',
+    marginTop: 12,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  serverProgressText: {
+    color: '#666',
+    marginTop: 4,
+    fontSize: 12,
+  },
+  timeoutContainer: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    backgroundColor: '#111',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  timeoutText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  timeoutSubtext: {
+    color: '#888',
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  retryServerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#e50914',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 20,
+  },
+  retryServerButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   categorySection: {
     padding: 16,
@@ -1061,107 +1367,64 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
   },
-  iframeContainer: {
-    width: '100%',
-    aspectRatio: 16 / 9,
-    backgroundColor: '#000',
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  iframeBanner: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(229, 9, 20, 0.9)',
-    padding: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  iframeBannerText: {
-    color: '#fff',
-    fontSize: 12,
-  },
-  tryAgainButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  tryAgainText: {
-    color: '#fff',
-    fontSize: 11,
-  },
-  iframeNotice: {
-    color: '#888',
-    fontSize: 14,
-    textAlign: 'center',
-    padding: 20,
-  },
   noSourceContainer: {
     width: '100%',
     aspectRatio: 16 / 9,
     backgroundColor: '#111',
-    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 20,
   },
   noSourceText: {
     color: '#888',
-    fontSize: 14,
-    marginBottom: 12,
+    fontSize: 16,
+    marginTop: 12,
+    textAlign: 'center',
   },
-  useIframeButton: {
-    backgroundColor: '#e50914',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  useIframeText: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  episodeNavSection: {
+  animeInfoCard: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     padding: 16,
     paddingHorizontal: Platform.OS === 'web' ? 32 : 16,
+    gap: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#1a1a1a',
   },
-  episodeNavButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    backgroundColor: '#222',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#333',
+  animeInfoCardWeb: {
+    paddingHorizontal: 0,
   },
-  episodeNavButtonDisabled: {
-    backgroundColor: '#111',
-    borderColor: '#222',
+  animeInfoPoster: {
+    width: 72,
+    height: 100,
+    borderRadius: 6,
+    backgroundColor: '#1a1a1a',
+    flexShrink: 0,
   },
-  episodeNavText: {
+  animeInfoDetails: {
+    flex: 1,
+    gap: 4,
+    paddingTop: 2,
+  },
+  animeInfoName: {
     color: '#fff',
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 16,
+    fontWeight: '700',
+    lineHeight: 22,
   },
-  episodeNavTextDisabled: {
-    color: '#444',
+  animeInfoEpisode: {
+    color: '#e50914',
+    fontSize: 13,
+    fontWeight: '600',
   },
-  episodeIndicator: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-  },
-  episodeIndicatorText: {
+  animeInfoGenres: {
     color: '#888',
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  animeInfoEpCount: {
+    color: '#555',
+    fontSize: 11,
+    marginTop: 4,
   },
   communitySection: {
     padding: 16,
@@ -1309,6 +1572,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.8)',
     justifyContent: 'flex-end',
+    ...(Platform.OS === 'web' && {
+      position: 'fixed' as any,
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 9999,
+    }),
   },
   modalContent: {
     backgroundColor: '#1a1a1a',
@@ -1451,4 +1722,198 @@ const styles = StyleSheet.create({
     backgroundColor: '#333',
     opacity: 0.5,
   },
+  // Resume prompt styles
+  resumePrompt: {
+    backgroundColor: '#1a1a1a',
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  resumePromptContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  resumePromptText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  resumePromptActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  resumeButton: {
+    flex: 1,
+    backgroundColor: '#e50914',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  resumeButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  restartButton: {
+    flex: 1,
+    backgroundColor: '#333',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  restartButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  // Web desktop layout styles (3:1 ratio)
+  webLayout: {
+    flex: 1,
+    flexDirection: 'row' as const,
+    gap: 16,
+    padding: 16,
+  },
+  webMainSection: {
+    flex: 3,
+    minWidth: 0,
+  },
+  webSidebarSection: {
+    flex: 1,
+    minWidth: 280,
+    maxWidth: 400,
+    backgroundColor: '#0a0a0a',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1a1a1a',
+    maxHeight: '100%',
+  },
+  playerContainerWeb: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  resumePromptWeb: {
+    marginHorizontal: 16,
+    marginTop: 8,
+  },
+  categorySectionWeb: {
+    paddingHorizontal: 0,
+  },
+  qualitySectionWeb: {
+    paddingHorizontal: 0,
+  },
+  infoSectionWeb: {
+    paddingHorizontal: 0,
+  },
+  communitySectionWeb: {
+    paddingHorizontal: 0,
+    borderTopWidth: 0,
+  },
+  communityActionsWeb: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+  },
+  // Sidebar styles
+  sidebarSection: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1a1a1a',
+  },
+  sidebarTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  episodeWindowNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    borderRadius: 6,
+    backgroundColor: '#111',
+    marginBottom: 4,
+  },
+  episodeWindowNavText: {
+    color: '#666',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  episodeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    backgroundColor: '#111',
+    borderRadius: 8,
+    marginBottom: 4,
+    gap: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: 'transparent',
+  },
+  episodeItemActive: {
+    backgroundColor: 'rgba(229, 9, 20, 0.12)',
+    borderLeftWidth: 3,
+    borderLeftColor: '#e50914',
+  },
+  episodeNumber: {
+    color: '#666',
+    fontSize: 13,
+    fontWeight: '600',
+    minWidth: 45,
+  },
+  episodeNumberActive: {
+    color: '#e50914',
+    fontWeight: '700',
+  },
+  episodeItemTitle: {
+    flex: 1,
+    color: '#888',
+    fontSize: 12,
+  },
+  episodeItemTitleActive: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  recommendationList: {
+    maxHeight: 400,
+  },
+  recommendationItem: {
+    flexDirection: 'row',
+    padding: 8,
+    backgroundColor: '#111',
+    borderRadius: 8,
+    marginBottom: 8,
+    gap: 10,
+  },
+  recommendationPoster: {
+    width: 50,
+    height: 70,
+    borderRadius: 4,
+    backgroundColor: '#222',
+  },
+  recommendationInfo: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  recommendationTitle: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  recommendationType: {
+    color: '#888',
+    fontSize: 11,
+    marginTop: 4,
+  },
 });
+
+
+

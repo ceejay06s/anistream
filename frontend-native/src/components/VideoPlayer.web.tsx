@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { View, StyleSheet, ActivityIndicator, Text, TouchableOpacity } from 'react-native';
 import Hls from 'hls.js';
-import { VideoControls, SubtitleTrack, SubtitleSettings } from './VideoControls';
+import { VideoControls, SubtitleTrack, SubtitleSettings, PlayerSource } from './VideoControls';
 import { SubtitleRenderer } from './SubtitleRenderer';
 
 export interface VideoPlayerProps {
@@ -23,6 +23,22 @@ export interface VideoPlayerProps {
   onBack?: () => void;
   // Callback to get current time for clipping
   onCurrentTimeChange?: (time: number) => void;
+  // Episode navigation
+  onPrevious?: () => void;
+  onNext?: () => void;
+  hasPrevious?: boolean;
+  hasNext?: boolean;
+  // Resume playback
+  initialTime?: number;
+  // Audio & quality
+  category?: 'sub' | 'dub';
+  onCategoryChange?: (cat: 'sub' | 'dub') => void;
+  sources?: PlayerSource[];
+  selectedSourceUrl?: string;
+  onQualityChange?: (source: PlayerSource) => void;
+  // Skip intro/outro
+  intro?: { start: number; end: number };
+  outro?: { start: number; end: number };
 }
 
 export function VideoPlayer({
@@ -39,10 +55,23 @@ export function VideoPlayer({
   title,
   onBack,
   onCurrentTimeChange,
+  onPrevious,
+  onNext,
+  hasPrevious,
+  hasNext,
+  initialTime,
+  category,
+  onCategoryChange,
+  sources,
+  selectedSourceUrl,
+  onQualityChange,
+  intro,
+  outro,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const hasSeekToInitial = useRef(false);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +93,9 @@ export function VideoPlayer({
     backgroundColor: 'semi',
   });
   const [useCustomControls, setUseCustomControls] = useState(true);
+  const [autoSkip, setAutoSkip] = useState(false);
+  const autoSkippedIntroRef = useRef(false);
+  const autoSkippedOutroRef = useRef(false);
 
   const showStreamError = (message: string) => {
     console.log('Stream error:', message);
@@ -143,16 +175,28 @@ export function VideoPlayer({
 
   const handleToggleFullscreen = useCallback(() => {
     const container = containerRef.current;
+    const video = videoRef.current;
     if (!container) return;
 
     if (!document.fullscreenElement) {
-      container.requestFullscreen().then(() => {
+      if (container.requestFullscreen) {
+        container.requestFullscreen().then(() => {
+          setIsFullscreen(true);
+        }).catch(console.error);
+      } else if ((video as any)?.webkitEnterFullscreen) {
+        // iOS Safari fallback — only supports fullscreen on <video> directly
+        (video as any).webkitEnterFullscreen();
         setIsFullscreen(true);
-      }).catch(console.error);
+      }
     } else {
-      document.exitFullscreen().then(() => {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().then(() => {
+          setIsFullscreen(false);
+        }).catch(console.error);
+      } else if ((document as any).webkitExitFullscreen) {
+        (document as any).webkitExitFullscreen();
         setIsFullscreen(false);
-      }).catch(console.error);
+      }
     }
   }, []);
 
@@ -180,15 +224,17 @@ export function VideoPlayer({
     }
   }, []);
 
-  // Fullscreen change listener
+  // Fullscreen change listener (standard + webkit for iOS Safari)
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
+      setIsFullscreen(!!(document.fullscreenElement || (document as any).webkitFullscreenElement));
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
     };
   }, []);
 
@@ -252,6 +298,7 @@ export function VideoPlayer({
         console.log('HLS manifest parsed');
         setIsLoading(false);
         onReady?.();
+
         if (autoPlay) {
           video.play().catch((e) => {
             console.log('Autoplay prevented:', e);
@@ -262,9 +309,10 @@ export function VideoPlayer({
       hls.on(Hls.Events.ERROR, (event, data) => {
         console.error('HLS error:', event, data);
         if (data.fatal) {
-          const is403 = data.response?.code === 403 ||
+          const responseCode = data.response?.code;
+          const is403 = responseCode === 403 ||
                         data.details?.includes('403') ||
-                        (data.type === Hls.ErrorTypes.NETWORK_ERROR && data.response?.code >= 400);
+                        (data.type === Hls.ErrorTypes.NETWORK_ERROR && typeof responseCode === 'number' && responseCode >= 400);
 
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
@@ -344,7 +392,37 @@ export function VideoPlayer({
         hlsRef.current = null;
       }
     };
-  }, [source, autoPlay, onError, onReady, useIframe, retryCount, handleTimeUpdate]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source, autoPlay, useIframe, retryCount]);
+
+  // Reset seek state and auto-skip flags when source changes
+  useEffect(() => {
+    hasSeekToInitial.current = false;
+    autoSkippedIntroRef.current = false;
+    autoSkippedOutroRef.current = false;
+  }, [source]);
+
+  // Auto-skip intro/outro when enabled
+  useEffect(() => {
+    if (!autoSkip) return;
+    if (intro && currentTime >= intro.start && currentTime < intro.end && !autoSkippedIntroRef.current) {
+      autoSkippedIntroRef.current = true;
+      handleSeek(intro.end);
+    }
+    if (outro && currentTime >= outro.start && currentTime < outro.end && !autoSkippedOutroRef.current) {
+      autoSkippedOutroRef.current = true;
+      handleSeek(outro.end);
+    }
+  }, [currentTime, autoSkip, intro, outro, handleSeek]);
+
+  // Handle initial seek — fires when initialTime is set OR when loading finishes
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!isLoading && video && initialTime && initialTime > 0 && !hasSeekToInitial.current) {
+      hasSeekToInitial.current = true;
+      video.currentTime = initialTime;
+    }
+  }, [initialTime, isLoading]);
 
   // Iframe fallback - use hianime.to directly
   if (useIframe && animeId) {
@@ -434,6 +512,21 @@ export function VideoPlayer({
             title={title}
             episodeInfo={episodeNumber ? `Episode ${episodeNumber}` : undefined}
             onBack={onBack}
+            onPrevious={onPrevious}
+            onNext={onNext}
+            hasPrevious={hasPrevious}
+            hasNext={hasNext}
+            category={category}
+            onCategoryChange={onCategoryChange}
+            sources={sources}
+            selectedSourceUrl={selectedSourceUrl}
+            onQualityChange={onQualityChange}
+            intro={intro}
+            outro={outro}
+            onSkipIntro={() => intro && handleSeek(intro.end)}
+            onSkipOutro={() => outro && handleSeek(outro.end)}
+            autoSkip={autoSkip}
+            onAutoSkipChange={setAutoSkip}
           />
         )}
         {isLoading && (
@@ -458,6 +551,7 @@ const containerStyles: React.CSSProperties = {
   height: '100%',
 };
 
+
 const iframeStyles: React.CSSProperties = {
   width: '100%',
   height: '100%',
@@ -469,7 +563,7 @@ const videoStyles: React.CSSProperties = {
   width: '100%',
   height: '100%',
   backgroundColor: '#000',
-  objectFit: 'initial',
+  objectFit: 'fill',
 };
 
 const styles = StyleSheet.create({

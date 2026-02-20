@@ -4,7 +4,7 @@ import { userNotificationService } from './userNotificationService';
 
 // Lazy initialization to avoid module load order issues
 function getDb() {
-  if (Platform.OS !== 'web' || !app) {
+  if (!app) {
     return null;
   }
   const { getFirestore } = require('firebase/firestore');
@@ -12,7 +12,7 @@ function getDb() {
 }
 
 function getStorage() {
-  if (Platform.OS !== 'web' || !app) {
+  if (!app) {
     return null;
   }
   const { getStorage } = require('firebase/storage');
@@ -77,6 +77,7 @@ export interface Post {
   content: string;
   animeId?: string;
   animeName?: string;
+  clippedSceneTime?: number;
   media?: MediaItem[];
   likes: string[];
   commentCount: number;
@@ -130,6 +131,35 @@ export const communityService = {
     }
   },
 
+  async getPostsByAnime(animeId: string, limitCount: number = 50): Promise<Post[]> {
+    const db = getDb();
+    if (!db) {
+      // Return mock posts filtered by anime ID
+      return this.getMockPosts().filter(p => p.animeId === animeId);
+    }
+
+    try {
+      const { collection, query, orderBy, where, limit, getDocs } = require('firebase/firestore');
+      const q = query(
+        collection(db, 'posts'),
+        where('animeId', '==', animeId),
+        orderBy('createdAt', 'desc'),
+        limit(limitCount)
+      );
+
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map((doc: any) => ({
+        id: doc.id,
+        likes: [],
+        commentCount: 0,
+        ...doc.data(),
+      }));
+    } catch (err) {
+      console.error('Failed to fetch posts by anime:', err);
+      return [];
+    }
+  },
+
   async createPost(
     user: UserInfo,
     content: string,
@@ -154,11 +184,11 @@ export const communityService = {
     const postData = {
       userId: user.uid,
       userName: user.displayName || 'Anonymous',
-      userPhoto: user.photoURL || null,
+      userPhoto: user.photoURL || undefined,
       content,
-      animeId: animeId || null,
-      animeName: animeName || null,
-      media: media || null,
+      animeId: animeId || undefined,
+      animeName: animeName || undefined,
+      media: media || undefined,
       likes: [],
       commentCount: 0,
       createdAt: Date.now(),
@@ -211,7 +241,7 @@ export const communityService = {
 
       const savedAnimeSnapshot = await getDocs(savedAnimeQuery);
       
-      const notifications = [];
+      const notifications: Promise<void>[] = [];
       savedAnimeSnapshot.docs.forEach((doc: any) => {
         // Extract userId from path: users/{userId}/savedAnime/{animeId}
         const pathParts = doc.ref.path.split('/');
@@ -341,7 +371,7 @@ export const communityService = {
     const commentData = {
       userId: user.uid,
       userName: user.displayName || 'Anonymous',
-      userPhoto: user.photoURL || null,
+      userPhoto: user.photoURL || undefined,
       content,
       createdAt: Date.now(),
     };
@@ -397,7 +427,7 @@ export const communityService = {
       }
 
       const postData = postSnap.data();
-      const notifications = [];
+      const notifications: Promise<void>[] = [];
 
       // Notify post author (if not the comment author)
       if (postData.userId !== commentAuthor.uid) {
@@ -527,6 +557,70 @@ export const communityService = {
         createdAt: now - 1000 * 60 * 60 * 24, // 1 day ago
       },
     ];
+  },
+
+  subscribeToPosts(limitCount: number = 30, callback: (posts: Post[]) => void): () => void {
+    const db = getDb();
+    if (!db) {
+      callback(this.getMockPosts());
+      return () => {};
+    }
+
+    const { collection, query, orderBy, limit, onSnapshot } = require('firebase/firestore');
+    const q = query(
+      collection(db, 'posts'),
+      orderBy('createdAt', 'desc'),
+      limit(limitCount)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot: any) => {
+      const posts: Post[] = snapshot.docs.map((doc: any) => ({
+        id: doc.id,
+        likes: [],
+        commentCount: 0,
+        ...doc.data(),
+      }));
+      callback(posts);
+    }, (err: any) => {
+      console.error('Posts subscription error:', err);
+    });
+
+    return unsubscribe;
+  },
+
+  subscribeToComments(postId: string, callback: (comments: Comment[]) => void): () => void {
+    const db = getDb();
+    if (!db) {
+      callback([]);
+      return () => {};
+    }
+
+    const { collection, query, orderBy, onSnapshot } = require('firebase/firestore');
+    const q = query(
+      collection(db, 'posts', postId, 'comments'),
+      orderBy('createdAt', 'asc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot: any) => {
+      const comments: Comment[] = snapshot.docs.map((doc: any) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      callback(comments);
+    }, (err: any) => {
+      console.error('Comments subscription error:', err);
+    });
+
+    return unsubscribe;
+  },
+
+  formatTime(seconds: number): string {
+    if (!Number.isFinite(seconds) || seconds < 0) {
+      return '0:00';
+    }
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   },
 
   formatTimeAgo(timestamp: number): string {

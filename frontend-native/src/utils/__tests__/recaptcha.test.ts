@@ -11,12 +11,12 @@ jest.mock('react-native', () => ({
 
 // Mock window.grecaptcha
 const mockGrecaptcha = {
-  ready: jest.fn((callback) => callback()),
+  ready: jest.fn((callback: any) => callback()),
   execute: jest.fn(() => Promise.resolve('mock-token')),
   render: jest.fn(() => 123),
   reset: jest.fn(),
   enterprise: {
-    ready: jest.fn((callback) => callback()),
+    ready: jest.fn((callback: any) => callback()),
     execute: jest.fn(() => Promise.resolve('mock-token')),
     render: jest.fn(() => 123),
     reset: jest.fn(),

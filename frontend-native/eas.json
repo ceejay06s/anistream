@@ -20,6 +20,7 @@
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://anistream-backend-blme.onrender.com",
+        "EXPO_PUBLIC_NOTIFY_API_SECRET": "11983e9db774b37203befc6dc98cb4eb410efdab72b55ff96f26738c7c9380bb",
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
       }
     },
@@ -31,6 +32,7 @@
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://anistream-backend-blme.onrender.com",
+        "EXPO_PUBLIC_NOTIFY_API_SECRET": "11983e9db774b37203befc6dc98cb4eb410efdab72b55ff96f26738c7c9380bb",
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
       }
     }

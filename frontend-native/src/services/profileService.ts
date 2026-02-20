@@ -3,7 +3,7 @@ import { app } from '@/config/firebase';
 
 // Lazy initialization to avoid module load order issues
 function getStorage() {
-  if (Platform.OS !== 'web' || !app) {
+  if (!app) {
     return null;
   }
   const { getStorage } = require('firebase/storage');

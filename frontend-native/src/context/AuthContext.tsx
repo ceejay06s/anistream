@@ -7,6 +7,7 @@ interface User {
   email: string | null;
   displayName: string | null;
   photoURL: string | null;
+  hasPassword: boolean;
 }
 
 interface AuthContextType {
@@ -24,6 +25,8 @@ interface AuthContextType {
   updateProfile: (displayName?: string, photoURL?: string) => Promise<void>;
   deleteAccount: () => Promise<void>;
   reauthenticate: (email: string, password: string) => Promise<void>;
+  setPassword: (password: string) => Promise<void>;
+  sendPasswordReset: (email: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -41,11 +44,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { onAuthStateChanged } = require('firebase/auth');
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser: any) => {
       if (firebaseUser) {
+        // Check if user has password provider linked
+        const hasPassword = firebaseUser.providerData?.some(
+          (provider: any) => provider.providerId === 'password'
+        ) || false;
         setUser({
           uid: firebaseUser.uid,
           email: firebaseUser.email,
           displayName: firebaseUser.displayName,
           photoURL: firebaseUser.photoURL,
+          hasPassword,
         });
       } else {
         setUser(null);
@@ -80,58 +88,67 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await firebaseSignOut(auth);
   };
 
+  const sendPasswordReset = async (email: string) => {
+    if (!auth) {
+      throw new Error('Auth not available');
+    }
+    const { sendPasswordResetEmail } = require('firebase/auth');
+    await sendPasswordResetEmail(auth, email);
+  };
+
   const signInWithGoogle = async () => {
     if (!auth) {
       throw new Error('Auth not available');
     }
     if (Platform.OS === 'web') {
-      const { signInWithPopup, GoogleAuthProvider } = require('firebase/auth');
+      const { signInWithPopup, signInWithRedirect, GoogleAuthProvider } = require('firebase/auth');
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-    } else {
-      // Mobile: Use expo-auth-session for Google OAuth
-      const AuthSession = require('expo-auth-session');
-      const WebBrowser = require('expo-web-browser');
-      
-      // Complete auth session when done
-      WebBrowser.maybeCompleteAuthSession();
-      
-      // NOTE: You need to configure the Google OAuth Client ID in Firebase Console:
-      // 1. Go to Firebase Console > Authentication > Sign-in method > Google
-      // 2. Enable Google Sign-In
-      // 3. Get the Web client ID (not the iOS/Android client IDs)
-      // 4. Replace the placeholder below with your actual client ID
-      const GOOGLE_CLIENT_ID = '797841167253-tl8v6hm1dg1lof6qmterms3hl077bb8g.apps.googleusercontent.com';
-      
-      // Use discovery endpoint for Google
-      const discovery = {
-        authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
-        tokenEndpoint: 'https://oauth2.googleapis.com/token',
-        revocationEndpoint: 'https://oauth2.googleapis.com/revoke',
-      };
+      provider.setCustomParameters({ prompt: 'select_account' });
+      try {
+        await signInWithPopup(auth, provider);
+      } catch (err: any) {
+        const code = String(err?.code || '');
+        const message = String(err?.message || '');
+        const shouldFallbackToRedirect =
+          code === 'auth/popup-blocked' ||
+          code === 'auth/popup-closed-by-user' ||
+          code === 'auth/cancelled-popup-request' ||
+          code === 'auth/operation-not-supported-in-this-environment' ||
+          message.includes('Cross-Origin-Opener-Policy');
 
-      // Create auth request
-      const request = new AuthSession.AuthRequest({
-        clientId: GOOGLE_CLIENT_ID,
-        scopes: ['openid', 'profile', 'email'],
-        responseType: AuthSession.ResponseType.IdToken,
-        redirectUri: AuthSession.makeRedirectUri({ useProxy: true }),
-      });
-
-      const result = await request.promptAsync(discovery, {
-        useProxy: true,
-      });
-
-      if (result.type === 'success') {
-        const { id_token } = result.params;
-        const { GoogleAuthProvider, signInWithCredential } = require('firebase/auth');
-        const credential = GoogleAuthProvider.credential(id_token);
-        await signInWithCredential(auth, credential);
-      } else if (result.type === 'cancel') {
-        throw new Error('Google Sign-In was cancelled');
-      } else {
-        throw new Error('Google Sign-In failed');
+        if (shouldFallbackToRedirect) {
+          await signInWithRedirect(auth, provider);
+          return;
+        }
+        throw err;
       }
+    } else {
+      // Mobile: Use native Google Sign-In
+      const { GoogleSignin } = require('@react-native-google-signin/google-signin');
+      const { GoogleAuthProvider, signInWithCredential } = require('firebase/auth');
+
+      // Configure Google Sign-In
+      GoogleSignin.configure({
+        webClientId: '797841167253-tl8v6hm1dg1lof6qmterms3hl077bb8g.apps.googleusercontent.com',
+      });
+
+      // Check if already signed in to Google
+      const isSignedIn = await GoogleSignin.hasPreviousSignIn();
+      if (isSignedIn) {
+        await GoogleSignin.signOut();
+      }
+
+      // Perform sign in
+      const signInResult = await GoogleSignin.signIn();
+      const idToken = signInResult.data?.idToken;
+
+      if (!idToken) {
+        throw new Error('No ID token received from Google Sign-In');
+      }
+
+      // Sign in to Firebase with the Google credential
+      const credential = GoogleAuthProvider.credential(idToken);
+      await signInWithCredential(auth, credential);
     }
   };
 
@@ -220,6 +237,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await deleteUser(auth.currentUser);
   };
 
+  const setPassword = async (password: string) => {
+    if (!auth || !auth.currentUser) {
+      throw new Error('Auth not available or user not signed in');
+    }
+    if (!auth.currentUser.email) {
+      throw new Error('User does not have an email address');
+    }
+    const { EmailAuthProvider, linkWithCredential } = require('firebase/auth');
+    const credential = EmailAuthProvider.credential(auth.currentUser.email, password);
+    await linkWithCredential(auth.currentUser, credential);
+    // Update user state to reflect password is now set
+    setUser(prev => prev ? { ...prev, hasPassword: true } : null);
+  };
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -236,6 +267,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updateProfile,
       deleteAccount,
       reauthenticate,
+      setPassword,
+      sendPasswordReset,
     }}>
       {children}
     </AuthContext.Provider>

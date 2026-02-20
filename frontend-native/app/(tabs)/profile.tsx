@@ -26,8 +26,8 @@ import { executeRecaptcha } from '@/utils/recaptcha';
 import { isRecaptchaEnabled, RECAPTCHA_SITE_KEY } from '@/config/recaptcha';
 import { verifyRecaptchaToken } from '@/services/recaptchaService';
 import { uploadProfilePhoto } from '@/services/profileService';
-import { userNotificationService, UserNotification } from '@/services/userNotificationService';
 import { NotificationBell } from '@/components/NotificationBell';
+import * as Updates from 'expo-updates';
 
 type AuthMode = 'login' | 'signup' | 'passwordless';
 type ProfileTab = 'saved' | 'settings';
@@ -57,12 +57,14 @@ export default function ProfileScreen() {
     updateProfile,
     deleteAccount,
     reauthenticate,
+    setPassword,
+    sendPasswordReset,
   } = useAuth();
 
   const [authMode, setAuthMode] = useState<AuthMode>('passwordless');
   const [profileTab, setProfileTab] = useState<ProfileTab>('saved');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -86,13 +88,12 @@ export default function ProfileScreen() {
   // Account management modals
   const [showChangeEmail, setShowChangeEmail] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const [showSetPassword, setShowSetPassword] = useState(false);
+  const [newSetPassword, setNewSetPassword] = useState('');
+  const [confirmSetPassword, setConfirmSetPassword] = useState('');
   const [showUpdateProfile, setShowUpdateProfile] = useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
 
-  // Notifications
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [notifications, setNotifications] = useState<UserNotification[]>([]);
-  const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -103,6 +104,42 @@ export default function ProfileScreen() {
   const [isDragging, setIsDragging] = useState(false);
   const [updatingAccount, setUpdatingAccount] = useState(false);
   const profilePhotoInputRef = useRef<HTMLInputElement>(null);
+
+  // Update states
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<string | null>(null);
+
+  const handleCheckForUpdate = async () => {
+    if (Platform.OS === 'web') {
+      setUpdateStatus('Updates are automatic on web. Refresh the page to get the latest version.');
+      setTimeout(() => setUpdateStatus(null), 3000);
+      return;
+    }
+
+    setCheckingUpdate(true);
+    setUpdateStatus(null);
+
+    try {
+      const update = await Updates.checkForUpdateAsync();
+      if (update.isAvailable) {
+        setUpdateStatus('Downloading update...');
+        await Updates.fetchUpdateAsync();
+        setUpdateStatus('Update downloaded! Restarting...');
+        setTimeout(async () => {
+          await Updates.reloadAsync();
+        }, 1000);
+      } else {
+        setUpdateStatus('You have the latest version!');
+        setTimeout(() => setUpdateStatus(null), 3000);
+      }
+    } catch (error: any) {
+      console.error('Update check failed:', error);
+      setUpdateStatus('Failed to check for updates');
+      setTimeout(() => setUpdateStatus(null), 3000);
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
 
   // Load saved anime and settings when user logs in
   useEffect(() => {
@@ -211,7 +248,7 @@ export default function ProfileScreen() {
   };
 
   const handlePasswordSubmit = async () => {
-    if (!email || !password) {
+    if (!email || !passwordInput) {
       setError('Please fill in all fields');
       return;
     }
@@ -237,14 +274,38 @@ export default function ProfileScreen() {
       }
 
       if (authMode === 'login') {
-        await signIn(email, password);
+        await signIn(email, passwordInput);
       } else {
-        await signUp(email, password);
+        await signUp(email, passwordInput);
       }
       setEmail('');
-      setPassword('');
+      setPasswordInput('');
     } catch (err: any) {
       setError(err.message || 'An error occurred');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setError('Please enter your email address first');
+      return;
+    }
+    setError('');
+    setSuccess('');
+    setSubmitting(true);
+    try {
+      await sendPasswordReset(email);
+      setSuccess('Password reset email sent! Check your inbox.');
+    } catch (err: any) {
+      if (err.code === 'auth/user-not-found') {
+        setError('No account found with this email address');
+      } else if (err.code === 'auth/invalid-email') {
+        setError('Please enter a valid email address');
+      } else {
+        setError(err.message || 'Failed to send reset email');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -444,6 +505,37 @@ export default function ProfileScreen() {
       setTimeout(() => setSuccess(''), 3000);
     } catch (err: any) {
       setError(err.message || 'Failed to update password');
+      setTimeout(() => setError(''), 5000);
+    } finally {
+      setUpdatingAccount(false);
+    }
+  };
+
+  const handleSetPassword = async () => {
+    if (!newSetPassword || !confirmSetPassword) {
+      setError('Please fill in all fields');
+      return;
+    }
+    if (newSetPassword.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+    if (newSetPassword !== confirmSetPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    setUpdatingAccount(true);
+    setError('');
+    try {
+      await setPassword(newSetPassword);
+      setSuccess('Password set successfully! You can now sign in with email and password.');
+      setNewSetPassword('');
+      setConfirmSetPassword('');
+      setShowSetPassword(false);
+      setTimeout(() => setSuccess(''), 5000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to set password');
       setTimeout(() => setError(''), 5000);
     } finally {
       setUpdatingAccount(false);
@@ -680,7 +772,7 @@ export default function ProfileScreen() {
 
   // FAQ Modal
   const FAQModal = () => (
-    <Modal visible={showFAQ} animationType="slide" transparent>
+    <Modal visible={showFAQ} animationType="slide" transparent statusBarTranslucent hardwareAccelerated>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
@@ -793,92 +885,13 @@ export default function ProfileScreen() {
   );
 
 
-  // Bug Report Modal
-  const BugReportModal = () => (
-    <Modal visible={showBugReport} animationType="slide" transparent>
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Report a Bug</Text>
-            <TouchableOpacity onPress={() => setShowBugReport(false)}>
-              <Ionicons name="close" size={24} color="#fff" />
-            </TouchableOpacity>
-          </View>
-          <View style={styles.modalBody}>
-            <Text style={styles.bugReportLabel}>Describe the issue:</Text>
-            <TextInput
-              style={styles.bugReportInput}
-              multiline
-              numberOfLines={6}
-              placeholder="Please describe the bug in detail..."
-              placeholderTextColor="#666"
-              value={bugReportText}
-              onChangeText={setBugReportText}
-            />
-            <TouchableOpacity style={styles.submitBugButton} onPress={handleBugReport}>
-              <Text style={styles.submitBugButtonText}>Send Report</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
+  // Bug Report Modal - rendered inline to prevent TextInput issues
 
-  // Change Email Modal
-  const ChangeEmailModal = () => (
-    <Modal visible={showChangeEmail} animationType="slide" transparent onRequestClose={() => setShowChangeEmail(false)}>
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Change Email</Text>
-            <TouchableOpacity onPress={() => setShowChangeEmail(false)}>
-              <Ionicons name="close" size={24} color="#fff" />
-            </TouchableOpacity>
-          </View>
-          <View style={styles.modalBody}>
-            <Text style={styles.inputLabel}>Current Email</Text>
-            <Text style={styles.currentValueText}>{user?.email || 'No email'}</Text>
-            <Text style={styles.inputLabel}>New Email</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Enter new email"
-              placeholderTextColor="#666"
-              value={newEmail}
-              onChangeText={setNewEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-            />
-            <Text style={styles.inputLabel}>Current Password</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Enter your password to verify"
-              placeholderTextColor="#666"
-              value={currentPassword}
-              onChangeText={setCurrentPassword}
-              secureTextEntry
-            />
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
-            {success ? <Text style={styles.successText}>{success}</Text> : null}
-            <TouchableOpacity
-              style={[styles.modalButton, updatingAccount && styles.modalButtonDisabled]}
-              onPress={handleChangeEmail}
-              disabled={updatingAccount}
-            >
-              {updatingAccount ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.modalButtonText}>Update Email</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
+  // Change Email Modal - rendered inline to prevent TextInput issues
 
   // Change Password Modal
   const ChangePasswordModal = () => (
-    <Modal visible={showChangePassword} animationType="slide" transparent onRequestClose={() => setShowChangePassword(false)}>
+    <Modal visible={showChangePassword} animationType="slide" transparent statusBarTranslucent hardwareAccelerated onRequestClose={() => setShowChangePassword(false)}>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
@@ -934,9 +947,68 @@ export default function ProfileScreen() {
     </Modal>
   );
 
+  // Set Password Modal (for users who signed in with Google)
+  const SetPasswordModal = () => (
+    <Modal visible={showSetPassword} animationType="slide" transparent statusBarTranslucent hardwareAccelerated onRequestClose={() => setShowSetPassword(false)}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Set Password</Text>
+            <TouchableOpacity onPress={() => setShowSetPassword(false)}>
+              <Ionicons name="close" size={24} color="#fff" />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.modalBody}>
+            <Text style={styles.setPasswordInfo}>
+              Add a password to your account so you can sign in with email and password in addition to Google.
+            </Text>
+            <Text style={styles.inputLabel}>New Password</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Enter password (min 6 characters)"
+              placeholderTextColor="#666"
+              value={newSetPassword}
+              onChangeText={setNewSetPassword}
+              secureTextEntry
+            />
+            <Text style={styles.inputLabel}>Confirm Password</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Confirm password"
+              placeholderTextColor="#666"
+              value={confirmSetPassword}
+              onChangeText={setConfirmSetPassword}
+              secureTextEntry
+            />
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            {success ? <Text style={styles.successText}>{success}</Text> : null}
+            <TouchableOpacity
+              style={[styles.modalButton, updatingAccount && styles.modalButtonDisabled]}
+              onPress={handleSetPassword}
+              disabled={updatingAccount}
+            >
+              {updatingAccount ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.modalButtonText}>Set Password</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.modalCancelButton}
+              onPress={() => setShowSetPassword(false)}
+              disabled={updatingAccount}
+            >
+              <Text style={styles.modalCancelButtonText}>Skip for now</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+
   // Update Profile Modal
   const UpdateProfileModal = () => (
-    <Modal visible={showUpdateProfile} animationType="slide" transparent onRequestClose={() => {
+    <Modal visible={showUpdateProfile} animationType="slide" transparent statusBarTranslucent hardwareAccelerated onRequestClose={() => {
       handleRemovePhoto();
       setShowUpdateProfile(false);
     }}>
@@ -971,9 +1043,11 @@ export default function ProfileScreen() {
                   isDragging && styles.dragDropAreaActive,
                   photoPreview && styles.dragDropAreaHasPhoto,
                 ]}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
+                {...({
+                  onDragOver: handleDragOver,
+                  onDragLeave: handleDragLeave,
+                  onDrop: handleDrop,
+                } as any)}
               >
                 {photoPreview ? (
                   <View style={styles.photoPreviewContainer}>
@@ -1062,7 +1136,7 @@ export default function ProfileScreen() {
 
   // Delete Account Modal
   const DeleteAccountModal = () => (
-    <Modal visible={showDeleteAccount} animationType="slide" transparent onRequestClose={() => setShowDeleteAccount(false)}>
+    <Modal visible={showDeleteAccount} animationType="slide" transparent statusBarTranslucent hardwareAccelerated onRequestClose={() => setShowDeleteAccount(false)}>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
@@ -1109,99 +1183,7 @@ export default function ProfileScreen() {
     </Modal>
   );
 
-  // Notifications Modal
-  const NotificationsModal = () => {
-    const getNotificationIcon = (type: string) => {
-      switch (type) {
-        case 'post_anime_interest':
-          return 'chatbubble-outline';
-        case 'comment_on_post':
-        case 'comment_on_commented_post':
-          return 'chatbubbles-outline';
-        case 'anime_new_episode':
-        case 'anime_new_season':
-          return 'play-circle-outline';
-        default:
-          return 'notifications-outline';
-      }
-    };
 
-    const unreadCount = notifications.filter(n => !n.read).length;
-
-    return (
-      <Modal visible={showNotifications} animationType="slide" transparent onRequestClose={() => setShowNotifications(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <View style={styles.modalHeaderLeft}>
-                <Text style={styles.modalTitle}>Notifications</Text>
-                {unreadCount > 0 && (
-                  <View style={styles.unreadBadge}>
-                    <Text style={styles.unreadBadgeText}>{unreadCount}</Text>
-                  </View>
-                )}
-              </View>
-              <View style={styles.modalHeaderActions}>
-                {unreadCount > 0 && (
-                  <TouchableOpacity onPress={handleMarkAllAsRead} style={styles.markAllReadButton}>
-                    <Text style={styles.markAllReadText}>Mark all read</Text>
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity onPress={() => setShowNotifications(false)}>
-                  <Ionicons name="close" size={24} color="#fff" />
-                </TouchableOpacity>
-              </View>
-            </View>
-            <ScrollView style={styles.notificationsList}>
-              {loadingNotifications ? (
-                <View style={styles.notificationsEmpty}>
-                  <ActivityIndicator size="large" color="#e50914" />
-                </View>
-              ) : notifications.length === 0 ? (
-                <View style={styles.notificationsEmpty}>
-                  <Ionicons name="notifications-off-outline" size={48} color="#444" />
-                  <Text style={styles.notificationsEmptyText}>No notifications</Text>
-                  <Text style={styles.notificationsEmptySubtext}>You're all caught up!</Text>
-                </View>
-              ) : (
-                notifications.map((notification) => (
-                  <TouchableOpacity
-                    key={notification.id}
-                    style={[
-                      styles.notificationItem,
-                      !notification.read && styles.notificationItemUnread,
-                    ]}
-                    onPress={() => handleNotificationPress(notification)}
-                  >
-                    <View style={styles.notificationIconContainer}>
-                      <Ionicons
-                        name={getNotificationIcon(notification.type) as any}
-                        size={24}
-                        color={!notification.read ? '#e50914' : '#888'}
-                      />
-                    </View>
-                    <View style={styles.notificationContent}>
-                      <Text style={[
-                        styles.notificationTitle,
-                        !notification.read && styles.notificationTitleUnread,
-                      ]}>
-                        {notification.title}
-                      </Text>
-                      <Text style={styles.notificationBody}>{notification.body}</Text>
-                      <Text style={styles.notificationTime}>
-                        {userNotificationService.formatTimeAgo(notification.createdAt)}
-                      </Text>
-                    </View>
-                    {!notification.read && <View style={styles.notificationDot} />}
-                  </TouchableOpacity>
-                ))
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-    );
-  };
 
   if (loading) {
     return (
@@ -1217,48 +1199,168 @@ export default function ProfileScreen() {
   if (user) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
+        {/* FAQ Modal */}
         <FAQModal />
-        <BugReportModal />
-        <ChangeEmailModal />
+
+        {/* Bug Report Modal - Inline to prevent TextInput glitches */}
+        <Modal visible={showBugReport} animationType="slide" transparent statusBarTranslucent hardwareAccelerated onRequestClose={() => setShowBugReport(false)}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Report a Bug</Text>
+                <TouchableOpacity onPress={() => setShowBugReport(false)}>
+                  <Ionicons name="close" size={24} color="#fff" />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.modalBody}>
+                <Text style={styles.bugReportLabel}>Describe the issue:</Text>
+                <TextInput
+                  key="bug-report-input"
+                  style={styles.bugReportInput}
+                  multiline
+                  numberOfLines={6}
+                  placeholder="Please describe the bug in detail..."
+                  placeholderTextColor="#666"
+                  value={bugReportText}
+                  onChangeText={setBugReportText}
+                />
+                <TouchableOpacity style={styles.submitBugButton} onPress={handleBugReport}>
+                  <Text style={styles.submitBugButtonText}>Send Report</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Change Email Modal - Inline to prevent TextInput glitches */}
+        <Modal visible={showChangeEmail} animationType="slide" transparent statusBarTranslucent hardwareAccelerated onRequestClose={() => setShowChangeEmail(false)}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Change Email</Text>
+                <TouchableOpacity onPress={() => setShowChangeEmail(false)}>
+                  <Ionicons name="close" size={24} color="#fff" />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.modalBody}>
+                <Text style={styles.inputLabel}>Current Email</Text>
+                <Text style={styles.currentValueText}>{user?.email || 'No email'}</Text>
+                <Text style={styles.inputLabel}>New Email</Text>
+                <TextInput
+                  key="new-email-input"
+                  style={styles.modalInput}
+                  placeholder="Enter new email"
+                  placeholderTextColor="#666"
+                  value={newEmail}
+                  onChangeText={setNewEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                />
+                <Text style={styles.inputLabel}>Current Password</Text>
+                <TextInput
+                  key="email-password-input"
+                  style={styles.modalInput}
+                  placeholder="Enter your password to verify"
+                  placeholderTextColor="#666"
+                  value={currentPassword}
+                  onChangeText={setCurrentPassword}
+                  secureTextEntry
+                />
+                {error ? <Text style={styles.errorText}>{error}</Text> : null}
+                {success ? <Text style={styles.successText}>{success}</Text> : null}
+                <TouchableOpacity
+                  style={[styles.modalButton, updatingAccount && styles.modalButtonDisabled]}
+                  onPress={handleChangeEmail}
+                  disabled={updatingAccount}
+                >
+                  {updatingAccount ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.modalButtonText}>Update Email</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
         <ChangePasswordModal />
+        <SetPasswordModal />
         <UpdateProfileModal />
         <DeleteAccountModal />
 
         <ScrollView>
-          {/* Profile Header */}
-          <View style={styles.profileHeader}>
-            <View style={styles.profileHeaderTop}>
-              <View style={styles.avatarContainer}>
-                {user.photoURL ? (
-                  <Image source={{ uri: user.photoURL }} style={styles.avatar} />
-                ) : (
-                  <Ionicons name="person-circle" size={80} color="#e50914" />
-                )}
+          {/* Netflix-style Profile Header */}
+          <View style={styles.netflixHeader}>
+            <View style={styles.netflixHeaderTop}>
+              <Text style={styles.netflixHeaderTitle}>Profile</Text>
+              <View style={styles.netflixHeaderActions}>
+                <NotificationBell onPress={() => router.push('/(tabs)/notifications')} />
+                <TouchableOpacity style={styles.signOutIcon} onPress={handleSignOut}>
+                  <Ionicons name="log-out-outline" size={24} color="#fff" />
+                </TouchableOpacity>
               </View>
-              <NotificationBell onPress={() => setShowNotifications(true)} />
             </View>
-            <Text style={styles.userName}>{user.displayName || 'User'}</Text>
-            <Text style={styles.userEmail}>{user.email}</Text>
+
+            {/* Netflix-style Avatar with Edit Button */}
+            <TouchableOpacity
+              style={styles.netflixAvatarContainer}
+              onPress={() => {
+                setNewDisplayName(user?.displayName || '');
+                setSelectedPhotoFile(null);
+                setPhotoPreview(null);
+                setIsDragging(false);
+                setShowUpdateProfile(true);
+              }}
+              activeOpacity={0.8}
+            >
+              {user.photoURL ? (
+                <Image source={{ uri: user.photoURL }} style={styles.netflixAvatar} />
+              ) : (
+                <View style={styles.netflixAvatarPlaceholder}>
+                  <Ionicons name="person" size={60} color="#fff" />
+                </View>
+              )}
+              <View style={styles.netflixEditBadge}>
+                <Ionicons name="pencil" size={14} color="#fff" />
+              </View>
+            </TouchableOpacity>
+
+            <Text style={styles.netflixUserName}>{user.displayName || 'User'}</Text>
+            <Text style={styles.netflixUserEmail}>{user.email}</Text>
+
+            {/* Manage Profile Button */}
+            <TouchableOpacity
+              style={styles.manageProfileButton}
+              onPress={() => {
+                setNewDisplayName(user?.displayName || '');
+                setSelectedPhotoFile(null);
+                setPhotoPreview(null);
+                setIsDragging(false);
+                setShowUpdateProfile(true);
+              }}
+            >
+              <Ionicons name="pencil-outline" size={16} color="#fff" />
+              <Text style={styles.manageProfileButtonText}>Manage Profile</Text>
+            </TouchableOpacity>
           </View>
 
-          {/* Tab Switcher */}
-          <View style={styles.tabSwitcher}>
+          {/* Netflix-style Tab Switcher */}
+          <View style={styles.netflixTabSwitcher}>
             <TouchableOpacity
-              style={[styles.tabButton, profileTab === 'saved' && styles.tabButtonActive]}
+              style={[styles.netflixTab, profileTab === 'saved' && styles.netflixTabActive]}
               onPress={() => setProfileTab('saved')}
             >
-              <Ionicons name="bookmark" size={18} color={profileTab === 'saved' ? '#e50914' : '#888'} />
-              <Text style={[styles.tabButtonText, profileTab === 'saved' && styles.tabButtonTextActive]}>
-                Saved
+              <Text style={[styles.netflixTabText, profileTab === 'saved' && styles.netflixTabTextActive]}>
+                My List
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.tabButton, profileTab === 'settings' && styles.tabButtonActive]}
+              style={[styles.netflixTab, profileTab === 'settings' && styles.netflixTabActive]}
               onPress={() => setProfileTab('settings')}
             >
-              <Ionicons name="settings" size={18} color={profileTab === 'settings' ? '#e50914' : '#888'} />
-              <Text style={[styles.tabButtonText, profileTab === 'settings' && styles.tabButtonTextActive]}>
-                Settings
+              <Text style={[styles.netflixTabText, profileTab === 'settings' && styles.netflixTabTextActive]}>
+                Account
               </Text>
             </TouchableOpacity>
           </View>
@@ -1333,40 +1435,83 @@ export default function ProfileScreen() {
             </View>
           )}
 
-          {/* Settings Tab */}
+          {/* Settings Tab - Netflix Style */}
           {profileTab === 'settings' && (
-            <View style={styles.tabContent}>
-              {/* Notifications */}
-              <View style={styles.settingsSection}>
-                <Text style={styles.settingsSectionTitle}>Notifications</Text>
-                <View style={styles.settingRow}>
-                  <View style={styles.settingInfo}>
-                    <Ionicons name="notifications-outline" size={22} color="#fff" />
+            <View style={styles.netflixAccountContent}>
+              {/* Account Settings Card */}
+              <View style={styles.netflixCard}>
+                <View style={styles.netflixCardHeader}>
+                  <Text style={styles.netflixCardTitle}>Account Settings</Text>
+                </View>
+                <TouchableOpacity style={styles.netflixCardRow} onPress={() => {
+                  setNewEmail('');
+                  setCurrentPassword('');
+                  setShowChangeEmail(true);
+                }}>
+                  <View style={styles.netflixCardRowLeft}>
+                    <View style={styles.netflixIconCircle}>
+                      <Ionicons name="mail" size={18} color="#fff" />
+                    </View>
                     <View>
-                      <Text style={styles.settingText}>Anime Updates</Text>
-                      <Text style={styles.settingSubtext}>Get notified when new episodes are released</Text>
+                      <Text style={styles.netflixCardRowTitle}>Email</Text>
+                      <Text style={styles.netflixCardRowSubtitle}>{user?.email || 'No email set'}</Text>
                     </View>
                   </View>
-                  {registeringNotifications ? (
-                    <ActivityIndicator size="small" color="#e50914" />
-                  ) : (
-                    <Switch
-                      value={notificationsEnabled}
-                      onValueChange={handleNotificationToggle}
-                      trackColor={{ false: '#333', true: '#e50914' }}
-                      thumbColor="#fff"
-                    />
-                  )}
-                </View>
+                  <Ionicons name="chevron-forward" size={20} color="#666" />
+                </TouchableOpacity>
+                {user?.hasPassword ? (
+                  <TouchableOpacity style={styles.netflixCardRow} onPress={() => {
+                    setCurrentPassword('');
+                    setNewPassword('');
+                    setConfirmPassword('');
+                    setShowChangePassword(true);
+                  }}>
+                    <View style={styles.netflixCardRowLeft}>
+                      <View style={styles.netflixIconCircle}>
+                        <Ionicons name="lock-closed" size={18} color="#fff" />
+                      </View>
+                      <View>
+                        <Text style={styles.netflixCardRowTitle}>Password</Text>
+                        <Text style={styles.netflixCardRowSubtitle}>Change your password</Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color="#666" />
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity style={styles.netflixCardRow} onPress={() => {
+                    setNewSetPassword('');
+                    setConfirmSetPassword('');
+                    setError('');
+                    setShowSetPassword(true);
+                  }}>
+                    <View style={styles.netflixCardRowLeft}>
+                      <View style={[styles.netflixIconCircle, { backgroundColor: '#e50914' }]}>
+                        <Ionicons name="lock-open" size={18} color="#fff" />
+                      </View>
+                      <View>
+                        <Text style={[styles.netflixCardRowTitle, { color: '#e50914' }]}>Set Password</Text>
+                        <Text style={styles.netflixCardRowSubtitle}>Enable email/password sign in</Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color="#666" />
+                  </TouchableOpacity>
+                )}
               </View>
 
-              {/* Playback */}
-              <View style={styles.settingsSection}>
-                <Text style={styles.settingsSectionTitle}>Playback</Text>
-                <View style={styles.settingRow}>
-                  <View style={styles.settingInfo}>
-                    <Ionicons name="play-circle-outline" size={22} color="#fff" />
-                    <Text style={styles.settingText}>Auto-play Next Episode</Text>
+              {/* Playback Settings Card */}
+              <View style={styles.netflixCard}>
+                <View style={styles.netflixCardHeader}>
+                  <Text style={styles.netflixCardTitle}>Playback Settings</Text>
+                </View>
+                <View style={styles.netflixCardRowSwitch}>
+                  <View style={styles.netflixCardRowLeft}>
+                    <View style={styles.netflixIconCircle}>
+                      <Ionicons name="play" size={18} color="#fff" />
+                    </View>
+                    <View>
+                      <Text style={styles.netflixCardRowTitle}>Auto-play Next Episode</Text>
+                      <Text style={styles.netflixCardRowSubtitle}>Automatically play the next episode</Text>
+                    </View>
                   </View>
                   <Switch
                     value={autoPlayEnabled}
@@ -1386,103 +1531,139 @@ export default function ProfileScreen() {
                 </View>
               </View>
 
-              {/* Account Management */}
-              <View style={styles.settingsSection}>
-                <Text style={styles.settingsSectionTitle}>Account</Text>
-                <TouchableOpacity style={styles.settingRowButton} onPress={() => {
-                  setNewEmail('');
-                  setCurrentPassword('');
-                  setShowChangeEmail(true);
-                }}>
-                  <View style={styles.settingInfo}>
-                    <Ionicons name="mail-outline" size={22} color="#fff" />
+              {/* Notifications Card */}
+              <View style={styles.netflixCard}>
+                <View style={styles.netflixCardHeader}>
+                  <Text style={styles.netflixCardTitle}>Notifications</Text>
+                </View>
+                <View style={styles.netflixCardRowSwitch}>
+                  <View style={styles.netflixCardRowLeft}>
+                    <View style={styles.netflixIconCircle}>
+                      <Ionicons name="notifications" size={18} color="#fff" />
+                    </View>
                     <View>
-                      <Text style={styles.settingText}>Change Email</Text>
-                      <Text style={styles.settingSubtext}>{user?.email || 'No email set'}</Text>
+                      <Text style={styles.netflixCardRowTitle}>Anime Updates</Text>
+                      <Text style={styles.netflixCardRowSubtitle}>Get notified when new episodes release</Text>
                     </View>
                   </View>
-                  <Ionicons name="chevron-forward" size={20} color="#666" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.settingRowButton} onPress={() => {
-                  setCurrentPassword('');
-                  setNewPassword('');
-                  setConfirmPassword('');
-                  setShowChangePassword(true);
-                }}>
-                  <View style={styles.settingInfo}>
-                    <Ionicons name="lock-closed-outline" size={22} color="#fff" />
-                    <Text style={styles.settingText}>Change Password</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color="#666" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.settingRowButton} onPress={() => {
-                  setNewDisplayName(user?.displayName || '');
-                  setSelectedPhotoFile(null);
-                  setPhotoPreview(null);
-                  setIsDragging(false);
-                  setShowUpdateProfile(true);
-                }}>
-                  <View style={styles.settingInfo}>
-                    <Ionicons name="person-outline" size={22} color="#fff" />
+                  {registeringNotifications ? (
+                    <ActivityIndicator size="small" color="#e50914" />
+                  ) : (
+                    <Switch
+                      value={notificationsEnabled}
+                      onValueChange={handleNotificationToggle}
+                      trackColor={{ false: '#333', true: '#e50914' }}
+                      thumbColor="#fff"
+                    />
+                  )}
+                </View>
+              </View>
+
+              {/* App & Support Card */}
+              <View style={styles.netflixCard}>
+                <View style={styles.netflixCardHeader}>
+                  <Text style={styles.netflixCardTitle}>App & Support</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.netflixCardRow}
+                  onPress={handleCheckForUpdate}
+                  disabled={checkingUpdate}
+                >
+                  <View style={styles.netflixCardRowLeft}>
+                    <View style={styles.netflixIconCircle}>
+                      <Ionicons name="cloud-download" size={18} color="#fff" />
+                    </View>
                     <View>
-                      <Text style={styles.settingText}>Update Profile</Text>
-                      <Text style={styles.settingSubtext}>Name: {user?.displayName || 'Not set'}</Text>
+                      <Text style={styles.netflixCardRowTitle}>Check for Update</Text>
+                      <Text style={styles.netflixCardRowSubtitle}>Version 2.0.4</Text>
                     </View>
                   </View>
+                  {checkingUpdate ? (
+                    <ActivityIndicator size="small" color="#e50914" />
+                  ) : (
+                    <Ionicons name="chevron-forward" size={20} color="#666" />
+                  )}
+                </TouchableOpacity>
+                {updateStatus && (
+                  <View style={styles.netflixUpdateStatus}>
+                    <Text style={styles.netflixUpdateStatusText}>{updateStatus}</Text>
+                  </View>
+                )}
+                <TouchableOpacity style={styles.netflixCardRow} onPress={() => setShowFAQ(true)}>
+                  <View style={styles.netflixCardRowLeft}>
+                    <View style={styles.netflixIconCircle}>
+                      <Ionicons name="help-circle" size={18} color="#fff" />
+                    </View>
+                    <Text style={styles.netflixCardRowTitle}>FAQ</Text>
+                  </View>
                   <Ionicons name="chevron-forward" size={20} color="#666" />
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.settingRowButton} onPress={() => {
+                <TouchableOpacity style={styles.netflixCardRow} onPress={() => setShowBugReport(true)}>
+                  <View style={styles.netflixCardRowLeft}>
+                    <View style={styles.netflixIconCircle}>
+                      <Ionicons name="bug" size={18} color="#fff" />
+                    </View>
+                    <Text style={styles.netflixCardRowTitle}>Report a Bug</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#666" />
+                </TouchableOpacity>
+              </View>
+
+              {/* Legal Card */}
+              <View style={styles.netflixCard}>
+                <View style={styles.netflixCardHeader}>
+                  <Text style={styles.netflixCardTitle}>Legal</Text>
+                </View>
+                <TouchableOpacity style={styles.netflixCardRow} onPress={() => router.push('/policy')}>
+                  <View style={styles.netflixCardRowLeft}>
+                    <View style={styles.netflixIconCircle}>
+                      <Ionicons name="shield-checkmark" size={18} color="#fff" />
+                    </View>
+                    <Text style={styles.netflixCardRowTitle}>Privacy Policy</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#666" />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.netflixCardRow} onPress={() => router.push('/terms')}>
+                  <View style={styles.netflixCardRowLeft}>
+                    <View style={styles.netflixIconCircle}>
+                      <Ionicons name="document-text" size={18} color="#fff" />
+                    </View>
+                    <Text style={styles.netflixCardRowTitle}>Terms of Service</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#666" />
+                </TouchableOpacity>
+              </View>
+
+              {/* Danger Zone Card */}
+              <View style={[styles.netflixCard, styles.netflixCardDanger]}>
+                <View style={styles.netflixCardHeader}>
+                  <Text style={[styles.netflixCardTitle, { color: '#e50914' }]}>Danger Zone</Text>
+                </View>
+                <TouchableOpacity style={styles.netflixCardRow} onPress={() => {
                   setCurrentPassword('');
                   setShowDeleteAccount(true);
                 }}>
-                  <View style={styles.settingInfo}>
-                    <Ionicons name="trash-outline" size={22} color="#e50914" />
-                    <Text style={[styles.settingText, { color: '#e50914' }]}>Delete Account</Text>
+                  <View style={styles.netflixCardRowLeft}>
+                    <View style={[styles.netflixIconCircle, { backgroundColor: '#e50914' }]}>
+                      <Ionicons name="trash" size={18} color="#fff" />
+                    </View>
+                    <View>
+                      <Text style={[styles.netflixCardRowTitle, { color: '#e50914' }]}>Delete Account</Text>
+                      <Text style={styles.netflixCardRowSubtitle}>Permanently delete your account and data</Text>
+                    </View>
                   </View>
-                  <Ionicons name="chevron-forward" size={20} color="#666" />
+                  <Ionicons name="chevron-forward" size={20} color="#e50914" />
                 </TouchableOpacity>
               </View>
 
-              {/* Support */}
-              <View style={styles.settingsSection}>
-                <Text style={styles.settingsSectionTitle}>Support</Text>
-                <TouchableOpacity style={styles.settingRowButton} onPress={() => setShowFAQ(true)}>
-                  <View style={styles.settingInfo}>
-                    <Ionicons name="help-circle-outline" size={22} color="#fff" />
-                    <Text style={styles.settingText}>FAQ</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color="#666" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.settingRowButton} onPress={() => router.push('/policy')}>
-                  <View style={styles.settingInfo}>
-                    <Ionicons name="document-text-outline" size={22} color="#fff" />
-                    <Text style={styles.settingText}>Privacy Policy</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color="#666" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.settingRowButton} onPress={() => router.push('/terms')}>
-                  <View style={styles.settingInfo}>
-                    <Ionicons name="document-text-outline" size={22} color="#fff" />
-                    <Text style={styles.settingText}>Terms of Service</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color="#666" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.settingRowButton} onPress={() => setShowBugReport(true)}>
-                  <View style={styles.settingInfo}>
-                    <Ionicons name="bug-outline" size={22} color="#fff" />
-                    <Text style={styles.settingText}>Report a Bug</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color="#666" />
-                </TouchableOpacity>
+              <View style={styles.netflixFooter}>
+                <Image
+                  source={require('../../assets/logo-w-text.png')}
+                  style={styles.netflixFooterLogo}
+                  resizeMode="contain"
+                />
+                <Text style={styles.netflixFooterText}>Made with love for anime fans</Text>
               </View>
-
-              {/* Sign Out */}
-              <TouchableOpacity style={styles.signOutButtonFull} onPress={handleSignOut}>
-                <Ionicons name="log-out-outline" size={22} color="#e50914" />
-                <Text style={styles.signOutTextFull}>Sign Out</Text>
-              </TouchableOpacity>
-
-              <Text style={styles.versionText}>AniStream v1.0.0</Text>
             </View>
           )}
         </ScrollView>
@@ -1494,7 +1675,36 @@ export default function ProfileScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <FAQModal />
-      <BugReportModal />
+
+      {/* Bug Report Modal - Inline to prevent TextInput glitches */}
+      <Modal visible={showBugReport} animationType="slide" transparent statusBarTranslucent hardwareAccelerated onRequestClose={() => setShowBugReport(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Report a Bug</Text>
+              <TouchableOpacity onPress={() => setShowBugReport(false)}>
+                <Ionicons name="close" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.modalBody}>
+              <Text style={styles.bugReportLabel}>Describe the issue:</Text>
+              <TextInput
+                key="bug-report-input-login"
+                style={styles.bugReportInput}
+                multiline
+                numberOfLines={6}
+                placeholder="Please describe the bug in detail..."
+                placeholderTextColor="#666"
+                value={bugReportText}
+                onChangeText={setBugReportText}
+              />
+              <TouchableOpacity style={styles.submitBugButton} onPress={handleBugReport}>
+                <Text style={styles.submitBugButtonText}>Send Report</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
@@ -1563,11 +1773,22 @@ export default function ProfileScreen() {
                 style={styles.input}
                 placeholder="Password"
                 placeholderTextColor="#666"
-                value={password}
-                onChangeText={setPassword}
+                value={passwordInput}
+                onChangeText={setPasswordInput}
                 secureTextEntry
               />
             </View>
+          )}
+
+          {/* Forgot Password Link - only show on login */}
+          {authMode === 'login' && (
+            <TouchableOpacity
+              style={styles.forgotPasswordButton}
+              onPress={handleForgotPassword}
+              disabled={submitting}
+            >
+              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+            </TouchableOpacity>
           )}
 
           {/* Submit Button */}
@@ -1953,6 +2174,17 @@ const styles = StyleSheet.create({
     marginTop: 24,
     marginBottom: 32,
   },
+  updateStatusContainer: {
+    backgroundColor: 'rgba(229, 9, 20, 0.1)',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  updateStatusText: {
+    color: '#e50914',
+    fontSize: 13,
+    textAlign: 'center',
+  },
   // Guest Section
   guestSection: {
     alignItems: 'center',
@@ -1978,6 +2210,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.8)',
     justifyContent: 'flex-end',
+    ...(Platform.OS === 'web' && {
+      position: 'fixed' as any,
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 9999,
+    }),
   },
   modalContent: {
     backgroundColor: '#1a1a1a',
@@ -2492,5 +2732,228 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: '#e50914',
     alignSelf: 'center',
+  },
+  setPasswordInfo: {
+    color: '#888',
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 16,
+    padding: 12,
+    backgroundColor: 'rgba(229, 9, 20, 0.1)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(229, 9, 20, 0.2)',
+  },
+  forgotPasswordButton: {
+    alignSelf: 'flex-end',
+    marginTop: -8,
+    marginBottom: 8,
+  },
+  forgotPasswordText: {
+    color: '#e50914',
+    fontSize: 14,
+  },
+  // Netflix-style Profile Header
+  netflixHeader: {
+    alignItems: 'center',
+    paddingTop: 16,
+    paddingBottom: 24,
+    paddingHorizontal: 16,
+  },
+  netflixHeaderTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: 20,
+  },
+  netflixHeaderTitle: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  netflixHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  signOutIcon: {
+    padding: 4,
+  },
+  netflixAvatarContainer: {
+    position: 'relative',
+    marginBottom: 16,
+  },
+  netflixAvatar: {
+    width: 100,
+    height: 100,
+    borderRadius: 8,
+    backgroundColor: '#333',
+  },
+  netflixAvatarPlaceholder: {
+    width: 100,
+    height: 100,
+    borderRadius: 8,
+    backgroundColor: '#333',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  netflixEditBadge: {
+    position: 'absolute',
+    bottom: -6,
+    right: -6,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#000',
+  },
+  netflixUserName: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  netflixUserEmail: {
+    color: '#888',
+    fontSize: 14,
+    marginBottom: 16,
+  },
+  manageProfileButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#666',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 4,
+  },
+  manageProfileButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  // Netflix-style Tab Switcher
+  netflixTabSwitcher: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+    marginBottom: 16,
+  },
+  netflixTab: {
+    flex: 1,
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  netflixTabActive: {
+    borderBottomColor: '#e50914',
+  },
+  netflixTabText: {
+    color: '#888',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  netflixTabTextActive: {
+    color: '#fff',
+  },
+  // Netflix Account Content
+  netflixAccountContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 32,
+  },
+  netflixCard: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 8,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  netflixCardDanger: {
+    borderWidth: 1,
+    borderColor: 'rgba(229, 9, 20, 0.3)',
+  },
+  netflixCardHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2a2a2a',
+  },
+  netflixCardTitle: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  netflixCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2a2a2a',
+  },
+  netflixCardRowSwitch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2a2a2a',
+  },
+  netflixCardRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  netflixIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#333',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  netflixCardRowTitle: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  netflixCardRowSubtitle: {
+    color: '#888',
+    fontSize: 13,
+    marginTop: 2,
+  },
+  netflixUpdateStatus: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(229, 9, 20, 0.1)',
+  },
+  netflixUpdateStatusText: {
+    color: '#e50914',
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  netflixFooter: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+  netflixFooterLogo: {
+    width: 120,
+    height: 40,
+    marginBottom: 12,
+  },
+  netflixFooterText: {
+    color: '#444',
+    fontSize: 12,
   },
 });

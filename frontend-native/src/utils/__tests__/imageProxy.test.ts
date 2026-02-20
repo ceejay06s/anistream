@@ -10,19 +10,24 @@ jest.mock('react-native', () => ({
 }));
 
 // Mock API_BASE_URL
-jest.mock('@/services/api', () => ({
+jest.mock('../../services/api', () => ({
   API_BASE_URL: 'http://localhost:8801',
 }));
 
 describe('Image Proxy Utility', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (global as any).window = {
+      location: {
+        hostname: 'anistream.app',
+      },
+    };
   });
 
   describe('getProxiedImageUrl', () => {
-    it('should return undefined for null/undefined input', () => {
-      expect(getProxiedImageUrl(null)).toBeUndefined();
-      expect(getProxiedImageUrl(undefined)).toBeUndefined();
+    it('should return null for null/undefined input', () => {
+      expect(getProxiedImageUrl(null)).toBeNull();
+      expect(getProxiedImageUrl(undefined)).toBeNull();
     });
 
     it('should proxy URLs on web platform', () => {
@@ -45,7 +50,7 @@ describe('Image Proxy Utility', () => {
 
     it('should handle URLs with special characters', () => {
       Platform.OS = 'web';
-      const originalUrl = 'https://example.com/image with spaces.jpg?param=value';
+      const originalUrl = 'https://example.com/image%20with%20spaces.jpg?param=value';
       const proxied = getProxiedImageUrl(originalUrl);
 
       expect(proxied).toContain('http://localhost:8801');

@@ -20,6 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { communityService, Post, Comment, MediaItem } from '@/services/communityService';
+import { userNotificationService } from '@/services/userNotificationService';
 import { executeRecaptcha } from '@/utils/recaptcha';
 import { isRecaptchaEnabled, RECAPTCHA_SITE_KEY } from '@/config/recaptcha';
 import { verifyRecaptchaToken } from '@/services/recaptchaService';
@@ -31,6 +32,17 @@ export default function CommunityScreen() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+
+  // Subscribe to unread notification count for bell badge
+  useEffect(() => {
+    if (!user) return;
+    const unsubscribe = userNotificationService.subscribeToUnreadCount(
+      user.uid,
+      setUnreadNotifications
+    );
+    return () => unsubscribe();
+  }, [user]);
 
   // Create post modal
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -49,27 +61,22 @@ export default function CommunityScreen() {
   const [newComment, setNewComment] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
   const commentInputRef = useRef<TextInput>(null);
+  const commentUnsubscribeRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    loadPosts();
+    setLoading(true);
+    const unsubscribe = communityService.subscribeToPosts(30, (data) => {
+      setPosts(data);
+      setLoading(false);
+      setRefreshing(false);
+    });
+    return () => unsubscribe();
   }, []);
 
-  const loadPosts = async () => {
-    try {
-      setLoading(true);
-      const data = await communityService.getPosts(30);
-      setPosts(data);
-    } catch (err) {
-      console.error('Failed to load posts:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRefresh = useCallback(async () => {
+  const handleRefresh = useCallback(() => {
     setRefreshing(true);
-    await loadPosts();
-    setRefreshing(false);
+    // Real-time listener auto-updates; just reset the flag after a moment
+    setTimeout(() => setRefreshing(false), 800);
   }, []);
 
   const handleCloseCreateModal = useCallback(() => {
@@ -192,18 +199,8 @@ export default function CommunityScreen() {
     }
 
     try {
-      const isLiked = await communityService.toggleLike(user.uid, postId);
-      setPosts(prev =>
-        prev.map(post => {
-          if (post.id === postId) {
-            const newLikes = isLiked
-              ? [...post.likes, user.uid]
-              : post.likes.filter(id => id !== user.uid);
-            return { ...post, likes: newLikes };
-          }
-          return post;
-        })
-      );
+      // Real-time listener handles the UI update automatically — no manual setPosts needed
+      await communityService.toggleLike(user.uid, postId);
     } catch (err) {
       console.error('Failed to toggle like:', err);
     }
@@ -213,28 +210,37 @@ export default function CommunityScreen() {
     if (!user) return;
 
     try {
+      // Real-time listener handles the UI update automatically
       await communityService.deletePost(user.uid, postId);
-      setPosts(prev => prev.filter(post => post.id !== postId));
     } catch (err) {
       console.error('Failed to delete post:', err);
     }
   };
 
-  const openComments = async (post: Post) => {
-    setSelectedPost(post);
-    setNewComment(''); // Clear comment input when opening
-    setLoadingComments(true);
-    try {
-      const data = await communityService.getComments(post.id);
-      setComments(data);
-    } catch (err) {
-      console.error('Failed to load comments:', err);
-    } finally {
-      setLoadingComments(false);
+  const openComments = (post: Post) => {
+    // Unsubscribe from any previous comment subscription
+    if (commentUnsubscribeRef.current) {
+      commentUnsubscribeRef.current();
+      commentUnsubscribeRef.current = null;
     }
+
+    setSelectedPost(post);
+    setNewComment('');
+    setLoadingComments(true);
+    setComments([]);
+
+    const unsubscribe = communityService.subscribeToComments(post.id, (data) => {
+      setComments(data);
+      setLoadingComments(false);
+    });
+    commentUnsubscribeRef.current = unsubscribe;
   };
 
   const closeComments = () => {
+    if (commentUnsubscribeRef.current) {
+      commentUnsubscribeRef.current();
+      commentUnsubscribeRef.current = null;
+    }
     setSelectedPost(null);
     setComments([]);
     setNewComment('');
@@ -261,12 +267,11 @@ export default function CommunityScreen() {
         }
       }
 
-      const comment = await communityService.addComment(
+      await communityService.addComment(
         { uid: user.uid, displayName: user.displayName, photoURL: user.photoURL },
         selectedPost.id,
         newComment.trim()
       );
-      setComments([...comments, comment]);
       setNewComment('');
       // Update comment count in posts list
       setPosts(prev =>
@@ -398,119 +403,7 @@ export default function CommunityScreen() {
     </View>
   );
 
-  // Comments Modal - Function component to prevent relaunching
-  const CommentsModal = () => {
-    if (!selectedPost) return null;
-    
-    return (
-      <Modal 
-        visible={!!selectedPost} 
-        animationType="slide" 
-        transparent={true}
-        onRequestClose={closeComments}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.modalKeyboardView}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-        >
-          <View style={styles.commentsModalContent}>
-            <TouchableOpacity 
-              style={styles.modalOverlay} 
-              activeOpacity={1}
-              onPress={closeComments}
-            />
-            <TouchableOpacity 
-              activeOpacity={1}
-              onPress={(e) => e.stopPropagation()}
-              style={styles.commentsModalInner}
-            >
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Comments</Text>
-                <TouchableOpacity onPress={closeComments}>
-                  <Ionicons name="close" size={24} color="#fff" />
-                </TouchableOpacity>
-              </View>
-
-              <ScrollView 
-                style={styles.commentsContent}
-                keyboardShouldPersistTaps="handled"
-                keyboardDismissMode="none"
-                nestedScrollEnabled={true}
-              >
-                {loadingComments ? (
-                  <View style={styles.commentsLoadingContainer}>
-                    <ActivityIndicator size="small" color="#e50914" />
-                  </View>
-                ) : comments.length === 0 ? (
-                  <View style={styles.emptyComments}>
-                    <Ionicons name="chatbubble-outline" size={48} color="#444" />
-                    <Text style={styles.emptyCommentsText}>No comments yet</Text>
-                    <Text style={styles.emptyCommentsSubtext}>Be the first to comment!</Text>
-                  </View>
-                ) : (
-                  <View style={styles.commentsListContent}>
-                    {comments.map((comment) => (
-                      <View key={comment.id} style={styles.commentItem}>
-                        <View style={styles.commentAuthor}>
-                          {comment.userPhoto ? (
-                            <Image source={{ uri: comment.userPhoto }} style={styles.commentAvatar} />
-                          ) : (
-                            <View style={styles.commentAvatarPlaceholder}>
-                              <Ionicons name="person" size={12} color="#888" />
-                            </View>
-                          )}
-                          <Text style={styles.commentAuthorName}>{comment.userName}</Text>
-                          <Text style={styles.commentTime}>
-                            {communityService.formatTimeAgo(comment.createdAt)}
-                          </Text>
-                        </View>
-                        <Text style={styles.commentContent}>{comment.content}</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-              </ScrollView>
-
-              {user && (
-                <View style={styles.commentInputContainer}>
-                  <TextInput
-                    ref={commentInputRef}
-                    style={styles.commentInput}
-                    placeholder="Add a comment..."
-                    placeholderTextColor="#666"
-                    value={newComment}
-                    onChangeText={setNewComment}
-                    maxLength={280}
-                    multiline
-                    numberOfLines={1}
-                    returnKeyType="default"
-                    blurOnSubmit={false}
-                    textAlignVertical="center"
-                    editable={!submittingComment}
-                  />
-                  <TouchableOpacity
-                    style={[
-                      styles.sendButton,
-                      (!newComment.trim() || submittingComment) && styles.sendButtonDisabled,
-                    ]}
-                    onPress={handleAddComment}
-                    disabled={!newComment.trim() || submittingComment}
-                  >
-                    {submittingComment ? (
-                      <ActivityIndicator size="small" color="#fff" />
-                    ) : (
-                      <Ionicons name="send" size={18} color="#fff" />
-                    )}
-                  </TouchableOpacity>
-                </View>
-              )}
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-    );
-  };
+  // Comments Modal rendered inline to prevent recreation issues
 
   // Not logged in view
   if (!user && Platform.OS === 'web') {
@@ -672,21 +565,136 @@ export default function CommunityScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      <CommentsModal />
+      {/* Comments Modal - Rendered inline to prevent recreation */}
+      <Modal
+        visible={!!selectedPost}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={closeComments}
+        statusBarTranslucent
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalKeyboardView}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        >
+          <View style={styles.commentsModalContent}>
+            <TouchableOpacity
+              style={styles.commentsModalOverlay}
+              activeOpacity={1}
+              onPress={closeComments}
+            />
+            <TouchableOpacity
+              activeOpacity={1}
+              onPress={(e) => e.stopPropagation()}
+              style={styles.commentsModalInner}
+            >
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Comments</Text>
+                <TouchableOpacity onPress={closeComments}>
+                  <Ionicons name="close" size={24} color="#fff" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView
+                style={styles.commentsContent}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="none"
+                nestedScrollEnabled={true}
+              >
+                {loadingComments ? (
+                  <View style={styles.commentsLoadingContainer}>
+                    <ActivityIndicator size="small" color="#e50914" />
+                  </View>
+                ) : comments.length === 0 ? (
+                  <View style={styles.emptyComments}>
+                    <Ionicons name="chatbubble-outline" size={48} color="#444" />
+                    <Text style={styles.emptyCommentsText}>No comments yet</Text>
+                    <Text style={styles.emptyCommentsSubtext}>Be the first to comment!</Text>
+                  </View>
+                ) : (
+                  <View style={styles.commentsListContent}>
+                    {comments.map((comment) => (
+                      <View key={comment.id} style={styles.commentItem}>
+                        <View style={styles.commentAuthor}>
+                          {comment.userPhoto ? (
+                            <Image source={{ uri: comment.userPhoto }} style={styles.commentAvatar} />
+                          ) : (
+                            <View style={styles.commentAvatarPlaceholder}>
+                              <Ionicons name="person" size={12} color="#888" />
+                            </View>
+                          )}
+                          <Text style={styles.commentAuthorName}>{comment.userName}</Text>
+                          <Text style={styles.commentTime}>
+                            {communityService.formatTimeAgo(comment.createdAt)}
+                          </Text>
+                        </View>
+                        <Text style={styles.commentContent}>{comment.content}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </ScrollView>
+
+              {user && (
+                <View style={styles.commentInputContainer}>
+                  <TextInput
+                    key="comments-input"
+                    ref={commentInputRef}
+                    style={styles.commentInput}
+                    placeholder="Add a comment..."
+                    placeholderTextColor="#666"
+                    value={newComment}
+                    onChangeText={setNewComment}
+                    maxLength={280}
+                    multiline
+                    numberOfLines={1}
+                    returnKeyType="default"
+                    blurOnSubmit={false}
+                    textAlignVertical="center"
+                    editable={!submittingComment}
+                  />
+                  <TouchableOpacity
+                    style={[
+                      styles.sendButton,
+                      (!newComment.trim() || submittingComment) && styles.sendButtonDisabled,
+                    ]}
+                    onPress={handleAddComment}
+                    disabled={!newComment.trim() || submittingComment}
+                  >
+                    {submittingComment ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Ionicons name="send" size={18} color="#fff" />
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       <View style={styles.header}>
+        {/* Notification bell — top left */}
+        <TouchableOpacity
+          style={styles.headerIconButton}
+          onPress={() => router.push('/(tabs)/notifications')}
+        >
+          <Ionicons name="notifications-outline" size={24} color="#fff" />
+          {unreadNotifications > 0 && (
+            <View style={styles.notificationBadge}>
+              <Text style={styles.notificationBadgeText}>
+                {unreadNotifications > 99 ? '99+' : unreadNotifications}
+              </Text>
+            </View>
+          )}
+        </TouchableOpacity>
+
         <Text style={styles.headerTitle}>Community</Text>
-        {user && (
-          <TouchableOpacity
-            style={styles.createButton}
-            onPress={() => {
-              if (modalClosingRef.current || showCreateModal) return; // Prevent opening if modal is closing or already open
-              setShowCreateModal(true);
-            }}
-          >
-            <Ionicons name="add" size={24} color="#fff" />
-          </TouchableOpacity>
-        )}
+
+        {/* Spacer to keep title centered */}
+        <View style={styles.headerSpacer} />
       </View>
 
       {posts.length === 0 ? (
@@ -700,7 +708,7 @@ export default function CommunityScreen() {
             <TouchableOpacity
               style={styles.createFirstButton}
               onPress={() => {
-                if (modalClosingRef.current || showCreateModal) return; // Prevent opening if modal is closing or already open
+                if (modalClosingRef.current || showCreateModal) return;
                 setShowCreateModal(true);
               }}
             >
@@ -722,6 +730,20 @@ export default function CommunityScreen() {
             />
           }
         />
+      )}
+
+      {/* FAB — floating add post button */}
+      {user && (
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => {
+            if (modalClosingRef.current || showCreateModal) return;
+            setShowCreateModal(true);
+          }}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="add" size={28} color="#fff" />
+        </TouchableOpacity>
       )}
     </SafeAreaView>
   );
@@ -746,7 +768,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#222',
   },
@@ -754,14 +777,51 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: '#fff',
+    flex: 1,
+    textAlign: 'center',
   },
-  createButton: {
-    backgroundColor: '#e50914',
+  headerIconButton: {
     width: 40,
     height: 40,
-    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    position: 'relative',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#e50914',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 3,
+  },
+  notificationBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  headerSpacer: {
+    width: 40,
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#e50914',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 8,
   },
   postsList: {
     padding: 16,
@@ -923,8 +983,17 @@ const styles = StyleSheet.create({
   },
   // Modals
   modalOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    flex: 1,
     backgroundColor: 'rgba(0,0,0,0.8)',
+    justifyContent: 'flex-end',
+    ...(Platform.OS === 'web' && {
+      position: 'fixed' as any,
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 9999,
+    }),
   },
   commentsModalInner: {
     backgroundColor: '#1a1a1a',
@@ -944,10 +1013,23 @@ const styles = StyleSheet.create({
   modalKeyboardView: {
     flex: 1,
     justifyContent: 'flex-end',
+    ...(Platform.OS === 'web' && {
+      position: 'fixed' as any,
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 9999,
+      backgroundColor: 'rgba(0,0,0,0.8)',
+    }),
   },
   commentsModalContent: {
     flex: 1,
     justifyContent: 'flex-end',
+  },
+  commentsModalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'transparent',
   },
   commentsContent: {
     flex: 1,
