@@ -21,9 +21,11 @@ app.use('*', cors({
     'https://anistream-pink.vercel.app',
     'https://anistream.expo.app',
     'https://aniwatch-76fd3.web.app',
+    'https://anistream--cjdycx6tzo.expo.app',
+    'https://anistream-oz3xd4n0i-kuris-projects-e157a786.vercel.app',
   ],
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization'],
+  allowHeaders: ['Content-Type', 'Authorization', 'X-Secret-Token'],
 }));
 
 // Health check
