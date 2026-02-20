@@ -11,6 +11,7 @@ import {
   Modal,
   FlatList,
   Image,
+  ImageBackground,
   KeyboardAvoidingView,
   useWindowDimensions,
 } from 'react-native';
@@ -59,7 +60,7 @@ export default function WatchScreen() {
   const [resumeTimestamp, setResumeTimestamp] = useState<number | null>(null);
   const [showResumePrompt, setShowResumePrompt] = useState(false);
   const lastSavedTimeRef = useRef<number>(0);
-  const saveProgressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const saveProgressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Clean up Expo Router internal params from URL on web
   useEffect(() => {
@@ -109,7 +110,7 @@ export default function WatchScreen() {
   const [retryTimedOut, setRetryTimedOut] = useState(false);
   const [retryElapsed, setRetryElapsed] = useState(0);
   const retryStartTimeRef = useRef<number | null>(null);
-  const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Start/stop retry timer based on loading state
   useEffect(() => {
@@ -471,12 +472,15 @@ export default function WatchScreen() {
     }
   };
 
-  const handleQualityChange = (source: StreamingSource) => {
+  const handleQualityChange = (source: { url: string; quality: string }) => {
     if (useWebSocket) {
       // For WebSocket, we can't directly set - need to select from streaming data
       // This is a UI-only change since sources are already loaded
     }
-    setRestSelectedSource(source);
+    const matchedSource = restStreamingData?.sources?.find(candidate => candidate.url === source.url);
+    if (matchedSource) {
+      setRestSelectedSource(matchedSource);
+    }
   };
 
   // Get the actual selected source (handling both WS and REST)
@@ -794,11 +798,11 @@ export default function WatchScreen() {
       </View>
 
       {/* Recommendations */}
-      {animeInfo?.relatedAnimes && animeInfo.relatedAnimes.length > 0 && (
+      {animeInfo?.relatedAnime && animeInfo.relatedAnime.length > 0 && (
         <View style={styles.sidebarSection}>
           <Text style={styles.sidebarTitle}>Related</Text>
           <ScrollView style={styles.recommendationList} nestedScrollEnabled>
-            {animeInfo.relatedAnimes.slice(0, 10).map((related: any) => (
+            {animeInfo.relatedAnime.slice(0, 10).map((related: any) => (
               <TouchableOpacity
                 key={related.id}
                 style={styles.recommendationItem}
@@ -864,8 +868,15 @@ export default function WatchScreen() {
           </TouchableOpacity>
         </View>
       ) : loading && !selectedSource ? (
-        // Loading state with retry progress
-        <View style={styles.videoLoadingContainer}>
+        // Loading state with poster cover
+        <ImageBackground
+          source={animeInfo?.poster ? { uri: animeInfo.poster } : undefined}
+          style={styles.videoLoadingContainer}
+          imageStyle={styles.videoLoadingCoverImage}
+          resizeMode="stretch"
+        >
+          {/* Dark overlay */}
+          <View style={styles.videoLoadingOverlay} />
           {animeInfo?.name && (
             <Text style={styles.videoLoadingTitle} numberOfLines={1}>{animeInfo.name}</Text>
           )}
@@ -884,7 +895,7 @@ export default function WatchScreen() {
               Server {serverIndex + 1} of {totalServers}
             </Text>
           )}
-        </View>
+        </ImageBackground>
       ) : selectedSource ? (
         <VideoPlayer
           source={selectedSource.url}
@@ -909,12 +920,14 @@ export default function WatchScreen() {
           onNext={handleNextEpisode}
           hasPrevious={hasPreviousEpisode}
           hasNext={hasNextEpisode}
-          initialTime={resumeTimestamp || undefined}
+          initialTime={showResumePrompt ? undefined : (resumeTimestamp || undefined)}
           category={category}
           onCategoryChange={setCategory}
           sources={streamingData?.sources}
           selectedSourceUrl={selectedSource?.url}
           onQualityChange={handleQualityChange}
+          intro={streamingData?.intro}
+          outro={streamingData?.outro}
         />
       ) : (
         // No source available - show error
@@ -1202,6 +1215,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#111',
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
+  },
+  videoLoadingCoverImage: {
+    opacity: 0.4,
+  },
+  videoLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
   },
   videoLoadingTitle: {
     color: '#fff',
@@ -1893,3 +1914,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 });
+
+
+

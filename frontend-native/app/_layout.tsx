@@ -1,9 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View, StyleSheet, Platform, Alert, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, Platform, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { useBrowserNotifications } from '@/hooks/useBrowserNotifications';
 import * as SplashScreen from 'expo-splash-screen';
 
 // Prevent auto-hide of splash screen
@@ -19,65 +22,60 @@ const Analytics = Platform.OS === 'web'
   ? require('@vercel/analytics/react').Analytics
   : () => null;
 
-// OTA Updates hook for native platforms
-function useOTAUpdates() {
-  useEffect(() => {
-    if (Platform.OS === 'web') return;
-
-    const checkForUpdates = async () => {
-      try {
-        const Updates = require('expo-updates');
-
-        // Don't check for updates in development
-        if (__DEV__) return;
-
-        const update = await Updates.checkForUpdateAsync();
-        if (update.isAvailable) {
-          // Download the update
-          await Updates.fetchUpdateAsync();
-
-          // Alert the user
-          Alert.alert(
-            'Update Available',
-            'A new version has been downloaded. Restart now to apply the update?',
-            [
-              { text: 'Later', style: 'cancel' },
-              {
-                text: 'Restart',
-                onPress: async () => {
-                  await Updates.reloadAsync();
-                },
-              },
-            ]
-          );
-        }
-      } catch (err) {
-        // Silently fail - updates are not critical
-        console.log('Failed to check for updates:', err);
-      }
-    };
-
-    // Check for updates after a short delay to not block app startup
-    const timeout = setTimeout(checkForUpdates, 3000);
-    return () => clearTimeout(timeout);
-  }, []);
+// OTA Updates — checks during splash screen and auto-applies silently
+async function checkAndApplyUpdate(): Promise<void> {
+  if (Platform.OS === 'web' || __DEV__) return;
+  try {
+    const Updates = require('expo-updates');
+    const update = await Updates.checkForUpdateAsync();
+    if (update.isAvailable) {
+      await Updates.fetchUpdateAsync();
+      // Silently reload — user sees the new version on next launch instead of a prompt
+      await Updates.reloadAsync();
+    }
+  } catch (err) {
+    // Silently fail — updates are non-critical
+    console.log('OTA update check failed:', err);
+  }
 }
 
-// Inner layout that waits for auth to be ready
+// Offline banner shown globally when there's no internet
+function OfflineBanner() {
+  const { isConnected } = useNetworkStatus();
+  if (isConnected) return null;
+  return (
+    <View style={styles.offlineBanner}>
+      <Ionicons name="cloud-offline-outline" size={16} color="#fff" />
+      <Text style={styles.offlineBannerText}>No internet connection</Text>
+    </View>
+  );
+}
+
+// Inner layout that waits for auth + update check to be ready
 function AppContent() {
   const { loading: authLoading } = useAuth();
   const [appReady, setAppReady] = useState(false);
   const [splashHidden, setSplashHidden] = useState(false);
+  // On web or DEV, skip update check immediately; on native production wait for it
+  const [updateChecked, setUpdateChecked] = useState(
+    Platform.OS === 'web' || __DEV__
+  );
 
-  // Check for OTA updates on native platforms
-  useOTAUpdates();
+  // Subscribe to Firestore notifications and show browser push notifications
+  useBrowserNotifications();
 
-  // Mark app as ready when auth is loaded
+  // Run OTA update check during splash — silently applies if available
   useEffect(() => {
-    if (!authLoading) {
+    if (Platform.OS === 'web' || __DEV__) return;
+    checkAndApplyUpdate().finally(() => setUpdateChecked(true));
+  }, []);
+
+  // Mark app as ready when auth is loaded AND update check finished
+  useEffect(() => {
+    if (!authLoading && updateChecked) {
       setAppReady(true);
     }
-  }, [authLoading]);
+  }, [authLoading, updateChecked]);
 
   // Hide splash screen when app is ready
   const onLayoutRootView = useCallback(async () => {
@@ -108,6 +106,7 @@ function AppContent() {
       <StatusBar style="light" />
       {Platform.OS === 'web' && <SpeedInsights />}
       {Platform.OS === 'web' && <Analytics />}
+      <OfflineBanner />
       <Stack
         screenOptions={{
           headerShown: false,
@@ -153,5 +152,19 @@ const styles = StyleSheet.create({
   },
   loadingSpinner: {
     marginTop: 16,
+  },
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#b91c1c',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  offlineBannerText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });

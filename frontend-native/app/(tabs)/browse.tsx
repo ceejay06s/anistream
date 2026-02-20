@@ -278,7 +278,7 @@ export default function BrowseScreen() {
                   styles.chip,
                   selectedGenre === genre && styles.chipActive,
                   showFilters && styles.chipGrid,
-                  showFilters && chipWidth && { width: chipWidth },
+                  showFilters && chipWidth !== undefined ? { width: chipWidth } : null,
                   showFilters && !isLastInRow && { marginRight: 8 },
                 ]}
                 onPress={() => setSelectedGenre(genre)}

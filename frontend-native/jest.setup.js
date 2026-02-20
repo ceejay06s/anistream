@@ -1,18 +1,6 @@
 // Jest setup file for frontend tests
 import '@testing-library/jest-native/extend-expect';
 
-// Mock React Native modules
-jest.mock('react-native', () => {
-  const RN = jest.requireActual('react-native');
-  return {
-    ...RN,
-    Platform: {
-      OS: 'web',
-      select: jest.fn((obj) => obj.web || obj.default),
-    },
-  };
-});
-
 // Mock Expo modules
 jest.mock('expo-router', () => ({
   useRouter: () => ({

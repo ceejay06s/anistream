@@ -20,6 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { communityService, Post, Comment, MediaItem } from '@/services/communityService';
+import { userNotificationService } from '@/services/userNotificationService';
 import { executeRecaptcha } from '@/utils/recaptcha';
 import { isRecaptchaEnabled, RECAPTCHA_SITE_KEY } from '@/config/recaptcha';
 import { verifyRecaptchaToken } from '@/services/recaptchaService';
@@ -31,6 +32,17 @@ export default function CommunityScreen() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+
+  // Subscribe to unread notification count for bell badge
+  useEffect(() => {
+    if (!user) return;
+    const unsubscribe = userNotificationService.subscribeToUnreadCount(
+      user.uid,
+      setUnreadNotifications
+    );
+    return () => unsubscribe();
+  }, [user]);
 
   // Create post modal
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -664,18 +676,25 @@ export default function CommunityScreen() {
       </Modal>
 
       <View style={styles.header}>
+        {/* Notification bell — top left */}
+        <TouchableOpacity
+          style={styles.headerIconButton}
+          onPress={() => router.push('/(tabs)/notifications')}
+        >
+          <Ionicons name="notifications-outline" size={24} color="#fff" />
+          {unreadNotifications > 0 && (
+            <View style={styles.notificationBadge}>
+              <Text style={styles.notificationBadgeText}>
+                {unreadNotifications > 99 ? '99+' : unreadNotifications}
+              </Text>
+            </View>
+          )}
+        </TouchableOpacity>
+
         <Text style={styles.headerTitle}>Community</Text>
-        {user && (
-          <TouchableOpacity
-            style={styles.createButton}
-            onPress={() => {
-              if (modalClosingRef.current || showCreateModal) return; // Prevent opening if modal is closing or already open
-              setShowCreateModal(true);
-            }}
-          >
-            <Ionicons name="add" size={24} color="#fff" />
-          </TouchableOpacity>
-        )}
+
+        {/* Spacer to keep title centered */}
+        <View style={styles.headerSpacer} />
       </View>
 
       {posts.length === 0 ? (
@@ -689,7 +708,7 @@ export default function CommunityScreen() {
             <TouchableOpacity
               style={styles.createFirstButton}
               onPress={() => {
-                if (modalClosingRef.current || showCreateModal) return; // Prevent opening if modal is closing or already open
+                if (modalClosingRef.current || showCreateModal) return;
                 setShowCreateModal(true);
               }}
             >
@@ -711,6 +730,20 @@ export default function CommunityScreen() {
             />
           }
         />
+      )}
+
+      {/* FAB — floating add post button */}
+      {user && (
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => {
+            if (modalClosingRef.current || showCreateModal) return;
+            setShowCreateModal(true);
+          }}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="add" size={28} color="#fff" />
+        </TouchableOpacity>
       )}
     </SafeAreaView>
   );
@@ -735,7 +768,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#222',
   },
@@ -743,14 +777,51 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: '#fff',
+    flex: 1,
+    textAlign: 'center',
   },
-  createButton: {
-    backgroundColor: '#e50914',
+  headerIconButton: {
     width: 40,
     height: 40,
-    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    position: 'relative',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#e50914',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 3,
+  },
+  notificationBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  headerSpacer: {
+    width: 40,
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#e50914',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 8,
   },
   postsList: {
     padding: 16,

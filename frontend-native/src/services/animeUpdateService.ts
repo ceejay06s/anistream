@@ -40,7 +40,7 @@ export const animeUpdateService = {
         (anime) => anime.status === 'watching' && anime.notifyOnUpdate !== false
       );
 
-      const notifications = [];
+      const notifications: Promise<void>[] = [];
 
       for (const saved of watchingAnime) {
         try {
@@ -157,7 +157,7 @@ export const animeUpdateService = {
           // Create notification
           await userNotificationService.createNotification({
             userId,
-            type: update.type,
+            type: update.type === 'new_episode' ? 'anime_new_episode' : 'anime_new_season',
             title: update.type === 'new_episode' 
               ? `New episode: ${update.animeName}`
               : `New season: ${update.animeName}`,

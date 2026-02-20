@@ -47,6 +47,9 @@ export interface VideoPlayerProps {
   sources?: PlayerSource[];
   selectedSourceUrl?: string;
   onQualityChange?: (source: PlayerSource) => void;
+  // Skip intro/outro
+  intro?: { start: number; end: number };
+  outro?: { start: number; end: number };
 }
 
 export function VideoPlayer({
@@ -68,18 +71,25 @@ export function VideoPlayer({
   sources,
   selectedSourceUrl,
   onQualityChange,
+  intro,
+  outro,
 }: VideoPlayerProps) {
   const [isLoading, setIsLoading] = useState(true);
+  const [isPlayerReady, setIsPlayerReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const hasSeekToInitial = useRef(false);
+  const videoViewRef = useRef<any>(null);
   const [currentSubtitle, setCurrentSubtitle] = useState<string | null>(null);
   const [showSubtitleMenu, setShowSubtitleMenu] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
-  const timeUpdateRef = useRef<NodeJS.Timeout | null>(null);
+  const [autoSkip, setAutoSkip] = useState(false);
+  const timeUpdateRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const autoSkippedIntroRef = useRef(false);
+  const autoSkippedOutroRef = useRef(false);
 
   const player = useVideoPlayer(source, (player) => {
     player.loop = false;
@@ -97,11 +107,7 @@ export function VideoPlayer({
       if (status.status === 'readyToPlay') {
         setIsLoading(false);
         setError(null);
-        // Seek to initial time if provided (for resume functionality)
-        if (initialTime && initialTime > 0 && !hasSeekToInitial.current) {
-          hasSeekToInitial.current = true;
-          player.seekBy(initialTime);
-        }
+        setIsPlayerReady(true);
         onReady?.();
       } else if (status.status === 'loading') {
         setIsLoading(true);
@@ -124,9 +130,10 @@ export function VideoPlayer({
     };
   }, [player, onError, onReady]);
 
-  // Track current time for subtitle sync
+  // Track current time for subtitle sync, auto-skip, and time reporting
   useEffect(() => {
-    if (!player || !currentSubtitle) {
+    const needsTimeTracking = currentSubtitle || intro || outro || onCurrentTimeChange;
+    if (!player || !needsTimeTracking) {
       if (timeUpdateRef.current) {
         clearInterval(timeUpdateRef.current);
         timeUpdateRef.current = null;
@@ -134,17 +141,27 @@ export function VideoPlayer({
       return;
     }
 
-    // Update time every 100ms for smooth subtitle sync
+    // Update time every 250ms (subtitle sync uses 100ms, but for skip 250ms is sufficient)
     timeUpdateRef.current = setInterval(() => {
       if (player.currentTime !== undefined) {
         const newTime = player.currentTime;
         setCurrentTime(newTime);
-        // Notify parent of time change for clipping
         if (onCurrentTimeChange) {
           onCurrentTimeChange(newTime);
         }
+        // Auto-skip logic
+        if (autoSkip) {
+          if (intro && newTime >= intro.start && newTime < intro.end && !autoSkippedIntroRef.current) {
+            autoSkippedIntroRef.current = true;
+            player.currentTime = intro.end;
+          }
+          if (outro && newTime >= outro.start && newTime < outro.end && !autoSkippedOutroRef.current) {
+            autoSkippedOutroRef.current = true;
+            player.currentTime = outro.end;
+          }
+        }
       }
-    }, 100);
+    }, 250);
 
     return () => {
       if (timeUpdateRef.current) {
@@ -152,7 +169,7 @@ export function VideoPlayer({
         timeUpdateRef.current = null;
       }
     };
-  }, [player, currentSubtitle, onCurrentTimeChange]);
+  }, [player, currentSubtitle, intro, outro, onCurrentTimeChange, autoSkip]);
 
   // Auto-select first subtitle if available
   useEffect(() => {
@@ -164,6 +181,22 @@ export function VideoPlayer({
       setCurrentSubtitle(englishTrack?.url || subtitleTracks[0].url);
     }
   }, [subtitleTracks]);
+
+  // Reset seek/skip flags when source changes
+  useEffect(() => {
+    hasSeekToInitial.current = false;
+    setIsPlayerReady(false);
+    autoSkippedIntroRef.current = false;
+    autoSkippedOutroRef.current = false;
+  }, [source]);
+
+  // Handle initial seek — fires when initialTime is set OR when player becomes ready
+  useEffect(() => {
+    if (isPlayerReady && initialTime && initialTime > 0 && !hasSeekToInitial.current) {
+      hasSeekToInitial.current = true;
+      player.currentTime = initialTime;
+    }
+  }, [initialTime, isPlayerReady, player]);
 
   // Handle fullscreen orientation lock
   const handleFullscreenEnter = useCallback(async () => {
@@ -210,9 +243,10 @@ export function VideoPlayer({
   return (
     <View style={[styles.container, style]}>
       <VideoView
+        ref={videoViewRef}
         player={player}
         style={styles.video}
-        contentFit="contain"
+        contentFit="fill"
         nativeControls={!isLocked}
         allowsFullscreen
         allowsPictureInPicture
@@ -241,6 +275,44 @@ export function VideoPlayer({
           onPress={toggleLock}
         >
           <Ionicons name="lock-open" size={20} color="#fff" />
+        </TouchableOpacity>
+      )}
+
+      {/* Fullscreen button */}
+      {!isLocked && (
+        <TouchableOpacity
+          style={styles.fullscreenButton}
+          onPress={() => {
+            if (isFullscreen) {
+              videoViewRef.current?.exitFullscreen();
+            } else {
+              videoViewRef.current?.enterFullscreen();
+            }
+          }}
+        >
+          <Ionicons name={isFullscreen ? 'contract' : 'expand'} size={20} color="#fff" />
+        </TouchableOpacity>
+      )}
+
+      {/* Skip Intro button */}
+      {intro && currentTime >= intro.start && currentTime < intro.end && !isLocked && (
+        <TouchableOpacity
+          style={styles.skipOverlayButton}
+          onPress={() => { player.currentTime = intro.end; }}
+        >
+          <Text style={styles.skipOverlayText}>Skip Intro</Text>
+          <Ionicons name="play-skip-forward-outline" size={16} color="#fff" />
+        </TouchableOpacity>
+      )}
+
+      {/* Skip Outro button */}
+      {outro && currentTime >= outro.start && currentTime < outro.end && !isLocked && (
+        <TouchableOpacity
+          style={styles.skipOverlayButton}
+          onPress={() => { player.currentTime = outro.end; }}
+        >
+          <Text style={styles.skipOverlayText}>Skip Outro</Text>
+          <Ionicons name="play-skip-forward-outline" size={16} color="#fff" />
         </TouchableOpacity>
       )}
 
@@ -324,6 +396,23 @@ export function VideoPlayer({
                         </Text>
                       </TouchableOpacity>
                     ))}
+                  </View>
+                </>
+              )}
+
+              {/* Auto-skip toggle */}
+              {(intro || outro) && (
+                <>
+                  <Text style={styles.settingsSectionLabel}>Skip</Text>
+                  <View style={styles.settingsRow}>
+                    <TouchableOpacity
+                      style={[styles.settingsOption, autoSkip && styles.settingsOptionActive]}
+                      onPress={() => setAutoSkip(v => !v)}
+                    >
+                      <Text style={[styles.settingsOptionText, autoSkip && styles.settingsOptionTextActive]}>
+                        Auto-skip {autoSkip ? 'ON' : 'OFF'}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 </>
               )}
@@ -521,6 +610,36 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  fullscreenButton: {
+    position: 'absolute',
+    top: 12,
+    right: 108,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  skipOverlayButton: {
+    position: 'absolute',
+    bottom: 60,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+    borderRadius: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    gap: 6,
+  },
+  skipOverlayText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   settingsSectionLabel: {
     color: '#888',

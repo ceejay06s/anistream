@@ -34,7 +34,7 @@ interface WSMessage {
 
 export function useStreamSocket(): UseStreamSocketResult {
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastRequestRef = useRef<{ episodeId: string; category: 'sub' | 'dub' } | null>(null);
 
   const [status, setStatus] = useState<StreamStatus>({

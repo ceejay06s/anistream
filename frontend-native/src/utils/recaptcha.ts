@@ -115,10 +115,11 @@ export async function executeRecaptcha(
     throw new Error('reCAPTCHA Enterprise is not available');
   }
 
+  const enterprise = window.grecaptcha.enterprise;
   return new Promise((resolve, reject) => {
-    window.grecaptcha.enterprise!.ready(async () => {
+    enterprise.ready(async () => {
       try {
-        const token = await window.grecaptcha.enterprise!.execute(siteKey, { action });
+        const token = await enterprise.execute(siteKey, { action });
         resolve(token);
       } catch (error: any) {
         // If Enterprise fails, try falling back to regular reCAPTCHA if available
@@ -163,10 +164,11 @@ export async function renderRecaptcha(
     throw new Error('reCAPTCHA Enterprise is not available');
   }
 
+  const enterprise = window.grecaptcha.enterprise;
   return new Promise((resolve, reject) => {
-    window.grecaptcha.enterprise!.ready(() => {
+    enterprise.ready(() => {
       try {
-        const widgetId = window.grecaptcha.enterprise!.render(elementId, {
+        const widgetId = enterprise.render(elementId, {
           sitekey: siteKey,
           callback: callback,
           'expired-callback': onExpired || (() => {}),

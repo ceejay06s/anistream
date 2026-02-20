@@ -16,6 +16,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -108,14 +109,21 @@ export default function HomeScreen() {
     loadRecentlyWatched();
   }, []);
 
-  const loadRecentlyWatched = async () => {
+  const loadRecentlyWatched = useCallback(async () => {
     try {
       const history = await watchHistoryService.getRecentlyWatched(10);
       setRecentlyWatched(history);
     } catch (err) {
       console.error('Failed to load recently watched:', err);
     }
-  };
+  }, []);
+
+  // Reload watch history every time this tab comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadRecentlyWatched();
+    }, [loadRecentlyWatched])
+  );
 
   const loadNews = async () => {
     try {
@@ -750,10 +758,15 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#fff',
     marginBottom: 12,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
     maxWidth: Platform.OS === 'web' ? 600 : '100%',
+    ...Platform.select({
+      web: { textShadow: '0px 2px 4px rgba(0, 0, 0, 0.75)' } as any,
+      default: {
+        textShadowColor: 'rgba(0, 0, 0, 0.75)',
+        textShadowOffset: { width: 0, height: 2 },
+        textShadowRadius: 4,
+      },
+    }),
   },
   bannerMeta: {
     flexDirection: 'row',
@@ -931,9 +944,14 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: Platform.OS === 'web' ? 12 : 10,
     fontWeight: '600',
-    textShadowColor: 'rgba(0, 0, 0, 0.8)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    ...Platform.select({
+      web: { textShadow: '0px 1px 2px rgba(0, 0, 0, 0.8)' } as any,
+      default: {
+        textShadowColor: 'rgba(0, 0, 0, 0.8)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 2,
+      },
+    }),
   },
   // News styles
   newsList: {
@@ -1048,16 +1066,26 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: Platform.OS === 'web' ? 14 : 13,
     fontWeight: '600',
-    textShadowColor: 'rgba(0, 0, 0, 0.8)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+    ...Platform.select({
+      web: { textShadow: '0px 1px 3px rgba(0, 0, 0, 0.8)' } as any,
+      default: {
+        textShadowColor: 'rgba(0, 0, 0, 0.8)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 3,
+      },
+    }),
   },
   continueWatchingEpisode: {
     color: 'rgba(255, 255, 255, 0.8)',
     fontSize: Platform.OS === 'web' ? 12 : 11,
     marginTop: 2,
-    textShadowColor: 'rgba(0, 0, 0, 0.8)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+    ...Platform.select({
+      web: { textShadow: '0px 1px 3px rgba(0, 0, 0, 0.8)' } as any,
+      default: {
+        textShadowColor: 'rgba(0, 0, 0, 0.8)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 3,
+      },
+    }),
   },
 });

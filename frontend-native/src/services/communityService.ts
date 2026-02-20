@@ -77,6 +77,7 @@ export interface Post {
   content: string;
   animeId?: string;
   animeName?: string;
+  clippedSceneTime?: number;
   media?: MediaItem[];
   likes: string[];
   commentCount: number;
@@ -183,11 +184,11 @@ export const communityService = {
     const postData = {
       userId: user.uid,
       userName: user.displayName || 'Anonymous',
-      userPhoto: user.photoURL || null,
+      userPhoto: user.photoURL || undefined,
       content,
-      animeId: animeId || null,
-      animeName: animeName || null,
-      media: media || null,
+      animeId: animeId || undefined,
+      animeName: animeName || undefined,
+      media: media || undefined,
       likes: [],
       commentCount: 0,
       createdAt: Date.now(),
@@ -240,7 +241,7 @@ export const communityService = {
 
       const savedAnimeSnapshot = await getDocs(savedAnimeQuery);
       
-      const notifications = [];
+      const notifications: Promise<void>[] = [];
       savedAnimeSnapshot.docs.forEach((doc: any) => {
         // Extract userId from path: users/{userId}/savedAnime/{animeId}
         const pathParts = doc.ref.path.split('/');
@@ -370,7 +371,7 @@ export const communityService = {
     const commentData = {
       userId: user.uid,
       userName: user.displayName || 'Anonymous',
-      userPhoto: user.photoURL || null,
+      userPhoto: user.photoURL || undefined,
       content,
       createdAt: Date.now(),
     };
@@ -426,7 +427,7 @@ export const communityService = {
       }
 
       const postData = postSnap.data();
-      const notifications = [];
+      const notifications: Promise<void>[] = [];
 
       // Notify post author (if not the comment author)
       if (postData.userId !== commentAuthor.uid) {
@@ -611,6 +612,15 @@ export const communityService = {
     });
 
     return unsubscribe;
+  },
+
+  formatTime(seconds: number): string {
+    if (!Number.isFinite(seconds) || seconds < 0) {
+      return '0:00';
+    }
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   },
 
   formatTimeAgo(timestamp: number): string {
