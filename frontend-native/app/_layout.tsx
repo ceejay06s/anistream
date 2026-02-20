@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useBrowserNotifications } from '@/hooks/useBrowserNotifications';
+import { useNativeNotifications } from '@/hooks/useNativeNotifications';
 import * as SplashScreen from 'expo-splash-screen';
 
 // Prevent auto-hide of splash screen
@@ -61,8 +62,10 @@ function AppContent() {
     Platform.OS === 'web' || __DEV__
   );
 
-  // Subscribe to Firestore notifications and show browser push notifications
+  // Web: Firestore subscription → browser Notification API + FCM registration
   useBrowserNotifications();
+  // Native (Android/iOS): Expo push token registration + foreground handler + tap navigation
+  useNativeNotifications();
 
   // Run OTA update check during splash — silently applies if available
   useEffect(() => {
