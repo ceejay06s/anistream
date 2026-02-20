@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import { app } from '@/config/firebase';
+import { API_BASE_URL } from './api';
 
 // Lazy initialization to avoid module load order issues
 function getDb() {
@@ -175,6 +176,26 @@ export const userNotificationService = {
         read: false,
         createdAt: Date.now(),
       });
+
+      // Fire-and-forget: trigger FCM push via backend
+      const secret = process.env.EXPO_PUBLIC_NOTIFY_API_SECRET;
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (secret) headers['X-Secret-Token'] = secret;
+
+      fetch(`${API_BASE_URL}/api/notifications/send-push`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          userId: notification.userId,
+          title: notification.title,
+          body: notification.body,
+          data: {
+            animeId: notification.data?.animeId ?? '',
+            postId: notification.data?.postId ?? '',
+            type: notification.type,
+          },
+        }),
+      }).catch((err) => console.log('Push notification failed (non-critical):', err));
     } catch (err) {
       console.error('Failed to create notification:', err);
     }
