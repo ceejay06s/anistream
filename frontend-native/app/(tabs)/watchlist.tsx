@@ -63,8 +63,8 @@ export default function WatchlistScreen() {
   const handleRemoveAnime = async (animeId: string) => {
     if (!user) return;
     try {
-      await savedAnimeService.removeAnime(user.uid, animeId);
-      setSavedAnime(prev => prev.filter(a => a.animeId !== animeId));
+      await savedAnimeService.unsaveAnime(user.uid, animeId);
+      setSavedAnime(prev => prev.filter(a => a.id !== animeId));
     } catch (err) {
       console.error('Failed to remove anime:', err);
     }
@@ -75,7 +75,7 @@ export default function WatchlistScreen() {
     try {
       await savedAnimeService.updateAnimeStatus(user.uid, animeId, newStatus);
       setSavedAnime(prev =>
-        prev.map(a => (a.animeId === animeId ? { ...a, status: newStatus } : a))
+        prev.map(a => (a.id === animeId ? { ...a, status: newStatus } : a))
       );
     } catch (err) {
       console.error('Failed to update status:', err);
@@ -86,23 +86,23 @@ export default function WatchlistScreen() {
 
   const renderAnimeItem = ({ item }: { item: SavedAnime }) => (
     <TouchableOpacity
-      key={item.animeId}
+      key={item.id}
       style={styles.animeCard}
-      onPress={() => router.push(`/detail/${item.animeId}`)}
+      onPress={() => router.push(`/detail/${item.id}`)}
       activeOpacity={0.7}
     >
       <Image
-        source={{ uri: getProxiedImageUrl(item.posterUrl) }}
+        source={{ uri: getProxiedImageUrl(item.poster) || undefined }}
         style={styles.animePoster}
         resizeMode="cover"
       />
       <View style={styles.animeInfo}>
         <Text style={styles.animeTitle} numberOfLines={2}>
-          {item.title}
+          {item.name}
         </Text>
-        {item.lastWatchedEpisode && (
+        {item.currentEpisode && (
           <Text style={styles.episodeText}>
-            Episode {item.lastWatchedEpisode}
+            Episode {item.currentEpisode}
           </Text>
         )}
         <View style={styles.statusBadge}>
@@ -116,7 +116,7 @@ export default function WatchlistScreen() {
       </View>
       <TouchableOpacity
         style={styles.removeButton}
-        onPress={() => handleRemoveAnime(item.animeId)}
+        onPress={() => handleRemoveAnime(item.id)}
       >
         <Ionicons name="close-circle" size={24} color="#666" />
       </TouchableOpacity>
@@ -207,7 +207,7 @@ export default function WatchlistScreen() {
       ) : (
         <FlatList
           data={filteredAnime}
-          keyExtractor={(item) => item.animeId}
+          keyExtractor={(item) => item.id}
           renderItem={renderAnimeItem}
           contentContainerStyle={styles.listContainer}
           refreshControl={

@@ -60,7 +60,7 @@ export default function WatchScreen() {
   const [resumeTimestamp, setResumeTimestamp] = useState<number | null>(null);
   const [showResumePrompt, setShowResumePrompt] = useState(false);
   const lastSavedTimeRef = useRef<number>(0);
-  const saveProgressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const saveProgressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Clean up Expo Router internal params from URL on web
   useEffect(() => {
@@ -110,7 +110,7 @@ export default function WatchScreen() {
   const [retryTimedOut, setRetryTimedOut] = useState(false);
   const [retryElapsed, setRetryElapsed] = useState(0);
   const retryStartTimeRef = useRef<number | null>(null);
-  const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Start/stop retry timer based on loading state
   useEffect(() => {
@@ -472,12 +472,15 @@ export default function WatchScreen() {
     }
   };
 
-  const handleQualityChange = (source: StreamingSource) => {
+  const handleQualityChange = (source: { url: string; quality: string }) => {
     if (useWebSocket) {
       // For WebSocket, we can't directly set - need to select from streaming data
       // This is a UI-only change since sources are already loaded
     }
-    setRestSelectedSource(source);
+    const matchedSource = restStreamingData?.sources?.find(candidate => candidate.url === source.url);
+    if (matchedSource) {
+      setRestSelectedSource(matchedSource);
+    }
   };
 
   // Get the actual selected source (handling both WS and REST)
@@ -795,11 +798,11 @@ export default function WatchScreen() {
       </View>
 
       {/* Recommendations */}
-      {animeInfo?.relatedAnimes && animeInfo.relatedAnimes.length > 0 && (
+      {animeInfo?.relatedAnime && animeInfo.relatedAnime.length > 0 && (
         <View style={styles.sidebarSection}>
           <Text style={styles.sidebarTitle}>Related</Text>
           <ScrollView style={styles.recommendationList} nestedScrollEnabled>
-            {animeInfo.relatedAnimes.slice(0, 10).map((related: any) => (
+            {animeInfo.relatedAnime.slice(0, 10).map((related: any) => (
               <TouchableOpacity
                 key={related.id}
                 style={styles.recommendationItem}
@@ -1911,3 +1914,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 });
+
+
+

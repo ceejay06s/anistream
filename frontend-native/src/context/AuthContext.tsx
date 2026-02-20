@@ -101,9 +101,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error('Auth not available');
     }
     if (Platform.OS === 'web') {
-      const { signInWithPopup, GoogleAuthProvider } = require('firebase/auth');
+      const { signInWithPopup, signInWithRedirect, GoogleAuthProvider } = require('firebase/auth');
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      provider.setCustomParameters({ prompt: 'select_account' });
+      try {
+        await signInWithPopup(auth, provider);
+      } catch (err: any) {
+        const code = String(err?.code || '');
+        const message = String(err?.message || '');
+        const shouldFallbackToRedirect =
+          code === 'auth/popup-blocked' ||
+          code === 'auth/popup-closed-by-user' ||
+          code === 'auth/cancelled-popup-request' ||
+          code === 'auth/operation-not-supported-in-this-environment' ||
+          message.includes('Cross-Origin-Opener-Policy');
+
+        if (shouldFallbackToRedirect) {
+          await signInWithRedirect(auth, provider);
+          return;
+        }
+        throw err;
+      }
     } else {
       // Mobile: Use native Google Sign-In
       const { GoogleSignin } = require('@react-native-google-signin/google-signin');

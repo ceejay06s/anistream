@@ -1043,9 +1043,11 @@ export default function ProfileScreen() {
                   isDragging && styles.dragDropAreaActive,
                   photoPreview && styles.dragDropAreaHasPhoto,
                 ]}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
+                {...({
+                  onDragOver: handleDragOver,
+                  onDragLeave: handleDragLeave,
+                  onDrop: handleDrop,
+                } as any)}
               >
                 {photoPreview ? (
                   <View style={styles.photoPreviewContainer}>

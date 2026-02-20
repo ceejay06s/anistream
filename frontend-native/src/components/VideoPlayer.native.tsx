@@ -87,7 +87,7 @@ export function VideoPlayer({
   const [showSubtitleMenu, setShowSubtitleMenu] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [autoSkip, setAutoSkip] = useState(false);
-  const timeUpdateRef = useRef<NodeJS.Timeout | null>(null);
+  const timeUpdateRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoSkippedIntroRef = useRef(false);
   const autoSkippedOutroRef = useRef(false);
 

@@ -309,9 +309,10 @@ export function VideoPlayer({
       hls.on(Hls.Events.ERROR, (event, data) => {
         console.error('HLS error:', event, data);
         if (data.fatal) {
-          const is403 = data.response?.code === 403 ||
+          const responseCode = data.response?.code;
+          const is403 = responseCode === 403 ||
                         data.details?.includes('403') ||
-                        (data.type === Hls.ErrorTypes.NETWORK_ERROR && data.response?.code >= 400);
+                        (data.type === Hls.ErrorTypes.NETWORK_ERROR && typeof responseCode === 'number' && responseCode >= 400);
 
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:

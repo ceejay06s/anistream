@@ -1,9 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View, StyleSheet, Platform, Alert, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, Platform, Alert, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { useBrowserNotifications } from '@/hooks/useBrowserNotifications';
 import * as SplashScreen from 'expo-splash-screen';
 
 // Prevent auto-hide of splash screen
@@ -63,6 +66,18 @@ function useOTAUpdates() {
   }, []);
 }
 
+// Offline banner shown globally when there's no internet
+function OfflineBanner() {
+  const { isConnected } = useNetworkStatus();
+  if (isConnected) return null;
+  return (
+    <View style={styles.offlineBanner}>
+      <Ionicons name="cloud-offline-outline" size={16} color="#fff" />
+      <Text style={styles.offlineBannerText}>No internet connection</Text>
+    </View>
+  );
+}
+
 // Inner layout that waits for auth to be ready
 function AppContent() {
   const { loading: authLoading } = useAuth();
@@ -71,6 +86,9 @@ function AppContent() {
 
   // Check for OTA updates on native platforms
   useOTAUpdates();
+
+  // Subscribe to Firestore notifications and show browser push notifications
+  useBrowserNotifications();
 
   // Mark app as ready when auth is loaded
   useEffect(() => {
@@ -108,6 +126,7 @@ function AppContent() {
       <StatusBar style="light" />
       {Platform.OS === 'web' && <SpeedInsights />}
       {Platform.OS === 'web' && <Analytics />}
+      <OfflineBanner />
       <Stack
         screenOptions={{
           headerShown: false,
@@ -153,5 +172,19 @@ const styles = StyleSheet.create({
   },
   loadingSpinner: {
     marginTop: 16,
+  },
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#b91c1c',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  offlineBannerText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });
