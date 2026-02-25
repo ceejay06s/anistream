@@ -25,10 +25,13 @@ BACKBLAZE_REGION=us-east-005
 
 # HiAnime provider configuration
 # ANIWATCH_PROVIDER=api uses ghoshRitesh12/aniwatch-api over HTTP
+# ANIWATCH_PROVIDER=itzzzme-api uses tzzzme/itzzzme anime-api style endpoints
 # ANIWATCH_PROVIDER=package uses the local aniwatch npm package directly
 ANIWATCH_PROVIDER=api
-ANIWATCH_API_URL=http://localhost:4000
+ANIWATCH_API_URL=https://api-v2-anime.vercel.app
 ANIWATCH_API_BASE_PATH=/api/v2/hianime
+ITZZZME_API_URL=https://api-v1-anime.vercel.app
+ITZZZME_API_BASE_PATH=/api
 ANIWATCH_API_TIMEOUT_MS=12000
 # If true, fallback to npm package when aniwatch-api is unavailable
 ANIWATCH_API_FALLBACK_TO_PACKAGE=true
