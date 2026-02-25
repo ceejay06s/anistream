@@ -178,6 +178,27 @@ const isSubtitleFile = (url: string): boolean => {
   return /\.(vtt|srt|ass|ssa|sub)(\?|$)/i.test(url);
 };
 
+const DEFAULT_BROWSER_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+
+const chooseRefererOrigin = (decodedUrl: string, isSegment: boolean, isImage: boolean) => {
+  try {
+    const target = new URL(decodedUrl);
+    return {
+      referer: `${target.origin}/`,
+      origin: target.origin,
+    };
+  } catch {
+    if (isSegment) {
+      return { referer: 'https://megacloud.blog/', origin: 'https://megacloud.blog' };
+    }
+    if (isImage) {
+      return { referer: 'https://hianime.to/', origin: 'https://hianime.to' };
+    }
+    return { referer: 'https://hianime.to/', origin: 'https://hianime.to' };
+  }
+};
+
 // Proxy video stream to handle CORS
 streamingRoutes.get('/proxy', async (c) => {
   const url = c.req.query('url');
@@ -192,32 +213,84 @@ streamingRoutes.get('/proxy', async (c) => {
     const isSegment = isVideoSegment(decodedUrl);
     const isSubtitle = isSubtitleFile(decodedUrl);
     const isImage = /\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?|$)/i.test(decodedUrl);
+    const requestRange = c.req.header('range');
+    const { referer, origin } = chooseRefererOrigin(decodedUrl, isSegment, isImage);
 
     console.log(`Proxying ${isM3U8 ? 'M3U8' : isSubtitle ? 'subtitle' : isImage ? 'image' : isSegment ? 'segment' : 'video'}: ${decodedUrl.substring(0, 100)}...`);
 
-    // Use got-scraping for browser-like TLS fingerprint
-    // The TLS fingerprint is the key to bypassing CDN anti-bot
-    const response = await gotScraping({
-      url: decodedUrl,
-      responseType: (isM3U8 || isSubtitle) ? 'text' : 'buffer',
-      timeout: { request: 30000 },
-      followRedirect: true,
-      maxRedirects: 5,
-      throwHttpErrors: false,
-      // Enable header generator for TLS fingerprint
-      useHeaderGenerator: true,
-      headerGeneratorOptions: {
-        browsers: ['safari'],
-        devices: ['mobile'],
-        operatingSystems: ['ios'],
-        locales: ['en-US'],
-      },
-      // Critical: Set Referer based on content type
-      headers: {
-        'Referer': isSegment ? 'https://megacloud.blog/' : isImage ? 'https://hianime.to/' : 'https://hianime.to/',
-        'Origin': isSegment ? 'https://megacloud.blog' : isImage ? 'https://hianime.to' : 'https://hianime.to',
-      },
-    });
+    const baseHeaders: Record<string, string> = {
+      'User-Agent': DEFAULT_BROWSER_UA,
+      'Accept': isSubtitle ? 'text/vtt,text/plain;q=0.9,*/*;q=0.8' : '*/*',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Referer': referer,
+      'Origin': origin,
+    };
+
+    if (requestRange) {
+      baseHeaders['Range'] = requestRange;
+    }
+
+    // Subtitles are often hosted on different infra with stricter referer/origin handling.
+    // Retry once with simpler headers before failing.
+    const requestAttempts = isSubtitle
+      ? [
+          { headers: baseHeaders, useHeaderGenerator: false },
+          {
+            headers: {
+              'User-Agent': DEFAULT_BROWSER_UA,
+              'Accept': 'text/vtt,text/plain;q=0.9,*/*;q=0.8',
+              ...(requestRange ? { 'Range': requestRange } : {}),
+            },
+            useHeaderGenerator: false,
+          },
+        ]
+      : [
+          {
+            headers: baseHeaders,
+            useHeaderGenerator: true,
+          },
+        ];
+
+    let response: any = null;
+    let lastError: any = null;
+    for (const [index, attempt] of requestAttempts.entries()) {
+      try {
+        response = await gotScraping({
+          url: decodedUrl,
+          responseType: (isM3U8 || isSubtitle) ? 'text' : 'buffer',
+          timeout: { request: 30000 },
+          followRedirect: true,
+          maxRedirects: 5,
+          throwHttpErrors: false,
+          useHeaderGenerator: attempt.useHeaderGenerator,
+          headerGeneratorOptions: attempt.useHeaderGenerator
+            ? {
+                browsers: ['safari'],
+                devices: ['mobile'],
+                operatingSystems: ['ios'],
+                locales: ['en-US'],
+              }
+            : undefined,
+          headers: attempt.headers,
+        });
+
+        if (response.statusCode >= 400 && isSubtitle && index < requestAttempts.length - 1) {
+          console.warn(`Subtitle proxy attempt ${index + 1} failed with ${response.statusCode}, retrying...`);
+          continue;
+        }
+        break;
+      } catch (err: any) {
+        lastError = err;
+        if (isSubtitle && index < requestAttempts.length - 1) {
+          console.warn(`Subtitle proxy attempt ${index + 1} threw ${err.message}, retrying...`);
+          continue;
+        }
+      }
+    }
+
+    if (!response) {
+      throw lastError || new Error('Failed to fetch proxied content');
+    }
 
     console.log(`Response: ${response.statusCode} for ${decodedUrl.substring(0, 60)}...`);
 

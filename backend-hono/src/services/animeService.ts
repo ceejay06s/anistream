@@ -1,6 +1,12 @@
-import { HiAnime } from 'aniwatch';
-
-const aniwatch = new HiAnime.Scraper();
+import {
+  searchAnimeProvider,
+  getAnimeInfoProvider,
+  getAnimeEpisodesProvider,
+  getHomePageProvider,
+  getCategoryAnimeProvider,
+  getGenreAnimeProvider,
+  getAZAnimeProvider,
+} from './aniwatchApiClient.js';
 
 export interface AnimeSearchResult {
   id: string;
@@ -106,7 +112,7 @@ export async function searchAnime(
   }
 
   const page = filters?.page || 1;
-  const results = await aniwatch.search(query, page, searchFilters);
+  const results = await searchAnimeProvider(query, page, searchFilters);
   
   if (!results?.animes) {
     return [];
@@ -125,7 +131,7 @@ export async function searchAnime(
  * Get anime information
  */
 export async function getAnimeInfo(animeId: string): Promise<AnimeInfo | null> {
-  const info = await aniwatch.getInfo(animeId);
+  const info = await getAnimeInfoProvider(animeId);
 
   if (!info?.anime) {
     return null;
@@ -225,7 +231,7 @@ export async function getAnimeInfo(animeId: string): Promise<AnimeInfo | null> {
  * Get anime episodes
  */
 export async function getAnimeEpisodes(animeId: string): Promise<Episode[]> {
-  const episodes = await aniwatch.getEpisodes(animeId);
+  const episodes = await getAnimeEpisodesProvider(animeId);
   
   if (!episodes?.episodes) {
     return [];
@@ -242,7 +248,7 @@ export async function getAnimeEpisodes(animeId: string): Promise<Episode[]> {
  * Get trending/popular anime from homepage
  */
 export async function getTrendingAnime(): Promise<AnimeSearchResult[]> {
-  const homepage = await aniwatch.getHomePage();
+  const homepage = await getHomePageProvider();
   
   if (!homepage) {
     return [];
@@ -278,7 +284,7 @@ export async function getCategoryAnime(
   category: string,
   page: number = 1
 ): Promise<AnimeSearchResult[]> {
-  const results = await aniwatch.getCategoryAnime(category as any, page);
+  const results = await getCategoryAnimeProvider(category, page);
 
   if (!results?.animes) {
     return [];
@@ -300,7 +306,7 @@ export async function getGenreAnime(
   genre: string,
   page: number = 1
 ): Promise<AnimeSearchResult[]> {
-  const results = await aniwatch.getGenreAnime(genre, page);
+  const results = await getGenreAnimeProvider(genre, page);
 
   if (!results?.animes) {
     return [];
@@ -322,7 +328,7 @@ export async function getAZAnime(
   letter: string,
   page: number = 1
 ): Promise<AnimeSearchResult[]> {
-  const results = await aniwatch.getAZList(letter as any, page);
+  const results = await getAZAnimeProvider(letter, page);
 
   if (!results?.animes) {
     return [];
@@ -371,7 +377,7 @@ export async function filterAnime(
   // Use search with filters - for filter-only (no query), use 'a' as minimal search term
   // The aniwatch API requires a search term, so we use a common letter that returns results
   const searchQuery = query || 'a';
-  const results = await aniwatch.search(searchQuery, page, searchFilters);
+  const results = await searchAnimeProvider(searchQuery, page, searchFilters);
 
   if (!results?.animes) {
     return [];

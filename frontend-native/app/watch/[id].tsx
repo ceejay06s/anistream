@@ -21,6 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { VideoPlayer } from '@/components/VideoPlayer';
 import { streamingApi, StreamingData, StreamingSource, animeApi, Episode, AnimeInfo } from '@/services/api';
 import { useStreamSocket } from '@/hooks/useStreamSocket';
+import { shouldRenderPlayer } from '@/components/playerFallback';
 import { useAuth } from '@/context/AuthContext';
 import { communityService, Post, Comment } from '@/services/communityService';
 import { executeRecaptcha } from '@/utils/recaptcha';
@@ -94,6 +95,7 @@ export default function WatchScreen() {
   const [restError, setRestError] = useState<string | null>(null);
   const [restStreamingData, setRestStreamingData] = useState<StreamingData | null>(null);
   const [restSelectedSource, setRestSelectedSource] = useState<StreamingSource | null>(null);
+  const [restIframeFallback, setRestIframeFallback] = useState<string | null>(null);
 
   // Combined state
   const loading = useWebSocket ? wsStatus.isLoading : restLoading;
@@ -105,6 +107,7 @@ export default function WatchScreen() {
   const serverIndex = wsStatus.serverIndex;
   const totalServers = wsStatus.totalServers;
   const fromCache = wsStatus.fromCache;
+  const iframeFallbackUrl = useWebSocket ? wsStatus.iframeFallback : restIframeFallback;
 
   // Timeout state for auto-retry with 30-second limit
   const [retryTimedOut, setRetryTimedOut] = useState(false);
@@ -427,6 +430,7 @@ export default function WatchScreen() {
     // Use the full episodeId from HiAnime (contains database ID) if available
     // Otherwise construct it from anime id and episode number
     const episodeIdStr = fullEpisodeId;
+    setRestIframeFallback(null);
 
     if (useWebSocket) {
       // Use WebSocket for real-time server cycling
@@ -442,6 +446,7 @@ export default function WatchScreen() {
     try {
       setRestLoading(true);
       setRestError(null);
+      setRestIframeFallback(null);
 
       const data = await streamingApi.getSources(episodeId, 'hd-1', category);
 
@@ -449,12 +454,26 @@ export default function WatchScreen() {
         setRestStreamingData(data);
         setRestSelectedSource(data.sources[0]);
       } else {
-        setRestError(category === 'dub'
-          ? 'No dubbed version available. Try switching to SUB.'
-          : 'No video sources available.');
+        const embedUrl = await streamingApi.getEmbedUrl(episodeId, 'hd-2', category);
+        if (embedUrl) {
+          setRestIframeFallback(embedUrl);
+          setRestStreamingData(data || { sources: [] });
+          setRestSelectedSource(null);
+          setRestError(null);
+        } else {
+          setRestError(category === 'dub'
+            ? 'No dubbed version available. Try switching to SUB.'
+            : 'No video sources available.');
+        }
       }
     } catch (err: any) {
-      setRestError(err.message || 'Failed to load video');
+      const embedUrl = await streamingApi.getEmbedUrl(episodeId, 'hd-2', category);
+      if (embedUrl) {
+        setRestIframeFallback(embedUrl);
+        setRestError(null);
+      } else {
+        setRestError(err.message || 'Failed to load video');
+      }
     } finally {
       setRestLoading(false);
     }
@@ -844,7 +863,7 @@ export default function WatchScreen() {
   // Render video player section
   const renderVideoPlayer = () => (
     <View style={[styles.playerContainer, isDesktopWeb && styles.playerContainerWeb]}>
-      {retryTimedOut && !selectedSource ? (
+      {retryTimedOut && !selectedSource && !iframeFallbackUrl ? (
         // Timeout error state
         <View style={styles.timeoutContainer}>
           <Ionicons name="cloud-offline-outline" size={48} color="#e50914" />
@@ -867,7 +886,7 @@ export default function WatchScreen() {
             <Text style={styles.retryServerButtonText}>Try Again</Text>
           </TouchableOpacity>
         </View>
-      ) : loading && !selectedSource ? (
+      ) : loading && !selectedSource && !iframeFallbackUrl ? (
         // Loading state with poster cover
         <ImageBackground
           source={animeInfo?.poster ? { uri: animeInfo.poster } : undefined}
@@ -896,9 +915,12 @@ export default function WatchScreen() {
             </Text>
           )}
         </ImageBackground>
-      ) : selectedSource ? (
+      ) : shouldRenderPlayer({
+        selectedSourceUrl: selectedSource?.url,
+        iframeFallbackUrl,
+      }) ? (
         <VideoPlayer
-          source={selectedSource.url}
+          source={selectedSource?.url || ''}
           autoPlay={true}
           onError={(err) => console.error('Player error:', err)}
           onReady={() => {
@@ -907,6 +929,7 @@ export default function WatchScreen() {
           animeId={id}
           episodeNumber={episodeNumber}
           fullEpisodeId={fullEpisodeId}
+          iframeEmbedUrl={iframeFallbackUrl}
           subtitleTracks={streamingData?.tracks?.map(t => ({
             url: t.url,
             lang: t.lang,

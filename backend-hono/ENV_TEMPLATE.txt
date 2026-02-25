@@ -13,7 +13,7 @@ FIREBASE_SERVICE_ACCOUNT=
 
 # Secret token for anime update endpoint (for cron jobs)
 # Generate with: openssl rand -hex 32
-ANIME_UPDATE_SECRET_TOKEN=
+ANIME_UPDATE_SECRET_TOKEN=382a895d641ca48c1d1b310decc24208d71d26066edc349bdf21c2aef7160de9
 
 # Backblaze B2 Configuration
 # Get these from: https://secure.backblaze.com/user_signin.htm → App Keys
@@ -22,3 +22,22 @@ BACKBLAZE_APPLICATION_KEY=
 BACKBLAZE_BUCKET_NAME=anistream-bckt
 BACKBLAZE_ENDPOINT=https://s3.us-east-005.backblazeb2.com
 BACKBLAZE_REGION=us-east-005
+
+# HiAnime provider configuration
+# ANIWATCH_PROVIDER=api uses ghoshRitesh12/aniwatch-api over HTTP
+# ANIWATCH_PROVIDER=itzzzme-api uses tzzzme/itzzzme anime-api style endpoints
+# ANIWATCH_PROVIDER=package uses the local aniwatch npm package directly
+ANIWATCH_PROVIDER=api
+ANIWATCH_API_URL=https://api-v2-anime.vercel.app
+ANIWATCH_API_BASE_PATH=/api/v2/hianime
+ITZZZME_API_URL=https://api-v1-anime.vercel.app
+ITZZZME_API_BASE_PATH=/api
+ANIWATCH_API_TIMEOUT_MS=12000
+# If true, fallback to npm package when aniwatch-api is unavailable
+ANIWATCH_API_FALLBACK_TO_PACKAGE=true
+
+# Optional comma-separated fallback API base URLs for episode source recovery.
+# These are tried before built-in defaults when source arrays are empty/failing.
+# Example:
+# STREAMING_FALLBACK_APIS=https://your-api-1/anime/zoro,https://your-api-2/anime/zoro
+STREAMING_FALLBACK_APIS=
