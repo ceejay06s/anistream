@@ -22,3 +22,13 @@ BACKBLAZE_APPLICATION_KEY=
 BACKBLAZE_BUCKET_NAME=anistream-bckt
 BACKBLAZE_ENDPOINT=https://s3.us-east-005.backblazeb2.com
 BACKBLAZE_REGION=us-east-005
+
+# HiAnime provider configuration
+# ANIWATCH_PROVIDER=api uses ghoshRitesh12/aniwatch-api over HTTP
+# ANIWATCH_PROVIDER=package uses the local aniwatch npm package directly
+ANIWATCH_PROVIDER=api
+ANIWATCH_API_URL=http://localhost:4000
+ANIWATCH_API_BASE_PATH=/api/v2/hianime
+ANIWATCH_API_TIMEOUT_MS=12000
+# If true, fallback to npm package when aniwatch-api is unavailable
+ANIWATCH_API_FALLBACK_TO_PACKAGE=true

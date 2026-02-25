@@ -136,6 +136,7 @@ export interface StreamingData {
   tracks?: Array<{ url: string; lang: string }>;
   intro?: { start: number; end: number };
   outro?: { start: number; end: number };
+  embedURL?: string;
 }
 
 // Anime API
@@ -237,5 +238,21 @@ export const streamingApi = {
       params: { episodeId },
     });
     return response.data.data || [];
+  },
+
+  getEmbedUrl: async (
+    episodeId: string,
+    server: string = 'hd-2',
+    category: string = 'sub'
+  ): Promise<string | null> => {
+    try {
+      const response = await api.get('/api/streaming/embed', {
+        params: { episodeId, server, category },
+      });
+      return response.data?.embedURL || null;
+    } catch (error) {
+      console.warn('Failed to fetch embed URL:', error);
+      return null;
+    }
   },
 };

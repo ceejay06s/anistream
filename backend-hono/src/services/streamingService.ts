@@ -1,7 +1,8 @@
-import { HiAnime } from 'aniwatch';
 import axios from 'axios';
-
-const aniwatch = new HiAnime.Scraper();
+import {
+  getEpisodeSourcesProvider,
+  getEpisodeServersProvider,
+} from './aniwatchApiClient.js';
 
 // Fallback API endpoints (consumet-based APIs)
 const FALLBACK_APIS = [
@@ -64,7 +65,7 @@ export async function getEpisodeSources(
     
     let data;
     try {
-      data = await aniwatch.getEpisodeSources(finalEpisodeId, server as any, category);
+      data = await getEpisodeSourcesProvider(finalEpisodeId, server, category);
     } catch (aniwatchError: any) {
       console.error('Aniwatch package error:', aniwatchError);
       console.error('Error details:', {
@@ -78,7 +79,7 @@ export async function getEpisodeSources(
     }
 
     if (!data) {
-      console.warn('No data returned from aniwatch.getEpisodeSources');
+      console.warn('No data returned from episode sources provider');
       return { sources: [] };
     }
 
@@ -237,7 +238,7 @@ async function tryFallbackApis(
  * Get available episode servers
  */
 export async function getEpisodeServers(episodeId: string): Promise<Server[]> {
-  const servers = await aniwatch.getEpisodeServers(episodeId);
+  const servers = await getEpisodeServersProvider(episodeId);
 
   if (!servers) {
     return [];

@@ -3,6 +3,7 @@ import { View, StyleSheet, ActivityIndicator, Text, TouchableOpacity } from 'rea
 import Hls from 'hls.js';
 import { VideoControls, SubtitleTrack, SubtitleSettings, PlayerSource } from './VideoControls';
 import { SubtitleRenderer } from './SubtitleRenderer';
+import { buildIframeSource } from './playerFallback';
 
 export interface VideoPlayerProps {
   source: string;
@@ -14,6 +15,7 @@ export interface VideoPlayerProps {
   animeId?: string;
   episodeNumber?: string;
   fullEpisodeId?: string;
+  iframeEmbedUrl?: string | null;
   // Subtitle tracks from streaming data
   subtitleTracks?: SubtitleTrack[];
   // Callback to request new source when current one fails
@@ -50,6 +52,7 @@ export function VideoPlayer({
   animeId,
   episodeNumber,
   fullEpisodeId,
+  iframeEmbedUrl,
   subtitleTracks = [],
   onRequestNewSource,
   title,
@@ -78,6 +81,7 @@ export function VideoPlayer({
   const [useIframe, setUseIframe] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [showIframeOption, setShowIframeOption] = useState(false);
+  const canUseIframeFallback = Boolean(iframeEmbedUrl || animeId);
 
   // Video state
   const [isPlaying, setIsPlaying] = useState(false);
@@ -130,6 +134,23 @@ export function VideoPlayer({
       }, 100);
     }
   };
+
+  useEffect(() => {
+    if (!source && iframeEmbedUrl) {
+      setUseIframe(true);
+      setError(null);
+      setIsLoading(false);
+    }
+  }, [source, iframeEmbedUrl]);
+
+  // Exit iframe mode if a direct stream source becomes available again.
+  useEffect(() => {
+    if (useIframe && source) {
+      setUseIframe(false);
+      setError(null);
+      setIsLoading(true);
+    }
+  }, [useIframe, source]);
 
   // Video event handlers
   const handleTimeUpdate = useCallback(() => {
@@ -255,7 +276,13 @@ export function VideoPlayer({
     if (useIframe) return;
 
     const video = videoRef.current;
-    if (!video || !source) return;
+    if (!video || !source) {
+      if (!source && canUseIframeFallback) {
+        setShowIframeOption(true);
+        setIsLoading(false);
+      }
+      return;
+    }
 
     // Clean up previous HLS instance
     if (hlsRef.current) {
@@ -424,16 +451,18 @@ export function VideoPlayer({
     }
   }, [initialTime, isLoading]);
 
-  // Iframe fallback - use hianime.to directly
-  if (useIframe && animeId) {
-    let epId = episodeNumber || '1';
-    if (fullEpisodeId && fullEpisodeId.includes('?ep=')) {
-      const match = fullEpisodeId.match(/\?ep=(\d+)/);
-      if (match) {
-        epId = match[1];
-      }
+  // Iframe fallback: backend embed URL first, direct hianime URL as last fallback
+  if (useIframe && canUseIframeFallback) {
+    const iframeSrc = buildIframeSource({
+      iframeEmbedUrl,
+      animeId,
+      episodeNumber,
+      fullEpisodeId,
+    });
+    if (!iframeSrc) {
+      return null;
     }
-    const iframeSrc = `https://hianime.to/watch/${animeId}?ep=${epId}`;
+    const noticeText = iframeEmbedUrl ? 'Playing via backend embed fallback' : 'Playing via hianime.to';
 
     return (
       <View style={[styles.container, style]}>
@@ -446,7 +475,7 @@ export function VideoPlayer({
           title={`Episode ${episodeNumber || '1'}`}
         />
         <View style={styles.iframeNotice}>
-          <Text style={styles.iframeNoticeText}>Playing via hianime.to</Text>
+          <Text style={styles.iframeNoticeText}>{noticeText}</Text>
         </View>
       </View>
     );
@@ -462,7 +491,7 @@ export function VideoPlayer({
           <TouchableOpacity style={styles.retryButton} onPress={retryStream}>
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
-          {showIframeOption && animeId && (
+          {showIframeOption && canUseIframeFallback && (
             <TouchableOpacity style={styles.iframeButton} onPress={switchToIframe}>
               <Text style={styles.iframeButtonText}>Use Iframe Player</Text>
             </TouchableOpacity>
@@ -533,7 +562,7 @@ export function VideoPlayer({
           <View style={styles.loadingOverlay}>
             <ActivityIndicator size="large" color="#e50914" />
             <Text style={styles.loadingText}>Loading video...</Text>
-            {animeId && (
+            {canUseIframeFallback && (
               <TouchableOpacity style={styles.skipButton} onPress={switchToIframe}>
                 <Text style={styles.skipButtonText}>Skip to iframe player</Text>
               </TouchableOpacity>
