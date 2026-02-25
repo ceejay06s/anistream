@@ -817,10 +817,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#e50914',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
+    boxShadow: '0px 4px 6px rgba(0, 0, 0, 0.4)',
     elevation: 8,
   },
   postsList: {

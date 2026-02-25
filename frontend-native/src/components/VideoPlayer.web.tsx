@@ -311,6 +311,12 @@ export function VideoPlayer({
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: false,
+        maxBufferHole: 1,
+        maxSeekHole: 2,
+        nudgeOffset: 0.1,
+        nudgeMaxRetry: 10,
+        fragLoadingTimeOut: 20000,
+        manifestLoadingTimeOut: 20000,
         xhrSetup: (xhr) => {
           xhr.withCredentials = false;
         },
@@ -334,7 +340,15 @@ export function VideoPlayer({
       });
 
       hls.on(Hls.Events.ERROR, (event, data) => {
+        if (!data.fatal && data.type === Hls.ErrorTypes.MEDIA_ERROR && data.details === 'bufferSeekOverHole') {
+          // Typical non-fatal gap issue on some proxied HLS streams.
+          // Nudge playback forward slightly to recover smooth playback.
+          const current = video.currentTime || 0;
+          video.currentTime = current + 0.2;
+          return;
+        }
         console.error('HLS error:', event, data);
+
         if (data.fatal) {
           const responseCode = data.response?.code;
           const is403 = responseCode === 403 ||

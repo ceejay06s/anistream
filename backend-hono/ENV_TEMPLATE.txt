@@ -13,7 +13,7 @@ FIREBASE_SERVICE_ACCOUNT=
 
 # Secret token for anime update endpoint (for cron jobs)
 # Generate with: openssl rand -hex 32
-ANIME_UPDATE_SECRET_TOKEN=
+ANIME_UPDATE_SECRET_TOKEN=382a895d641ca48c1d1b310decc24208d71d26066edc349bdf21c2aef7160de9
 
 # Backblaze B2 Configuration
 # Get these from: https://secure.backblaze.com/user_signin.htm → App Keys
