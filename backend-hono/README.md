@@ -55,3 +55,4 @@ npm start
 - `ITZZZME_API_BASE_PATH` - API base path for `itzzzme-api` (default: `/api`)
 - `ANIWATCH_API_TIMEOUT_MS` - Upstream request timeout in ms (default: `12000`)
 - `ANIWATCH_API_FALLBACK_TO_PACKAGE` - `true` to fallback to npm scraper if API request fails (default: `true`)
+- `STREAMING_FALLBACK_APIS` - Optional comma-separated fallback API base URLs (for `/info` and `/watch`) that are tried before built-in fallback endpoints when sources are empty/failing

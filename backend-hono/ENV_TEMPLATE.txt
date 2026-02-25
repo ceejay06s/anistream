@@ -35,3 +35,9 @@ ITZZZME_API_BASE_PATH=/api
 ANIWATCH_API_TIMEOUT_MS=12000
 # If true, fallback to npm package when aniwatch-api is unavailable
 ANIWATCH_API_FALLBACK_TO_PACKAGE=true
+
+# Optional comma-separated fallback API base URLs for episode source recovery.
+# These are tried before built-in defaults when source arrays are empty/failing.
+# Example:
+# STREAMING_FALLBACK_APIS=https://your-api-1/anime/zoro,https://your-api-2/anime/zoro
+STREAMING_FALLBACK_APIS=
