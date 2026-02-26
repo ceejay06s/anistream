@@ -29,6 +29,26 @@ export interface VoiceActor {
   };
 }
 
+function getPrimaryVoiceActor(cv: any): any {
+  if (!cv || typeof cv !== 'object') {
+    return null;
+  }
+
+  if (cv.voiceActor) {
+    return cv.voiceActor;
+  }
+
+  if (Array.isArray(cv.voiceActors) && cv.voiceActors.length > 0) {
+    return cv.voiceActors[0];
+  }
+
+  if (Array.isArray(cv.character?.voiceActors) && cv.character.voiceActors.length > 0) {
+    return cv.character.voiceActors[0];
+  }
+
+  return null;
+}
+
 export interface Studio {
   id: string;
   name: string;
@@ -154,18 +174,23 @@ export async function getAnimeInfo(animeId: string): Promise<AnimeInfo | null> {
                         [];
 
 
-  const characters: VoiceActor[] = rawCharacters.map((cv: any) => ({
-    character: {
-      id: cv.character?.id || cv.id || '',
-      name: cv.character?.name || cv.name || '',
-      poster: cv.character?.poster || cv.poster || cv.image || '',
-    },
-    voiceActor: {
-      id: cv.voiceActor?.id || '',
-      name: cv.voiceActor?.name || '',
-      poster: cv.voiceActor?.poster || cv.voiceActor?.image || '',
-    },
-  }));
+  const characters: VoiceActor[] = rawCharacters
+    .map((cv: any) => {
+      const va = getPrimaryVoiceActor(cv);
+      return {
+        character: {
+          id: cv.character?.id || cv.id || '',
+          name: cv.character?.name || cv.name || '',
+          poster: cv.character?.poster || cv.poster || cv.image || '',
+        },
+        voiceActor: {
+          id: va?.id || '',
+          name: va?.name || '',
+          poster: va?.poster || va?.image || '',
+        },
+      };
+    })
+    .filter((cv: VoiceActor) => cv.character.name || cv.voiceActor.name);
 
   // Extract studios - check multiple formats
   const rawStudios = moreInfo.studios || (moreInfo as any).studio || [];

@@ -181,17 +181,20 @@ export const communityService = {
     }
 
     const { collection, addDoc } = require('firebase/firestore');
-    const postData = {
+    const postDataBase = {
       userId: user.uid,
       userName: user.displayName || 'Anonymous',
-      userPhoto: user.photoURL || undefined,
       content,
-      animeId: animeId || undefined,
-      animeName: animeName || undefined,
-      media: media || undefined,
       likes: [],
       commentCount: 0,
       createdAt: Date.now(),
+    };
+    const postData = {
+      ...postDataBase,
+      ...(user.photoURL ? { userPhoto: user.photoURL } : {}),
+      ...(animeId ? { animeId } : {}),
+      ...(animeName ? { animeName } : {}),
+      ...(media && media.length > 0 ? { media } : {}),
     };
 
     const docRef = await addDoc(collection(db, 'posts'), postData);
@@ -262,7 +265,7 @@ export const communityService = {
                 postId,
                 actorId: postAuthor.uid,
                 actorName: postAuthor.displayName || 'Anonymous',
-                actorPhoto: postAuthor.photoURL || undefined,
+                ...(postAuthor.photoURL ? { actorPhoto: postAuthor.photoURL } : {}),
               },
             })
           );
@@ -368,12 +371,15 @@ export const communityService = {
 
     const { collection, addDoc, doc, updateDoc, increment } = require('firebase/firestore');
 
-    const commentData = {
+    const commentDataBase = {
       userId: user.uid,
       userName: user.displayName || 'Anonymous',
-      userPhoto: user.photoURL || undefined,
       content,
       createdAt: Date.now(),
+    };
+    const commentData = {
+      ...commentDataBase,
+      ...(user.photoURL ? { userPhoto: user.photoURL } : {}),
     };
 
     const commentRef = await addDoc(
@@ -442,7 +448,7 @@ export const communityService = {
               commentId,
               actorId: commentAuthor.uid,
               actorName: commentAuthor.displayName || 'Anonymous',
-              actorPhoto: commentAuthor.photoURL || undefined,
+              ...(commentAuthor.photoURL ? { actorPhoto: commentAuthor.photoURL } : {}),
             },
           })
         );
@@ -474,7 +480,7 @@ export const communityService = {
                 commentId,
                 actorId: commentAuthor.uid,
                 actorName: commentAuthor.displayName || 'Anonymous',
-                actorPhoto: commentAuthor.photoURL || undefined,
+                ...(commentAuthor.photoURL ? { actorPhoto: commentAuthor.photoURL } : {}),
               },
             })
           );

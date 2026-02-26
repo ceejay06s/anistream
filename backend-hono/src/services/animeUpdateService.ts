@@ -5,24 +5,35 @@ import { firestoreDb, admin } from '../config/firebase.js';
 async function sendPushToUser(userId: string, title: string, body: string, data: Record<string, string>) {
   if (!firestoreDb || !admin) return;
   try {
-    const tokenSnap = await firestoreDb.doc(`users/${userId}/tokens/push`).get();
-    if (!tokenSnap.exists) return;
-    const tokenData = tokenSnap.data() as { token: string } | undefined;
-    const token = tokenData?.token;
-    if (!token) return;
+    const tokenSnap = await firestoreDb.collection(`users/${userId}/tokens`).get();
+    if (tokenSnap.empty) return;
 
-    if (token.startsWith('ExponentPushToken[')) {
-      await fetch('https://exp.host/--/api/v2/push/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: token, sound: 'default', title, body, data }),
-      });
-    } else {
-      await admin.messaging().send({
-        token,
+    const tokens = tokenSnap.docs
+      .map((d) => d.data()?.token as string | undefined)
+      .filter((t): t is string => Boolean(t && typeof t === 'string'));
+    if (tokens.length === 0) return;
+
+    const expoTokens = tokens.filter((t) => t.startsWith('ExponentPushToken['));
+    const fcmTokens = tokens.filter((t) => !t.startsWith('ExponentPushToken['));
+
+    if (expoTokens.length > 0) {
+      await Promise.all(
+        expoTokens.map(async (token) => {
+          await fetch('https://exp.host/--/api/v2/push/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to: token, sound: 'default', title, body, data }),
+          });
+        })
+      );
+    }
+
+    if (fcmTokens.length > 0) {
+      await admin.messaging().sendEachForMulticast({
+        tokens: fcmTokens,
         notification: { title, body },
         data,
-        android: { notification: { icon: 'notification_icon', color: '#e50914', channelId: 'default' } },
+        android: { notification: { color: '#e50914', channelId: 'default' } },
         apns: { payload: { aps: { badge: 1, sound: 'default' } } },
       });
     }

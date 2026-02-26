@@ -19,9 +19,19 @@ export function useNativeNotifications() {
   useEffect(() => {
     if (Platform.OS === 'web') return;
 
-    // Show notification alert/sound/badge even when app is in foreground
     try {
       const Notifications = require('expo-notifications');
+      if (Platform.OS === 'android') {
+        // Ensure the FCM payload channelId ("default") exists on Android 8+.
+        void Notifications.setNotificationChannelAsync('default', {
+          name: 'Default',
+          importance: Notifications.AndroidImportance.HIGH,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#e50914',
+        });
+      }
+
+      // Show notification alert/sound/badge even when app is in foreground
       Notifications.setNotificationHandler({
         handleNotification: async () => ({
           shouldShowAlert: true,

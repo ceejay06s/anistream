@@ -171,8 +171,14 @@ export const userNotificationService = {
 
     try {
       const { collection, addDoc } = require('firebase/firestore');
+      const cleanData = notification.data
+        ? Object.fromEntries(
+            Object.entries(notification.data).filter(([, value]) => value !== undefined)
+          )
+        : undefined;
       await addDoc(collection(db, 'notifications'), {
         ...notification,
+        ...(cleanData ? { data: cleanData } : {}),
         read: false,
         createdAt: Date.now(),
       });
