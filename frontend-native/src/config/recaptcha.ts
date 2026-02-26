@@ -3,7 +3,7 @@
  * Set EXPO_PUBLIC_RECAPTCHA_SITE_KEY in your environment variables
  * Get your site key from: https://www.google.com/recaptcha/admin
  */
-export const RECAPTCHA_SITE_KEY = process.env.EXPO_PUBLIC_RECAPTCHA_SITE_KEY || '6Lfx8WwsAAAAAPjYien995uAFbBR_tcrym7BGs7G';
+export const RECAPTCHA_SITE_KEY = process.env.EXPO_PUBLIC_RECAPTCHA_SITE_KEY || '';
 
 /**
  * Check if reCAPTCHA is configured

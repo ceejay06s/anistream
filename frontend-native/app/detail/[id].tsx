@@ -272,7 +272,7 @@ export default function DetailScreen() {
         {animeInfo?.characters && animeInfo.characters.length > 0 ? (
           <View style={styles.castGrid}>
             {animeInfo.characters.map((cv, index) => (
-              <View key={index} style={styles.castItem}>
+              <View key={`${cv.character.id || cv.character.name || 'character'}-${index}`} style={styles.castItem}>
                 <View style={styles.castRow}>
                   {/* Character */}
                   <View style={styles.castPerson}>
@@ -281,7 +281,7 @@ export default function DetailScreen() {
                       style={styles.castImage}
                     />
                     <Text style={styles.castName} numberOfLines={2}>
-                      {cv.character.name}
+                      {cv.character.name || 'Unknown Character'}
                     </Text>
                     <Text style={styles.castRole}>Character</Text>
                   </View>
@@ -298,7 +298,7 @@ export default function DetailScreen() {
                       style={styles.castImage}
                     />
                     <Text style={styles.castName} numberOfLines={2}>
-                      {cv.voiceActor.name}
+                      {cv.voiceActor.name || 'Unknown Voice Actor'}
                     </Text>
                     <Text style={styles.castRole}>Voice Actor</Text>
                   </View>
