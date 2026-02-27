@@ -44,3 +44,242 @@
     at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
 [error] 
 [error] Error: Failed to list functions for aniwatch-76fd3
+[debug] [2026-02-26T09:08:21.414Z] ----------------------------------------------------------------------
+[debug] [2026-02-26T09:08:21.419Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\chris\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js deploy
+[debug] [2026-02-26T09:08:21.420Z] CLI Version:   15.6.0
+[debug] [2026-02-26T09:08:21.420Z] Platform:      win32
+[debug] [2026-02-26T09:08:21.421Z] Node Version:  v24.12.0
+[debug] [2026-02-26T09:08:21.421Z] Time:          Thu Feb 26 2026 17:08:21 GMT+0800 (Philippine Standard Time)
+[debug] [2026-02-26T09:08:21.421Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-02-26T09:08:21.426Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2026-02-26T09:08:29.718Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-02-26T09:08:29.719Z] > authorizing via signed-in user (christianbalais06@gmail.com)
+[debug] [2026-02-26T09:08:29.720Z] [iam] checking project aniwatch-76fd3 for permissions ["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get","firebasehosting.sites.update"]
+[debug] [2026-02-26T09:08:29.722Z] Checked if tokens are valid: false, expires at: 1772086137575
+[debug] [2026-02-26T09:08:29.723Z] Checked if tokens are valid: false, expires at: 1772086137575
+[debug] [2026-02-26T09:08:29.724Z] > refreshing access token with scopes: []
+[debug] [2026-02-26T09:08:29.727Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-02-26T09:08:29.728Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-02-26T09:08:29.936Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-02-26T09:08:29.937Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-02-26T09:08:29.952Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/aniwatch-76fd3:testIamPermissions [none]
+[debug] [2026-02-26T09:08:29.953Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/aniwatch-76fd3:testIamPermissions  x-goog-user-project=aniwatch-76fd3
+[debug] [2026-02-26T09:08:29.953Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/aniwatch-76fd3:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2026-02-26T09:08:30.277Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2026-02-26T09:08:30.277Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
+[debug] [2026-02-26T09:08:31.063Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/aniwatch-76fd3:testIamPermissions 200
+[debug] [2026-02-26T09:08:31.063Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/aniwatch-76fd3:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2026-02-26T09:08:31.064Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:08:31.064Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:08:31.064Z] >>> [apiv2][query] POST https://iam.googleapis.com/v1/projects/aniwatch-76fd3/serviceAccounts/aniwatch-76fd3@appspot.gserviceaccount.com:testIamPermissions [none]
+[debug] [2026-02-26T09:08:31.065Z] >>> [apiv2][body] POST https://iam.googleapis.com/v1/projects/aniwatch-76fd3/serviceAccounts/aniwatch-76fd3@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[debug] [2026-02-26T09:08:32.566Z] <<< [apiv2][status] POST https://iam.googleapis.com/v1/projects/aniwatch-76fd3/serviceAccounts/aniwatch-76fd3@appspot.gserviceaccount.com:testIamPermissions 404
+[debug] [2026-02-26T09:08:32.566Z] <<< [apiv2][body] POST https://iam.googleapis.com/v1/projects/aniwatch-76fd3/serviceAccounts/aniwatch-76fd3@appspot.gserviceaccount.com:testIamPermissions {"error":{"code":404,"message":"Unknown service account","status":"NOT_FOUND"}}
+[debug] [2026-02-26T09:08:32.567Z] [functions] service account IAM check errored, deploy may fail: Request to https://iam.googleapis.com/v1/projects/aniwatch-76fd3/serviceAccounts/aniwatch-76fd3@appspot.gserviceaccount.com:testIamPermissions had HTTP Error: 404, Unknown service account {"name":"FirebaseError","children":[],"context":{"body":{"error":{"code":404,"message":"Unknown service account","status":"NOT_FOUND"}},"response":{"statusCode":404}},"exit":1,"message":"Request to https://iam.googleapis.com/v1/projects/aniwatch-76fd3/serviceAccounts/aniwatch-76fd3@appspot.gserviceaccount.com:testIamPermissions had HTTP Error: 404, Unknown service account","status":404}
+[debug] [2026-02-26T09:08:32.569Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:08:32.569Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:08:32.570Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/aniwatch-76fd3 [none]
+[debug] [2026-02-26T09:08:33.031Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/aniwatch-76fd3 200
+[debug] [2026-02-26T09:08:33.031Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/aniwatch-76fd3 {"projectId":"aniwatch-76fd3","projectNumber":"797841167253","displayName":"anistream","name":"projects/aniwatch-76fd3","resources":{"hostingSite":"aniwatch-76fd3","realtimeDatabaseInstance":"aniwatch-76fd3-default-rtdb"},"state":"ACTIVE","etag":"1_3f04e0ac-08a4-4ac2-834f-86e3eee8cf92"}
+[info] 
+[info] === Deploying to 'aniwatch-76fd3'...
+[info] 
+[info] i  deploying firestore, functions, hosting 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[debug] [2026-02-26T09:08:33.040Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:08:33.040Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:08:33.040Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/aniwatch-76fd3/databases/(default) [none]
+[debug] [2026-02-26T09:08:33.558Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/aniwatch-76fd3/databases/(default) 200
+[debug] [2026-02-26T09:08:33.559Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/aniwatch-76fd3/databases/(default) {"name":"projects/aniwatch-76fd3/databases/(default)","uid":"7a550515-804a-46b8-9848-d5ef999238c9","createTime":"2026-02-13T14:45:15.700741Z","updateTime":"2026-02-13T14:45:15.700741Z","locationId":"asia-southeast1","type":"FIRESTORE_NATIVE","concurrencyMode":"PESSIMISTIC","versionRetentionPeriod":"3600s","earliestVersionTime":"2026-02-26T08:08:33.463708Z","appEngineIntegrationMode":"DISABLED","keyPrefix":"zas","pointInTimeRecoveryEnablement":"POINT_IN_TIME_RECOVERY_DISABLED","deleteProtectionState":"DELETE_PROTECTION_DISABLED","databaseEdition":"STANDARD","freeTier":true,"realtimeUpdatesMode":"REALTIME_UPDATES_MODE_ENABLED","etag":"IJ+uo7jn9pIDMNq2pYeE5JID"}
+[info] i  firestore: reading indexes from firestore.indexes.json... 
+[info] i  cloud.firestore: checking firestore.rules for compilation errors... 
+[debug] [2026-02-26T09:08:33.565Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:08:33.565Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:08:33.566Z] >>> [apiv2][query] POST https://firebaserules.googleapis.com/v1/projects/aniwatch-76fd3:test [none]
+[debug] [2026-02-26T09:08:33.566Z] >>> [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/aniwatch-76fd3:test [omitted]
+[debug] [2026-02-26T09:08:34.019Z] <<< [apiv2][status] POST https://firebaserules.googleapis.com/v1/projects/aniwatch-76fd3:test 200
+[debug] [2026-02-26T09:08:34.020Z] <<< [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/aniwatch-76fd3:test {}
+[info] +  cloud.firestore: rules file firestore.rules compiled successfully 
+[debug] [2026-02-26T09:08:34.024Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:08:34.024Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:08:34.025Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/cloudresourcemanager.googleapis.com [none]
+[debug] [2026-02-26T09:08:34.025Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/cloudresourcemanager.googleapis.com  x-goog-user-project=aniwatch-76fd3
+[debug] [2026-02-26T09:08:35.436Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/cloudresourcemanager.googleapis.com 200
+[debug] [2026-02-26T09:08:35.436Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/cloudresourcemanager.googleapis.com [omitted]
+[debug] [2026-02-26T09:08:35.449Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:08:35.449Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:08:35.450Z] >>> [apiv2][query] GET https://cloudresourcemanager.googleapis.com/v1/projects/aniwatch-76fd3 [none]
+[debug] [2026-02-26T09:08:35.714Z] <<< [apiv2][status] GET https://cloudresourcemanager.googleapis.com/v1/projects/aniwatch-76fd3 200
+[debug] [2026-02-26T09:08:35.714Z] <<< [apiv2][body] GET https://cloudresourcemanager.googleapis.com/v1/projects/aniwatch-76fd3 {"projectNumber":"797841167253","projectId":"aniwatch-76fd3","lifecycleState":"ACTIVE","name":"anistream","labels":{"firebase":"enabled","firebase-core":"disabled"},"createTime":"2026-02-13T10:58:12.066089Z"}
+[info] i  functions: preparing codebase default for deployment 
+[info] i  functions: ensuring required API cloudfunctions.googleapis.com is enabled... 
+[debug] [2026-02-26T09:08:35.717Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:08:35.717Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:08:35.718Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:08:35.718Z] Checked if tokens are valid: true, expires at: 1772100508938
+[info] i  functions: ensuring required API cloudbuild.googleapis.com is enabled... 
+[debug] [2026-02-26T09:08:35.719Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:08:35.720Z] Checked if tokens are valid: true, expires at: 1772100508938
+[info] i  artifactregistry: ensuring required API artifactregistry.googleapis.com is enabled... 
+[debug] [2026-02-26T09:08:35.721Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:08:35.721Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:08:35.722Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/cloudfunctions.googleapis.com [none]
+[debug] [2026-02-26T09:08:35.722Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/cloudfunctions.googleapis.com  x-goog-user-project=aniwatch-76fd3
+[debug] [2026-02-26T09:08:35.723Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/runtimeconfig.googleapis.com [none]
+[debug] [2026-02-26T09:08:35.724Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/runtimeconfig.googleapis.com  x-goog-user-project=aniwatch-76fd3
+[debug] [2026-02-26T09:08:35.727Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/cloudbuild.googleapis.com [none]
+[debug] [2026-02-26T09:08:35.727Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/cloudbuild.googleapis.com  x-goog-user-project=aniwatch-76fd3
+[debug] [2026-02-26T09:08:35.731Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/artifactregistry.googleapis.com [none]
+[debug] [2026-02-26T09:08:35.732Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/artifactregistry.googleapis.com  x-goog-user-project=aniwatch-76fd3
+[debug] [2026-02-26T09:08:37.031Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/cloudfunctions.googleapis.com 200
+[debug] [2026-02-26T09:08:37.031Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/cloudfunctions.googleapis.com [omitted]
+[warn] !  functions: missing required API cloudfunctions.googleapis.com. Enabling now... 
+[debug] [2026-02-26T09:08:37.032Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:08:37.032Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:08:37.032Z] >>> [apiv2][query] POST https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/cloudfunctions.googleapis.com:enable [none]
+[debug] [2026-02-26T09:08:37.032Z] >>> [apiv2][(partial)header] POST https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/cloudfunctions.googleapis.com:enable  x-goog-user-project=aniwatch-76fd3
+[debug] [2026-02-26T09:08:37.110Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/cloudbuild.googleapis.com 200
+[debug] [2026-02-26T09:08:37.110Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/cloudbuild.googleapis.com [omitted]
+[warn] !  functions: missing required API cloudbuild.googleapis.com. Enabling now... 
+[debug] [2026-02-26T09:08:37.111Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:08:37.111Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:08:37.111Z] >>> [apiv2][query] POST https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/cloudbuild.googleapis.com:enable [none]
+[debug] [2026-02-26T09:08:37.111Z] >>> [apiv2][(partial)header] POST https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/cloudbuild.googleapis.com:enable  x-goog-user-project=aniwatch-76fd3
+[debug] [2026-02-26T09:08:37.142Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/artifactregistry.googleapis.com 200
+[debug] [2026-02-26T09:08:37.143Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/artifactregistry.googleapis.com [omitted]
+[warn] !  artifactregistry: missing required API artifactregistry.googleapis.com. Enabling now... 
+[debug] [2026-02-26T09:08:37.143Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:08:37.143Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:08:37.144Z] >>> [apiv2][query] POST https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/artifactregistry.googleapis.com:enable [none]
+[debug] [2026-02-26T09:08:37.144Z] >>> [apiv2][(partial)header] POST https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/artifactregistry.googleapis.com:enable  x-goog-user-project=aniwatch-76fd3
+[debug] [2026-02-26T09:08:37.168Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/runtimeconfig.googleapis.com 200
+[debug] [2026-02-26T09:08:37.168Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/runtimeconfig.googleapis.com [omitted]
+[debug] [2026-02-26T09:08:37.485Z] <<< [apiv2][status] POST https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/cloudfunctions.googleapis.com:enable 200
+[debug] [2026-02-26T09:08:37.485Z] <<< [apiv2][body] POST https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/cloudfunctions.googleapis.com:enable [omitted]
+[debug] [2026-02-26T09:08:38.440Z] <<< [apiv2][status] POST https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/artifactregistry.googleapis.com:enable 400
+[debug] [2026-02-26T09:08:38.441Z] <<< [apiv2][body] POST https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/artifactregistry.googleapis.com:enable [omitted]
+[debug] [2026-02-26T09:08:38.501Z] <<< [apiv2][status] POST https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/cloudbuild.googleapis.com:enable 400
+[debug] [2026-02-26T09:08:38.501Z] <<< [apiv2][body] POST https://serviceusage.googleapis.com/v1/projects/aniwatch-76fd3/services/cloudbuild.googleapis.com:enable [omitted]
+[error] 
+[error] Error: Your project aniwatch-76fd3 must be on the Blaze (pay-as-you-go) plan to complete this command. Required API artifactregistry.googleapis.com can't be enabled until the upgrade is complete. To upgrade, visit the following URL:
+
+https://console.firebase.google.com/project/aniwatch-76fd3/usage/details
+[debug] [2026-02-26T09:08:53.470Z] ----------------------------------------------------------------------
+[debug] [2026-02-26T09:08:53.475Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\chris\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js deploy --only hosting
+[debug] [2026-02-26T09:08:53.476Z] CLI Version:   15.6.0
+[debug] [2026-02-26T09:08:53.476Z] Platform:      win32
+[debug] [2026-02-26T09:08:53.476Z] Node Version:  v24.12.0
+[debug] [2026-02-26T09:08:53.476Z] Time:          Thu Feb 26 2026 17:08:53 GMT+0800 (Philippine Standard Time)
+[debug] [2026-02-26T09:08:53.477Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-02-26T09:08:57.077Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-02-26T09:08:57.078Z] > authorizing via signed-in user (christianbalais06@gmail.com)
+[debug] [2026-02-26T09:08:57.079Z] [iam] checking project aniwatch-76fd3 for permissions ["firebase.projects.get","firebasehosting.sites.update"]
+[debug] [2026-02-26T09:08:57.082Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:08:57.083Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:08:57.087Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/aniwatch-76fd3:testIamPermissions [none]
+[debug] [2026-02-26T09:08:57.087Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/aniwatch-76fd3:testIamPermissions  x-goog-user-project=aniwatch-76fd3
+[debug] [2026-02-26T09:08:57.088Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/aniwatch-76fd3:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2026-02-26T09:08:58.250Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/aniwatch-76fd3:testIamPermissions 200
+[debug] [2026-02-26T09:08:58.250Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/aniwatch-76fd3:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2026-02-26T09:08:58.251Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:08:58.252Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:08:58.253Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/aniwatch-76fd3 [none]
+[debug] [2026-02-26T09:08:58.678Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/aniwatch-76fd3 200
+[debug] [2026-02-26T09:08:58.679Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/aniwatch-76fd3 {"projectId":"aniwatch-76fd3","projectNumber":"797841167253","displayName":"anistream","name":"projects/aniwatch-76fd3","resources":{"hostingSite":"aniwatch-76fd3","realtimeDatabaseInstance":"aniwatch-76fd3-default-rtdb"},"state":"ACTIVE","etag":"1_3f04e0ac-08a4-4ac2-834f-86e3eee8cf92"}
+[info] 
+[info] === Deploying to 'aniwatch-76fd3'...
+[info] 
+[info] i  deploying hosting 
+[debug] [2026-02-26T09:08:58.688Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:08:58.689Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:08:58.689Z] >>> [apiv2][query] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/aniwatch-76fd3/versions [none]
+[debug] [2026-02-26T09:08:58.689Z] >>> [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/aniwatch-76fd3/versions {"status":"CREATED","labels":{"deployment-tool":"cli-firebase"}}
+[debug] [2026-02-26T09:09:00.344Z] <<< [apiv2][status] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/aniwatch-76fd3/versions 200
+[debug] [2026-02-26T09:09:00.345Z] <<< [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/aniwatch-76fd3/versions {"name":"projects/797841167253/sites/aniwatch-76fd3/versions/ddb48f0add8d6f66","status":"CREATED","config":{},"labels":{"deployment-tool":"cli-firebase"}}
+[info] i  hosting[aniwatch-76fd3]: beginning deploy... 
+[info] i  hosting[aniwatch-76fd3]: found 6 files in dist 
+[debug] [2026-02-26T09:09:00.373Z] [hosting] uploading with 200 concurrency
+[debug] [2026-02-26T09:09:00.616Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:09:00.617Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:09:00.634Z] [hosting] hash cache [ZGlzdA] stored for 6 files
+[debug] [2026-02-26T09:09:00.637Z] [hosting][hash queue][FINAL] {"max":233,"min":4,"avg":49,"active":0,"complete":6,"success":6,"errored":0,"retried":0,"total":6,"elapsed":261}
+[debug] [2026-02-26T09:09:00.640Z] >>> [apiv2][query] POST https://firebasehosting.googleapis.com/v1beta1/projects/797841167253/sites/aniwatch-76fd3/versions/ddb48f0add8d6f66:populateFiles [none]
+[debug] [2026-02-26T09:09:00.641Z] >>> [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/797841167253/sites/aniwatch-76fd3/versions/ddb48f0add8d6f66:populateFiles {"files":{"/firebase-messaging-sw.js":"269c7c1a158878047615ccc215ca9b499edecd7785017ba3e0f42a4c290e4deb\r","/metadata.json":"59607d4abc28dbe25c04810f4160b1e785f320a28d51d4caf80c70367ec8b978","/index.html":"5eb085204268e10f5464eeaa9d3b55b4a8d32235934e64065e030c7bfe5395d5","/favicon.ico":"70bdeb89c8b50ff9aea39ab1042deb04e9b4fe56862a5aafe33bd7513fbc4050","/assets/assets/logo-w-text.9c7b6ebf5e2da889d6c0670350ec73d1.png":"fac07df5c086cc1e2af668655ec4027824ece2129e15b8f49ac527a6e2c3a44d","/_expo/static/js/web/entry-62860ac72ba8756c12856bdc044caf5e.js":"ae9e65ed4ad031567420dec49b7cc5934a386deea79daed93528172c9c4bcab1"}}
+[debug] [2026-02-26T09:09:01.710Z] <<< [apiv2][status] POST https://firebasehosting.googleapis.com/v1beta1/projects/797841167253/sites/aniwatch-76fd3/versions/ddb48f0add8d6f66:populateFiles 200
+[debug] [2026-02-26T09:09:01.710Z] <<< [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/797841167253/sites/aniwatch-76fd3/versions/ddb48f0add8d6f66:populateFiles {"uploadRequiredHashes":["5eb085204268e10f5464eeaa9d3b55b4a8d32235934e64065e030c7bfe5395d5","ae9e65ed4ad031567420dec49b7cc5934a386deea79daed93528172c9c4bcab1"],"uploadUrl":"https://upload-firebasehosting.googleapis.com/upload/sites/aniwatch-76fd3/versions/ddb48f0add8d6f66/files"}
+[debug] [2026-02-26T09:09:01.711Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:09:01.712Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:09:01.713Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:09:01.713Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:09:01.714Z] >>> [apiv2][query] POST https://upload-firebasehosting.googleapis.com/upload/sites/aniwatch-76fd3/versions/ddb48f0add8d6f66/files/5eb085204268e10f5464eeaa9d3b55b4a8d32235934e64065e030c7bfe5395d5 [none]
+[debug] [2026-02-26T09:09:01.714Z] >>> [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/aniwatch-76fd3/versions/ddb48f0add8d6f66/files/5eb085204268e10f5464eeaa9d3b55b4a8d32235934e64065e030c7bfe5395d5 [stream]
+[debug] [2026-02-26T09:09:01.716Z] >>> [apiv2][query] POST https://upload-firebasehosting.googleapis.com/upload/sites/aniwatch-76fd3/versions/ddb48f0add8d6f66/files/ae9e65ed4ad031567420dec49b7cc5934a386deea79daed93528172c9c4bcab1 [none]
+[debug] [2026-02-26T09:09:01.717Z] >>> [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/aniwatch-76fd3/versions/ddb48f0add8d6f66/files/ae9e65ed4ad031567420dec49b7cc5934a386deea79daed93528172c9c4bcab1 [stream]
+[debug] [2026-02-26T09:09:01.719Z] [hosting][populate queue][FINAL] {"max":1097,"min":1097,"avg":1097,"active":0,"complete":1,"success":1,"errored":0,"retried":0,"total":1,"elapsed":1103}
+[debug] [2026-02-26T09:09:01.720Z] [hosting] uploads queued: 2
+[info] i  hosting: uploading new files [0/2] (0%) 
+[debug] [2026-02-26T09:09:03.349Z] <<< [apiv2][status] POST https://upload-firebasehosting.googleapis.com/upload/sites/aniwatch-76fd3/versions/ddb48f0add8d6f66/files/ae9e65ed4ad031567420dec49b7cc5934a386deea79daed93528172c9c4bcab1 200
+[debug] [2026-02-26T09:09:03.349Z] <<< [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/aniwatch-76fd3/versions/ddb48f0add8d6f66/files/ae9e65ed4ad031567420dec49b7cc5934a386deea79daed93528172c9c4bcab1 [stream]
+[debug] [2026-02-26T09:09:03.757Z] <<< [apiv2][status] POST https://upload-firebasehosting.googleapis.com/upload/sites/aniwatch-76fd3/versions/ddb48f0add8d6f66/files/5eb085204268e10f5464eeaa9d3b55b4a8d32235934e64065e030c7bfe5395d5 200
+[debug] [2026-02-26T09:09:03.757Z] <<< [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/aniwatch-76fd3/versions/ddb48f0add8d6f66/files/5eb085204268e10f5464eeaa9d3b55b4a8d32235934e64065e030c7bfe5395d5 [stream]
+[debug] [2026-02-26T09:09:03.757Z] [hosting][upload queue][FINAL] {"max":2046,"min":1638,"avg":1842,"active":0,"complete":2,"success":2,"errored":0,"retried":0,"total":2,"elapsed":2046}
+[info] i  hosting: upload complete 
+[info] +  hosting[aniwatch-76fd3]: file upload complete 
+[debug] [2026-02-26T09:09:03.758Z] [hosting] deploy completed after 3408ms
+[debug] [2026-02-26T09:09:03.759Z] [
+  {
+    "config": {
+      "public": "dist",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ],
+      "headers": [
+        {
+          "source": "**",
+          "headers": [
+            {
+              "key": "Cross-Origin-Opener-Policy",
+              "value": "same-origin-allow-popups"
+            }
+          ]
+        }
+      ],
+      "site": "aniwatch-76fd3"
+    },
+    "version": "projects/797841167253/sites/aniwatch-76fd3/versions/ddb48f0add8d6f66"
+  }
+]
+[info] i  hosting[aniwatch-76fd3]: finalizing version... 
+[debug] [2026-02-26T09:09:03.761Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:09:03.762Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:09:03.762Z] >>> [apiv2][query] PATCH https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/aniwatch-76fd3/versions/ddb48f0add8d6f66 updateMask=status%2Cconfig
+[debug] [2026-02-26T09:09:03.762Z] >>> [apiv2][body] PATCH https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/aniwatch-76fd3/versions/ddb48f0add8d6f66 {"status":"FINALIZED","config":{"rewrites":[{"glob":"**","path":"/index.html"}],"headers":[{"glob":"**","headers":{"Cross-Origin-Opener-Policy":"same-origin-allow-popups"}}]}}
+[debug] [2026-02-26T09:09:04.579Z] <<< [apiv2][status] PATCH https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/aniwatch-76fd3/versions/ddb48f0add8d6f66 200
+[debug] [2026-02-26T09:09:04.579Z] <<< [apiv2][body] PATCH https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/aniwatch-76fd3/versions/ddb48f0add8d6f66 {"name":"projects/797841167253/sites/aniwatch-76fd3/versions/ddb48f0add8d6f66","status":"FINALIZED","config":{"headers":[{"headers":{"Cross-Origin-Opener-Policy":"same-origin-allow-popups"},"glob":"**"}],"rewrites":[{"glob":"**","path":"/index.html"}]},"labels":{"deployment-tool":"cli-firebase"},"createTime":"2026-02-26T09:08:59.332750Z","createUser":{"email":"christianbalais06@gmail.com"},"finalizeTime":"2026-02-26T09:09:04.371578Z","finalizeUser":{"email":"christianbalais06@gmail.com"}}
+[debug] [2026-02-26T09:09:04.579Z] [hosting] finalized version for aniwatch-76fd3:[object Object]
+[info] +  hosting[aniwatch-76fd3]: version finalized 
+[info] i  hosting[aniwatch-76fd3]: releasing new version... 
+[debug] [2026-02-26T09:09:04.580Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:09:04.580Z] Checked if tokens are valid: true, expires at: 1772100508938
+[debug] [2026-02-26T09:09:04.581Z] >>> [apiv2][query] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/aniwatch-76fd3/channels/live/releases versionName=projects%2F797841167253%2Fsites%2Faniwatch-76fd3%2Fversions%2Fddb48f0add8d6f66
+[debug] [2026-02-26T09:09:04.581Z] >>> [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/aniwatch-76fd3/channels/live/releases {}
+[debug] [2026-02-26T09:09:05.587Z] <<< [apiv2][status] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/aniwatch-76fd3/channels/live/releases 200
+[debug] [2026-02-26T09:09:05.589Z] <<< [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/aniwatch-76fd3/channels/live/releases {"name":"projects/797841167253/sites/aniwatch-76fd3/channels/live/releases/1772096944638000","version":{"name":"projects/797841167253/sites/aniwatch-76fd3/versions/ddb48f0add8d6f66","status":"FINALIZED","config":{"headers":[{"headers":{"Cross-Origin-Opener-Policy":"same-origin-allow-popups"},"glob":"**"}],"rewrites":[{"glob":"**","path":"/index.html"}]},"labels":{"deployment-tool":"cli-firebase"},"createTime":"2026-02-26T09:08:59.332750Z","createUser":{"email":"christianbalais06@gmail.com","imageUrl":"https://lh3.googleusercontent.com/a/ACg8ocKXPiip4cGz63OseUxKp0w4fswKLWAeFRuB2SS8AExO3qk-BYODoQ"},"finalizeTime":"2026-02-26T09:09:04.371578Z","finalizeUser":{"email":"christianbalais06@gmail.com","imageUrl":"https://lh3.googleusercontent.com/a/ACg8ocKXPiip4cGz63OseUxKp0w4fswKLWAeFRuB2SS8AExO3qk-BYODoQ"}},"type":"DEPLOY","releaseTime":"2026-02-26T09:09:04.638Z","releaseUser":{"email":"christianbalais06@gmail.com","imageUrl":"https://lh3.googleusercontent.com/a/ACg8ocKXPiip4cGz63OseUxKp0w4fswKLWAeFRuB2SS8AExO3qk-BYODoQ"}}
+[debug] [2026-02-26T09:09:05.589Z] [hosting] release: {"name":"projects/797841167253/sites/aniwatch-76fd3/channels/live/releases/1772096944638000","version":{"name":"projects/797841167253/sites/aniwatch-76fd3/versions/ddb48f0add8d6f66","status":"FINALIZED","config":{"headers":[{"headers":{"Cross-Origin-Opener-Policy":"same-origin-allow-popups"},"glob":"**"}],"rewrites":[{"glob":"**","path":"/index.html"}]},"labels":{"deployment-tool":"cli-firebase"},"createTime":"2026-02-26T09:08:59.332750Z","createUser":{"email":"christianbalais06@gmail.com","imageUrl":"https://lh3.googleusercontent.com/a/ACg8ocKXPiip4cGz63OseUxKp0w4fswKLWAeFRuB2SS8AExO3qk-BYODoQ"},"finalizeTime":"2026-02-26T09:09:04.371578Z","finalizeUser":{"email":"christianbalais06@gmail.com","imageUrl":"https://lh3.googleusercontent.com/a/ACg8ocKXPiip4cGz63OseUxKp0w4fswKLWAeFRuB2SS8AExO3qk-BYODoQ"}},"type":"DEPLOY","releaseTime":"2026-02-26T09:09:04.638Z","releaseUser":{"email":"christianbalais06@gmail.com","imageUrl":"https://lh3.googleusercontent.com/a/ACg8ocKXPiip4cGz63OseUxKp0w4fswKLWAeFRuB2SS8AExO3qk-BYODoQ"}}
+[info] +  hosting[aniwatch-76fd3]: release complete 
+[info] 
+[info] +  Deploy complete! 
+[info] 
+[info] Project Console: https://console.firebase.google.com/project/aniwatch-76fd3/overview
+[info] Hosting URL: https://aniwatch-76fd3.web.app
