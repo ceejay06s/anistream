@@ -67,10 +67,17 @@ function AppContent() {
   // Native (Android/iOS): Expo push token registration + foreground handler + tap navigation
   useNativeNotifications();
 
-  // Run OTA update check during splash — silently applies if available
+  // Run OTA update check during splash — silently applies if available.
+  // Use a timeout so local/standalone builds never hang (checkForUpdateAsync can block on Android).
   useEffect(() => {
     if (Platform.OS === 'web' || __DEV__) return;
-    checkAndApplyUpdate().finally(() => setUpdateChecked(true));
+    const timeoutMs = 5000;
+    const timeoutId = setTimeout(() => setUpdateChecked(true), timeoutMs);
+    checkAndApplyUpdate().finally(() => {
+      clearTimeout(timeoutId);
+      setUpdateChecked(true);
+    });
+    return () => clearTimeout(timeoutId);
   }, []);
 
   // Mark app as ready when auth is loaded AND update check finished
@@ -79,6 +86,13 @@ function AppContent() {
       setAppReady(true);
     }
   }, [authLoading, updateChecked]);
+
+  // Fallback: never stay on splash longer than 8s (e.g. auth or update check stuck on Android)
+  useEffect(() => {
+    const maxWaitMs = 8000;
+    const id = setTimeout(() => setAppReady(true), maxWaitMs);
+    return () => clearTimeout(id);
+  }, []);
 
   // Hide splash screen when app is ready
   const onLayoutRootView = useCallback(async () => {
