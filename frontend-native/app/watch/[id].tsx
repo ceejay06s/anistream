@@ -887,34 +887,18 @@ export default function WatchScreen() {
           </TouchableOpacity>
         </View>
       ) : loading && !selectedSource && !iframeFallbackUrl ? (
-        // Loading state with poster cover
-        <ImageBackground
-          source={animeInfo?.poster ? { uri: animeInfo.poster } : undefined}
-          style={styles.videoLoadingContainer}
-          imageStyle={styles.videoLoadingCoverImage}
-          resizeMode="stretch"
-        >
-          {/* Dark overlay */}
+        // Same container as player – show only spinner (no panel; expo-video loading state)
+        <View style={styles.videoLoadingContainer}>
+          {animeInfo?.poster ? (
+            <Image
+              source={{ uri: animeInfo.poster }}
+              style={StyleSheet.absoluteFill}
+              resizeMode="cover"
+            />
+          ) : null}
           <View style={styles.videoLoadingOverlay} />
-          {animeInfo?.name && (
-            <Text style={styles.videoLoadingTitle} numberOfLines={1}>{animeInfo.name}</Text>
-          )}
           <ActivityIndicator size="large" color="#e50914" />
-          <Text style={styles.videoLoadingText}>Finding working server...</Text>
-          {retryMessage && (
-            <Text style={styles.videoLoadingMessage}>{retryMessage}</Text>
-          )}
-          {retryElapsed > 0 && (
-            <Text style={styles.retryCounterText}>
-              Trying servers... {retryElapsed}s / 30s
-            </Text>
-          )}
-          {totalServers > 0 && (
-            <Text style={styles.serverProgressText}>
-              Server {serverIndex + 1} of {totalServers}
-            </Text>
-          )}
-        </ImageBackground>
+        </View>
       ) : shouldRenderPlayer({
         selectedSourceUrl: selectedSource?.url,
         iframeFallbackUrl,
