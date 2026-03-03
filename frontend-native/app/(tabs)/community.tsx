@@ -14,7 +14,6 @@ import {
   KeyboardAvoidingView,
   ScrollView,
   Dimensions,
-  Linking,
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -26,6 +25,47 @@ import { userNotificationService } from '@/services/userNotificationService';
 import { executeRecaptcha } from '@/utils/recaptcha';
 import { isRecaptchaEnabled, RECAPTCHA_SITE_KEY } from '@/config/recaptcha';
 import { verifyRecaptchaToken } from '@/services/recaptchaService';
+import { CommunityPostVideo } from '@/components/CommunityPostVideo';
+import { getSignedUrlWithAutoRenewal, getSignedUrl } from '@/services/uploadService';
+
+/** Resolves and renews Backblaze signed URL when filePath is present */
+function PostMediaItem({ mediaItem, imageStyle, videoStyle }: { mediaItem: MediaItem; imageStyle: any; videoStyle: any }) {
+  const [url, setUrl] = useState(mediaItem.url);
+  const [retryKey, setRetryKey] = useState(0);
+
+  useEffect(() => {
+    if (mediaItem.filePath) {
+      getSignedUrlWithAutoRenewal(mediaItem.filePath)
+        .then(setUrl)
+        .catch(() => {});
+    }
+  }, [mediaItem.filePath]);
+
+  const onMediaError = useCallback(() => {
+    if (mediaItem.filePath) {
+      getSignedUrl(mediaItem.filePath)
+        .then((fresh) => {
+          setUrl(fresh);
+          setRetryKey((k) => k + 1);
+        })
+        .catch(() => {});
+    }
+  }, [mediaItem.filePath]);
+
+  if (mediaItem.type === 'image') {
+    return (
+      <Image
+        source={{ uri: url }}
+        style={imageStyle}
+        resizeMode="cover"
+        onError={onMediaError}
+      />
+    );
+  }
+  return (
+    <CommunityPostVideo key={retryKey} url={url} style={videoStyle} />
+  );
+}
 
 export default function CommunityScreen() {
   const router = useRouter();
@@ -388,26 +428,11 @@ export default function CommunityScreen() {
                   item.media!.length > 2 && styles.mediaItemQuarter,
                 ]}
               >
-                {mediaItem.type === 'image' ? (
-                  <Image source={{ uri: mediaItem.url }} style={styles.mediaImage} resizeMode="cover" />
-                ) : Platform.OS === 'web' ? (
-                  <View style={styles.videoContainer}>
-                    <video
-                      src={mediaItem.url}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8 }}
-                      controls
-                    />
-                  </View>
-                ) : (
-                  <TouchableOpacity
-                    style={[styles.videoContainer, styles.videoPlaceholder]}
-                    onPress={() => Linking.openURL(mediaItem.url)}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="play-circle" size={48} color="#fff" />
-                    <Text style={styles.videoPlaceholderText}>Tap to play video</Text>
-                  </TouchableOpacity>
-                )}
+                <PostMediaItem
+                  mediaItem={mediaItem}
+                  imageStyle={styles.mediaImage}
+                  videoStyle={styles.videoContainer}
+                />
               </View>
             ))}
           </View>
@@ -1291,16 +1316,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
     borderRadius: 8,
     overflow: 'hidden',
-  },
-  videoPlaceholder: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    minHeight: 120,
-  },
-  videoPlaceholderText: {
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: 12,
-    marginTop: 8,
   },
   // Media preview in create modal
   mediaPreviewContainer: {

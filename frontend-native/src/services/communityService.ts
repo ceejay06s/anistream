@@ -23,6 +23,8 @@ export interface MediaItem {
   url: string;
   type: 'image' | 'video';
   thumbnailUrl?: string;
+  /** Backblaze path for renewing expired signed URLs */
+  filePath?: string;
 }
 
 /** Web: File; Native: { uri, type, name } for FormData */
@@ -62,7 +64,11 @@ async function uploadMediaFile(
     });
     const data = await response.json().catch(() => ({}));
     if (data.success) {
-      return { url: data.url, type: data.type };
+      return {
+        url: data.url,
+        type: data.type,
+        ...(data.filePath ? { filePath: data.filePath } : {}),
+      };
     }
     if (response.status === 400) {
       throw new Error(data.error || 'Invalid file or request');
