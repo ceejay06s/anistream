@@ -4,7 +4,8 @@
       "Bash(npm install:*)",
       "Bash(taskkill:*)",
       "Bash(npx tsc:*)",
-      "Bash(npm ls:*)"
+      "Bash(npm ls:*)",
+      "Bash(firebase deploy:*)"
     ],
     "deny": [],
     "ask": []

@@ -161,6 +161,6 @@ export const manualAnimeUpdateCheck = functions.https.onRequest(async (req, res)
     res.json({ success: true, updatesFound: totalUpdates });
   } catch (error) {
     console.error('Error in manual anime update check:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: (error as Error).message });
   }
 });

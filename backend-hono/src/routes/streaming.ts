@@ -178,6 +178,41 @@ const isSubtitleFile = (url: string): boolean => {
   return /\.(vtt|srt|ass|ssa|sub)(\?|$)/i.test(url);
 };
 
+const DEFAULT_BROWSER_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+
+// Referer/origin for embed pages (HD-1/MegaCloud streams expect these)
+const EMBED_REFERER_MEGACLOUD = { referer: 'https://megacloud.blog/', origin: 'https://megacloud.blog' };
+const EMBED_REFERER_HIANIME = { referer: 'https://hianime.to/', origin: 'https://hianime.to' };
+
+const chooseRefererOrigin = (
+  decodedUrl: string,
+  isSegment: boolean,
+  isImage: boolean,
+  isM3U8: boolean
+) => {
+  try {
+    const target = new URL(decodedUrl);
+    const streamOrigin = { referer: `${target.origin}/`, origin: target.origin };
+    // M3U8 and segments: use embed referer so CDN accepts (stream host often rejects own origin)
+    if (isSegment || isM3U8) {
+      return EMBED_REFERER_MEGACLOUD;
+    }
+    if (isImage) {
+      return EMBED_REFERER_HIANIME;
+    }
+    return streamOrigin;
+  } catch {
+    if (isSegment || isM3U8) {
+      return EMBED_REFERER_MEGACLOUD;
+    }
+    if (isImage) {
+      return EMBED_REFERER_HIANIME;
+    }
+    return EMBED_REFERER_HIANIME;
+  }
+};
+
 // Proxy video stream to handle CORS
 streamingRoutes.get('/proxy', async (c) => {
   const url = c.req.query('url');
@@ -192,32 +227,115 @@ streamingRoutes.get('/proxy', async (c) => {
     const isSegment = isVideoSegment(decodedUrl);
     const isSubtitle = isSubtitleFile(decodedUrl);
     const isImage = /\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?|$)/i.test(decodedUrl);
+    const requestRange = c.req.header('range');
+    const { referer, origin } = chooseRefererOrigin(decodedUrl, isSegment, isImage, isM3U8);
 
     console.log(`Proxying ${isM3U8 ? 'M3U8' : isSubtitle ? 'subtitle' : isImage ? 'image' : isSegment ? 'segment' : 'video'}: ${decodedUrl.substring(0, 100)}...`);
 
-    // Use got-scraping for browser-like TLS fingerprint
-    // The TLS fingerprint is the key to bypassing CDN anti-bot
-    const response = await gotScraping({
-      url: decodedUrl,
-      responseType: (isM3U8 || isSubtitle) ? 'text' : 'buffer',
-      timeout: { request: 30000 },
-      followRedirect: true,
-      maxRedirects: 5,
-      throwHttpErrors: false,
-      // Enable header generator for TLS fingerprint
-      useHeaderGenerator: true,
-      headerGeneratorOptions: {
-        browsers: ['safari'],
-        devices: ['mobile'],
-        operatingSystems: ['ios'],
-        locales: ['en-US'],
-      },
-      // Critical: Set Referer based on content type
-      headers: {
-        'Referer': isSegment ? 'https://megacloud.blog/' : isImage ? 'https://hianime.to/' : 'https://hianime.to/',
-        'Origin': isSegment ? 'https://megacloud.blog' : isImage ? 'https://hianime.to' : 'https://hianime.to',
-      },
-    });
+    const baseHeaders: Record<string, string> = {
+      'User-Agent': DEFAULT_BROWSER_UA,
+      'Accept': isSubtitle ? 'text/vtt,text/plain;q=0.9,*/*;q=0.8' : '*/*',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Referer': referer,
+      'Origin': origin,
+    };
+
+    if (requestRange) {
+      baseHeaders['Range'] = requestRange;
+    }
+
+    // Build request attempts: subtitles and M3U8 get multiple referer/header strategies.
+    let requestAttempts: Array<{ headers: Record<string, string>; useHeaderGenerator: boolean }>;
+    if (isSubtitle) {
+      requestAttempts = [
+        { headers: baseHeaders, useHeaderGenerator: false },
+        {
+          headers: {
+            'User-Agent': DEFAULT_BROWSER_UA,
+            'Accept': 'text/vtt,text/plain;q=0.9,*/*;q=0.8',
+            ...(requestRange ? { 'Range': requestRange } : {}),
+          },
+          useHeaderGenerator: false,
+        },
+      ];
+    } else if (isM3U8) {
+      // M3U8: try embed referer with header generator, then without, then stream origin, then hianime.
+      let streamOriginHeaders: Record<string, string> = baseHeaders;
+      try {
+        const target = new URL(decodedUrl);
+        streamOriginHeaders = {
+          ...baseHeaders,
+          'Referer': `${target.origin}/`,
+          'Origin': target.origin,
+        };
+      } catch {
+        // keep baseHeaders (megacloud)
+      }
+      requestAttempts = [
+        { headers: baseHeaders, useHeaderGenerator: true },
+        { headers: baseHeaders, useHeaderGenerator: false },
+        { headers: streamOriginHeaders, useHeaderGenerator: false },
+        {
+          headers: {
+            ...baseHeaders,
+            'Referer': EMBED_REFERER_HIANIME.referer,
+            'Origin': EMBED_REFERER_HIANIME.origin,
+          },
+          useHeaderGenerator: false,
+        },
+      ];
+    } else {
+      requestAttempts = [
+        { headers: baseHeaders, useHeaderGenerator: true },
+      ];
+    }
+
+    let response: any = null;
+    let lastError: any = null;
+    for (const [index, attempt] of requestAttempts.entries()) {
+      try {
+        response = await gotScraping({
+          url: decodedUrl,
+          responseType: (isM3U8 || isSubtitle) ? 'text' : 'buffer',
+          timeout: { request: 30000 },
+          followRedirect: true,
+          maxRedirects: 5,
+          throwHttpErrors: false,
+          useHeaderGenerator: attempt.useHeaderGenerator,
+          headerGeneratorOptions: attempt.useHeaderGenerator
+            ? {
+                browsers: ['safari'],
+                devices: ['mobile'],
+                operatingSystems: ['ios'],
+                locales: ['en-US'],
+              }
+            : undefined,
+          headers: attempt.headers,
+        });
+
+        if (response.statusCode >= 400 && index < requestAttempts.length - 1) {
+          if (isSubtitle || isM3U8) {
+            console.warn(
+              `${isM3U8 ? 'M3U8' : 'Subtitle'} proxy attempt ${index + 1} failed with ${response.statusCode}, retrying...`
+            );
+            continue;
+          }
+        }
+        break;
+      } catch (err: any) {
+        lastError = err;
+        if (index < requestAttempts.length - 1 && (isSubtitle || isM3U8)) {
+          console.warn(
+            `${isM3U8 ? 'M3U8' : 'Subtitle'} proxy attempt ${index + 1} threw ${err.message}, retrying...`
+          );
+          continue;
+        }
+      }
+    }
+
+    if (!response) {
+      throw lastError || new Error('Failed to fetch proxied content');
+    }
 
     console.log(`Response: ${response.statusCode} for ${decodedUrl.substring(0, 60)}...`);
 

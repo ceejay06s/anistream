@@ -1,13 +1,26 @@
-import { HiAnime } from 'aniwatch';
 import axios from 'axios';
+import {
+  getEpisodeSourcesProvider,
+  getEpisodeServersProvider,
+} from './aniwatchApiClient.js';
 
-const aniwatch = new HiAnime.Scraper();
-
-// Fallback API endpoints (consumet-based APIs)
-const FALLBACK_APIS = [
+// Default fallback API endpoints (consumet-based APIs)
+const DEFAULT_FALLBACK_APIS = [
   'https://api.consumet.org/anime/zoro',
   'https://consumet-api.vercel.app/anime/zoro',
+  'https://api-v2-anime.vercel.app/api/v2/hianime',
+  'https://api-v1-anime.vercel.app/api',
 ];
+
+const configuredFallbackApis = (process.env.STREAMING_FALLBACK_APIS || '')
+  .split(',')
+  .map((entry) => entry.trim())
+  .filter(Boolean)
+  .map((entry) => entry.replace(/\/+$/, ''));
+
+const FALLBACK_APIS = configuredFallbackApis.length > 0
+  ? [...configuredFallbackApis, ...DEFAULT_FALLBACK_APIS]
+  : DEFAULT_FALLBACK_APIS;
 
 export interface StreamingSource {
   url: string;
@@ -38,13 +51,13 @@ export async function getEpisodeSources(
   server: string = 'hd-1',
   category: 'sub' | 'dub' | 'raw' = 'sub'
 ): Promise<StreamingData> {
+  let finalEpisodeId = episodeId;
   try {
     console.log('Fetching episode sources:', { episodeId, server, category });
     
     // The episodeId should be in format: {animeId}?ep={episodeNumber}
     // Frontend should construct this, but we'll handle it here as fallback
-    let finalEpisodeId = episodeId;
-    
+
     // If episodeId doesn't contain ?ep=, try to construct it
     if (!episodeId.includes('?ep=')) {
       // Try to extract episode number from the end if it's in format like "anime-id-ep-1"
@@ -64,7 +77,7 @@ export async function getEpisodeSources(
     
     let data;
     try {
-      data = await aniwatch.getEpisodeSources(finalEpisodeId, server as any, category);
+      data = await getEpisodeSourcesProvider(finalEpisodeId, server, category);
     } catch (aniwatchError: any) {
       console.error('Aniwatch package error:', aniwatchError);
       console.error('Error details:', {
@@ -78,12 +91,20 @@ export async function getEpisodeSources(
     }
 
     if (!data) {
-      console.warn('No data returned from aniwatch.getEpisodeSources');
+      console.warn('No data returned from episode sources provider');
+      const fallbackResult = await tryFallbackApis(finalEpisodeId, server, category);
+      if (fallbackResult && fallbackResult.sources.length > 0) {
+        return fallbackResult;
+      }
       return { sources: [] };
     }
 
     if (!data.sources || !Array.isArray(data.sources) || data.sources.length === 0) {
       console.warn('No sources found in data:', data);
+      const fallbackResult = await tryFallbackApis(finalEpisodeId, server, category);
+      if (fallbackResult && fallbackResult.sources.length > 0) {
+        return fallbackResult;
+      }
       return { sources: [] };
     }
 
@@ -95,6 +116,10 @@ export async function getEpisodeSources(
 
     if (sources.length === 0) {
       console.warn('No valid sources after mapping');
+      const fallbackResult = await tryFallbackApis(finalEpisodeId, server, category);
+      if (fallbackResult && fallbackResult.sources.length > 0) {
+        return fallbackResult;
+      }
       return { sources: [] };
     }
 
@@ -149,7 +174,7 @@ export async function getEpisodeSources(
 
     // Try fallback APIs
     console.log('Trying fallback APIs...');
-    const fallbackResult = await tryFallbackApis(episodeId, server, category);
+    const fallbackResult = await tryFallbackApis(finalEpisodeId, server, category);
     if (fallbackResult && fallbackResult.sources.length > 0) {
       return fallbackResult;
     }
@@ -237,7 +262,7 @@ async function tryFallbackApis(
  * Get available episode servers
  */
 export async function getEpisodeServers(episodeId: string): Promise<Server[]> {
-  const servers = await aniwatch.getEpisodeServers(episodeId);
+  const servers = await getEpisodeServersProvider(episodeId);
 
   if (!servers) {
     return [];

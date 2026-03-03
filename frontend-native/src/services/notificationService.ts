@@ -15,6 +15,11 @@ function getMessagingInstance() {
   }
 }
 
+function tokenToDocId(token: string): string {
+  // Firestore doc IDs cannot contain "/" and should be stable per device token.
+  return token.replace(/\//g, '_');
+}
+
 export interface NotificationPayload {
   title: string;
   body: string;
@@ -103,12 +108,13 @@ export const notificationService = {
 
     const token = await this.getFCMToken();
     if (token && app) {
-      // Save token to Firestore for the user (all platforms)
+      // Save token to Firestore for the user (one doc per token/device)
       try {
         const { getFirestore, doc, setDoc } = require('firebase/firestore');
         const db = getFirestore(app);
-        await setDoc(doc(db, 'users', userId, 'tokens', 'push'), {
+        await setDoc(doc(db, 'users', userId, 'tokens', tokenToDocId(token)), {
           token,
+          provider: token.startsWith('ExponentPushToken[') ? 'expo' : 'fcm',
           platform: Platform.OS,
           updatedAt: Date.now(),
         });

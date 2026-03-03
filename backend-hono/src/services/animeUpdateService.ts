@@ -1,6 +1,47 @@
 import { getAnimeInfo, AnimeInfo } from './animeService.js';
 import { firestoreDb, admin } from '../config/firebase.js';
 
+/** Send a push notification to a user (Expo or FCM) */
+async function sendPushToUser(userId: string, title: string, body: string, data: Record<string, string>) {
+  if (!firestoreDb || !admin) return;
+  try {
+    const tokenSnap = await firestoreDb.collection(`users/${userId}/tokens`).get();
+    if (tokenSnap.empty) return;
+
+    const tokens = tokenSnap.docs
+      .map((d) => d.data()?.token as string | undefined)
+      .filter((t): t is string => Boolean(t && typeof t === 'string'));
+    if (tokens.length === 0) return;
+
+    const expoTokens = tokens.filter((t) => t.startsWith('ExponentPushToken['));
+    const fcmTokens = tokens.filter((t) => !t.startsWith('ExponentPushToken['));
+
+    if (expoTokens.length > 0) {
+      await Promise.all(
+        expoTokens.map(async (token) => {
+          await fetch('https://exp.host/--/api/v2/push/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to: token, sound: 'default', title, body, data }),
+          });
+        })
+      );
+    }
+
+    if (fcmTokens.length > 0) {
+      await admin.messaging().sendEachForMulticast({
+        tokens: fcmTokens,
+        notification: { title, body },
+        data,
+        android: { notification: { color: '#e50914', channelId: 'default' } },
+        apns: { payload: { aps: { badge: 1, sound: 'default' } } },
+      });
+    }
+  } catch (err) {
+    console.error(`Failed to send push to user ${userId}:`, err);
+  }
+}
+
 
 /**
  * Check for anime updates for all users
@@ -73,22 +114,38 @@ export async function checkAnimeUpdatesForAllUsers(): Promise<{
           if (currentEpisodes > lastKnownEpisodes) {
             updatesFound++;
 
-            // Create notification using Firebase Admin
             if (admin && firestoreDb) {
+              const notifTitle = `New episode: ${anime.data.name}`;
+              const notifBody = `Episode ${currentEpisodes} is now available!`;
+              const notifData = { animeId: anime.data.id, episodeNumber: String(currentEpisodes) };
+
+              // Write to notifications collection
               notifications.push(
                 firestoreDb.collection('notifications').add({
                   userId,
                   type: 'anime_new_episode',
-                  title: `New episode: ${anime.data.name}`,
-                  body: `Episode ${currentEpisodes} is now available!`,
-                  data: {
-                    animeId: anime.data.id,
-                    episodeNumber: currentEpisodes,
-                  },
+                  title: notifTitle,
+                  body: notifBody,
+                  data: { animeId: anime.data.id, episodeNumber: currentEpisodes },
                   read: false,
                   createdAt: admin.firestore.FieldValue.serverTimestamp(),
                 })
               );
+
+              // Write to news collection (shown on home screen)
+              notifications.push(
+                firestoreDb.collection('news').add({
+                  title: notifTitle,
+                  summary: notifBody,
+                  animeId: anime.data.id,
+                  animeName: anime.data.name,
+                  type: 'new_episode',
+                  createdAt: Date.now(),
+                })
+              );
+
+              // Send push notification directly
+              notifications.push(sendPushToUser(userId, notifTitle, notifBody, notifData));
 
               // Update saved anime with new episode count
               await anime.ref.update({

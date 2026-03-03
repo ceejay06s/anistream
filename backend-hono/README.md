@@ -48,3 +48,11 @@ npm start
 ## Environment Variables
 
 - `PORT` - Server port (default: 8801)
+- `ANIWATCH_PROVIDER` - `api` (default) for `ghoshRitesh12/aniwatch-api`, `itzzzme-api` for `tzzzme/itzzzme` style API, or `package` for direct npm scraper
+- `ANIWATCH_API_URL` - Base URL for self-hosted aniwatch-api (default: `http://localhost:4000`)
+- `ANIWATCH_API_BASE_PATH` - API base path (default: `/api/v2/hianime`)
+- `ITZZZME_API_URL` - Base URL for `itzzzme-api` when `ANIWATCH_PROVIDER=itzzzme-api` (default: `http://localhost:3000`)
+- `ITZZZME_API_BASE_PATH` - API base path for `itzzzme-api` (default: `/api`)
+- `ANIWATCH_API_TIMEOUT_MS` - Upstream request timeout in ms (default: `12000`)
+- `ANIWATCH_API_FALLBACK_TO_PACKAGE` - `true` to fallback to npm scraper if API request fails (default: `true`)
+- `STREAMING_FALLBACK_APIS` - Optional comma-separated fallback API base URLs (for `/info` and `/watch`) that are tried before built-in fallback endpoints when sources are empty/failing

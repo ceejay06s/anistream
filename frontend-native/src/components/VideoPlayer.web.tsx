@@ -3,6 +3,7 @@ import { View, StyleSheet, ActivityIndicator, Text, TouchableOpacity } from 'rea
 import Hls from 'hls.js';
 import { VideoControls, SubtitleTrack, SubtitleSettings, PlayerSource } from './VideoControls';
 import { SubtitleRenderer } from './SubtitleRenderer';
+import { buildIframeSource } from './playerFallback';
 
 export interface VideoPlayerProps {
   source: string;
@@ -14,6 +15,7 @@ export interface VideoPlayerProps {
   animeId?: string;
   episodeNumber?: string;
   fullEpisodeId?: string;
+  iframeEmbedUrl?: string | null;
   // Subtitle tracks from streaming data
   subtitleTracks?: SubtitleTrack[];
   // Callback to request new source when current one fails
@@ -50,6 +52,7 @@ export function VideoPlayer({
   animeId,
   episodeNumber,
   fullEpisodeId,
+  iframeEmbedUrl,
   subtitleTracks = [],
   onRequestNewSource,
   title,
@@ -78,6 +81,7 @@ export function VideoPlayer({
   const [useIframe, setUseIframe] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [showIframeOption, setShowIframeOption] = useState(false);
+  const canUseIframeFallback = Boolean(iframeEmbedUrl || animeId);
 
   // Video state
   const [isPlaying, setIsPlaying] = useState(false);
@@ -96,6 +100,8 @@ export function VideoPlayer({
   const [autoSkip, setAutoSkip] = useState(false);
   const autoSkippedIntroRef = useRef(false);
   const autoSkippedOutroRef = useRef(false);
+  const lastRequestNewSourceRef = useRef<{ url: string; at: number } | null>(null);
+  const REQUEST_NEW_SOURCE_COOLDOWN_MS = 3000;
 
   const showStreamError = (message: string) => {
     console.log('Stream error:', message);
@@ -130,6 +136,23 @@ export function VideoPlayer({
       }, 100);
     }
   };
+
+  useEffect(() => {
+    if (!source && iframeEmbedUrl) {
+      setUseIframe(true);
+      setError(null);
+      setIsLoading(false);
+    }
+  }, [source, iframeEmbedUrl]);
+
+  // Exit iframe mode if a direct stream source becomes available again.
+  useEffect(() => {
+    if (useIframe && source) {
+      setUseIframe(false);
+      setError(null);
+      setIsLoading(true);
+    }
+  }, [useIframe, source]);
 
   // Video event handlers
   const handleTimeUpdate = useCallback(() => {
@@ -255,7 +278,13 @@ export function VideoPlayer({
     if (useIframe) return;
 
     const video = videoRef.current;
-    if (!video || !source) return;
+    if (!video || !source) {
+      if (!source && canUseIframeFallback) {
+        setShowIframeOption(true);
+        setIsLoading(false);
+      }
+      return;
+    }
 
     // Clean up previous HLS instance
     if (hlsRef.current) {
@@ -284,6 +313,12 @@ export function VideoPlayer({
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: false,
+        maxBufferHole: 1,
+        maxSeekHole: 2,
+        nudgeOffset: 0.1,
+        nudgeMaxRetry: 10,
+        fragLoadingTimeOut: 20000,
+        manifestLoadingTimeOut: 20000,
         xhrSetup: (xhr) => {
           xhr.withCredentials = false;
         },
@@ -307,7 +342,15 @@ export function VideoPlayer({
       });
 
       hls.on(Hls.Events.ERROR, (event, data) => {
+        if (!data.fatal && data.type === Hls.ErrorTypes.MEDIA_ERROR && data.details === 'bufferSeekOverHole') {
+          // Typical non-fatal gap issue on some proxied HLS streams.
+          // Nudge playback forward slightly to recover smooth playback.
+          const current = video.currentTime || 0;
+          video.currentTime = current + 0.2;
+          return;
+        }
         console.error('HLS error:', event, data);
+
         if (data.fatal) {
           const responseCode = data.response?.code;
           const is403 = responseCode === 403 ||
@@ -317,11 +360,19 @@ export function VideoPlayer({
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
               if (onRequestNewSource) {
-                // Network error (including 403), request new source
+                const now = Date.now();
+                const last = lastRequestNewSourceRef.current;
+                const sameUrlRecently = last && last.url === source && (now - last.at) < REQUEST_NEW_SOURCE_COOLDOWN_MS;
+                if (sameUrlRecently) {
+                  console.log('Skipping request new source (cooldown) to avoid loop');
+                  hls.destroy();
+                  showStreamError('Network error loading video stream. Try another server or use iframe.');
+                  break;
+                }
+                lastRequestNewSourceRef.current = { url: source, at: now };
                 console.log(`Network error (${is403 ? '403' : 'other'}), requesting new source...`);
                 hls.destroy();
                 setIsLoading(true);
-                // Small delay before requesting new source to avoid hammering servers
                 setTimeout(() => {
                   onRequestNewSource();
                 }, 500);
@@ -340,6 +391,16 @@ export function VideoPlayer({
               break;
             default:
               if (onRequestNewSource) {
+                const now = Date.now();
+                const last = lastRequestNewSourceRef.current;
+                const sameUrlRecently = last && last.url === source && (now - last.at) < REQUEST_NEW_SOURCE_COOLDOWN_MS;
+                if (sameUrlRecently) {
+                  console.log('Skipping request new source (cooldown) to avoid loop');
+                  hls.destroy();
+                  showStreamError('Failed to load video stream. Try another server or use iframe.');
+                  break;
+                }
+                lastRequestNewSourceRef.current = { url: source, at: now };
                 console.log('Fatal error, requesting new source...');
                 hls.destroy();
                 setIsLoading(true);
@@ -395,14 +456,15 @@ export function VideoPlayer({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source, autoPlay, useIframe, retryCount]);
 
-  // Reset seek state and auto-skip flags when source changes
+  // Reset seek state, auto-skip flags, and request-new-source cooldown when source changes
   useEffect(() => {
     hasSeekToInitial.current = false;
     autoSkippedIntroRef.current = false;
     autoSkippedOutroRef.current = false;
+    lastRequestNewSourceRef.current = null;
   }, [source]);
 
-  // Auto-skip intro/outro when enabled
+  // Auto-skip intro/outro when enabled (at timestamp or when toggle turned on while in range)
   useEffect(() => {
     if (!autoSkip) return;
     if (intro && currentTime >= intro.start && currentTime < intro.end && !autoSkippedIntroRef.current) {
@@ -424,16 +486,18 @@ export function VideoPlayer({
     }
   }, [initialTime, isLoading]);
 
-  // Iframe fallback - use hianime.to directly
-  if (useIframe && animeId) {
-    let epId = episodeNumber || '1';
-    if (fullEpisodeId && fullEpisodeId.includes('?ep=')) {
-      const match = fullEpisodeId.match(/\?ep=(\d+)/);
-      if (match) {
-        epId = match[1];
-      }
+  // Iframe fallback: backend embed URL first, direct hianime URL as last fallback
+  if (useIframe && canUseIframeFallback) {
+    const iframeSrc = buildIframeSource({
+      iframeEmbedUrl,
+      animeId,
+      episodeNumber,
+      fullEpisodeId,
+    });
+    if (!iframeSrc) {
+      return null;
     }
-    const iframeSrc = `https://hianime.to/watch/${animeId}?ep=${epId}`;
+    const noticeText = iframeEmbedUrl ? 'Playing via backend embed fallback' : 'Playing via hianime.to';
 
     return (
       <View style={[styles.container, style]}>
@@ -446,7 +510,7 @@ export function VideoPlayer({
           title={`Episode ${episodeNumber || '1'}`}
         />
         <View style={styles.iframeNotice}>
-          <Text style={styles.iframeNoticeText}>Playing via hianime.to</Text>
+          <Text style={styles.iframeNoticeText}>{noticeText}</Text>
         </View>
       </View>
     );
@@ -462,7 +526,7 @@ export function VideoPlayer({
           <TouchableOpacity style={styles.retryButton} onPress={retryStream}>
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
-          {showIframeOption && animeId && (
+          {showIframeOption && canUseIframeFallback && (
             <TouchableOpacity style={styles.iframeButton} onPress={switchToIframe}>
               <Text style={styles.iframeButtonText}>Use Iframe Player</Text>
             </TouchableOpacity>
@@ -533,7 +597,7 @@ export function VideoPlayer({
           <View style={styles.loadingOverlay}>
             <ActivityIndicator size="large" color="#e50914" />
             <Text style={styles.loadingText}>Loading video...</Text>
-            {animeId && (
+            {canUseIframeFallback && (
               <TouchableOpacity style={styles.skipButton} onPress={switchToIframe}>
                 <Text style={styles.skipButtonText}>Skip to iframe player</Text>
               </TouchableOpacity>

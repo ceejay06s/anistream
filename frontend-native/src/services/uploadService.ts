@@ -1,5 +1,41 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from './api';
 import axios from 'axios';
+
+const SIGNED_URL_STORAGE_KEY_PREFIX = '@anistream_signed_url:';
+
+function signedUrlStorageKey(filePath: string): string {
+  return `${SIGNED_URL_STORAGE_KEY_PREFIX}${filePath}`;
+}
+
+/** Persist renewed URL so it is reused until expiry (saves the update) */
+async function saveSignedUrlToStorage(
+  filePath: string,
+  url: string,
+  timestamp: number
+): Promise<void> {
+  try {
+    await AsyncStorage.setItem(
+      signedUrlStorageKey(filePath),
+      JSON.stringify({ url, timestamp })
+    );
+  } catch {
+    // Ignore storage errors (e.g. quota, private mode)
+  }
+}
+
+/** Load previously saved URL if any */
+async function loadSignedUrlFromStorage(
+  filePath: string
+): Promise<{ url: string; timestamp: number } | null> {
+  try {
+    const raw = await AsyncStorage.getItem(signedUrlStorageKey(filePath));
+    if (!raw) return null;
+    return JSON.parse(raw) as { url: string; timestamp: number };
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Get a signed URL for a file in Backblaze B2 (for private buckets)
@@ -110,6 +146,16 @@ export async function refreshSignedUrl(filePath: string): Promise<string> {
 const urlCache = new Map<string, { url: string; timestamp: number }>();
 const CACHE_DURATION = 4 * 24 * 60 * 60 * 1000; // 4 days (refresh before 5-day expiry)
 
+/** Update in-memory cache and persist so the renewed URL is saved */
+async function setCachedAndSavedUrl(
+  filePath: string,
+  url: string,
+  timestamp: number
+): Promise<void> {
+  urlCache.set(filePath, { url, timestamp });
+  await saveSignedUrlToStorage(filePath, url, timestamp);
+}
+
 export async function getOrRefreshSignedUrl(
   filePath: string,
   forceRefresh: boolean = false
@@ -119,36 +165,48 @@ export async function getOrRefreshSignedUrl(
 
   // Return cached URL if still valid, not expired, and not forcing refresh
   if (!forceRefresh && cached) {
-    // Check both cache duration and actual URL expiration
     const cacheValid = (now - cached.timestamp) < CACHE_DURATION;
     const urlNotExpired = !isUrlExpired(cached.url);
-    
     if (cacheValid && urlNotExpired) {
       return cached.url;
     }
   }
 
-  // Get a fresh URL (either expired, cache expired, or forced refresh)
-  const newUrl = await getSignedUrl(filePath);
-  
-  // Cache it
-  urlCache.set(filePath, {
-    url: newUrl,
-    timestamp: now,
-  });
+  // Try stored URL before calling API
+  if (!forceRefresh) {
+    const stored = await loadSignedUrlFromStorage(filePath);
+    if (stored && !isUrlExpired(stored.url)) {
+      urlCache.set(filePath, stored);
+      return stored.url;
+    }
+  }
 
+  const newUrl = await getSignedUrl(filePath);
+  await setCachedAndSavedUrl(filePath, newUrl, now);
   return newUrl;
 }
 
 /**
- * Clear the URL cache for a specific file or all files
+ * Clear the URL cache for a specific file or all files (memory and persisted)
  * @param filePath Optional file path to clear. If not provided, clears all cached URLs
  */
-export function clearUrlCache(filePath?: string): void {
+export async function clearUrlCache(filePath?: string): Promise<void> {
   if (filePath) {
     urlCache.delete(filePath);
+    try {
+      await AsyncStorage.removeItem(signedUrlStorageKey(filePath));
+    } catch {
+      // ignore
+    }
   } else {
     urlCache.clear();
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      const toRemove = keys.filter((k) => k.startsWith(SIGNED_URL_STORAGE_KEY_PREFIX));
+      if (toRemove.length) await AsyncStorage.multiRemove(toRemove);
+    } catch {
+      // ignore
+    }
   }
 }
 
@@ -187,29 +245,28 @@ function isUrlExpired(signedUrl: string): boolean {
 }
 
 /**
- * Get a signed URL with automatic renewal if expired
- * This function will automatically refresh expired URLs
- * 
+ * Get a signed URL with automatic renewal if expired.
+ * Uses in-memory and persisted cache; when renewed, saves the update so it is reused until expiry.
+ *
  * @param filePath The path to the file
  * @returns A valid signed URL (refreshed if expired)
  */
 export async function getSignedUrlWithAutoRenewal(filePath: string): Promise<string> {
   const cached = urlCache.get(filePath);
-  
-  // If we have a cached URL, check if it's expired
   if (cached && !isUrlExpired(cached.url)) {
     return cached.url;
   }
-  
-  // URL is expired or not cached, get a fresh one
+
+  // Load from storage so we don't hit the API if we already have a valid saved URL
+  const stored = await loadSignedUrlFromStorage(filePath);
+  if (stored && !isUrlExpired(stored.url)) {
+    urlCache.set(filePath, stored);
+    return stored.url;
+  }
+
   const newUrl = await getSignedUrl(filePath);
-  
-  // Cache the new URL
-  urlCache.set(filePath, {
-    url: newUrl,
-    timestamp: Date.now(),
-  });
-  
+  const now = Date.now();
+  await setCachedAndSavedUrl(filePath, newUrl, now);
   return newUrl;
 }
 
@@ -242,16 +299,10 @@ export async function loadImageWithAutoRenewal(
         img.onerror = async () => {
           // Image failed to load, might be expired - try refreshing
           try {
-            // Clear cache and get fresh URL
-            clearUrlCache(filePath);
+            await clearUrlCache(filePath);
             const freshUrl = await getSignedUrl(filePath);
-            
-            // Cache the fresh URL
-            urlCache.set(filePath, {
-              url: freshUrl,
-              timestamp: Date.now(),
-            });
-            
+            await setCachedAndSavedUrl(filePath, freshUrl, Date.now());
+
             // Try loading again with fresh URL
             const retryImg = new Image();
             retryImg.onload = () => resolve(freshUrl);

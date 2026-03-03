@@ -11,34 +11,36 @@ export const uploadRoutes = new Hono();
  */
 uploadRoutes.post('/file', async (c) => {
   try {
-    // Get the file from the request
-    const body = await c.req.parseBody();
-    
-    // Hono's parseBody returns File objects for multipart/form-data
-    const file = body.file;
-    const userId = body.userId as string;
-    const folder = (body.folder as string) || 'posts'; // Default to 'posts' folder
+    // Use formData() for reliable multipart handling (e.g. React Native uploads)
+    const formData = await c.req.formData();
+    const file = formData.get('file');
+    const userId = formData.get('userId') as string | null;
+    const folder = (formData.get('folder') as string) || 'posts';
 
-    if (!file) {
-      return c.json({ error: 'No file provided' }, 400);
+    if (!file || typeof file === 'string') {
+      return c.json({ error: 'No file provided or invalid file part' }, 400);
     }
 
     if (!userId) {
       return c.json({ error: 'User ID is required' }, 400);
     }
 
-    // Handle both File and File-like objects from Hono
-    const fileName = (file as any).name || 'upload';
-    const fileType = (file as any).type || '';
-    const fileSize = (file as any).size || 0;
+    // File | Blob (RN and browsers can send either)
+    const fileName = (file as File).name || 'upload';
+    const fileType = (file as File).type || '';
+    let fileSize = (file as File).size ?? 0;
 
     // Validate file type
     const isImage = fileType.startsWith('image/');
     const isVideo = fileType.startsWith('video/');
-    
     if (!isImage && !isVideo) {
       return c.json({ error: 'Only image and video files are allowed' }, 400);
     }
+
+    // Convert to buffer (File and Blob both have arrayBuffer())
+    const arrayBuffer = await (file as Blob).arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    if (fileSize === 0) fileSize = buffer.length;
 
     // Validate file size (10MB limit)
     const maxSize = 10 * 1024 * 1024; // 10MB
@@ -50,22 +52,6 @@ uploadRoutes.post('/file', async (c) => {
     const fileExtension = fileName.split('.').pop() || (isVideo ? 'mp4' : 'jpg');
     const uniqueFileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExtension}`;
     const filePath = `${folder}/${userId}/${uniqueFileName}`;
-
-    // Convert File to Buffer
-    // Hono's parseBody may return different types, handle both
-    let buffer: Buffer;
-    if (file instanceof File) {
-      const arrayBuffer = await file.arrayBuffer();
-      buffer = Buffer.from(arrayBuffer);
-    } else if ((file as any).arrayBuffer) {
-      const arrayBuffer = await (file as any).arrayBuffer();
-      buffer = Buffer.from(arrayBuffer);
-    } else if (Buffer.isBuffer(file)) {
-      buffer = file as Buffer;
-    } else {
-      // Try to read as stream or convert
-      buffer = Buffer.from(file as any);
-    }
 
     // Upload to Backblaze B2 using S3-compatible API
     const s3Client = getBackblazeClient();

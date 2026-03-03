@@ -23,49 +23,70 @@ export interface MediaItem {
   url: string;
   type: 'image' | 'video';
   thumbnailUrl?: string;
+  /** Backblaze path for renewing expired signed URLs */
+  filePath?: string;
+}
+
+/** Web: File; Native: { uri, type, name } for FormData */
+export type MediaFileInput = File | { uri: string; type: string; name?: string };
+
+function isNativeAsset(
+  file: MediaFileInput
+): file is { uri: string; type: string; name?: string } {
+  return typeof file === 'object' && 'uri' in file && typeof (file as any).uri === 'string';
 }
 
 async function uploadMediaFile(
-  file: File,
+  file: MediaFileInput,
   userId: string
 ): Promise<MediaItem> {
-  // Use backend proxy to avoid CORS issues (no Blaze plan needed)
   const { API_BASE_URL } = require('./api');
-  const axios = require('axios');
+
+  const formData = new FormData();
+  formData.append('userId', userId);
+  formData.append('folder', 'posts');
+
+  if (isNativeAsset(file)) {
+    formData.append('file', {
+      uri: file.uri,
+      type: file.type || 'image/jpeg',
+      name: file.name || `upload.${file.type.startsWith('video/') ? 'mp4' : 'jpg'}`,
+    } as any);
+  } else {
+    formData.append('file', file);
+  }
 
   try {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('userId', userId);
-    formData.append('folder', 'posts');
-
-    const response = await axios.post(`${API_BASE_URL}/api/upload/file`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+    const response = await fetch(`${API_BASE_URL}/api/upload/file`, {
+      method: 'POST',
+      body: formData,
+      headers: {},
     });
-
-    if (response.data.success) {
+    const data = await response.json().catch(() => ({}));
+    if (data.success) {
       return {
-        url: response.data.url,
-        type: response.data.type,
+        url: data.url,
+        type: data.type,
+        ...(data.filePath ? { filePath: data.filePath } : {}),
       };
-    } else {
-      throw new Error(response.data.error || 'Upload failed');
     }
-  } catch (error: any) {
-    // Provide more helpful error messages
-    if (error.response?.status === 400) {
-      throw new Error(error.response.data.error || 'Invalid file or request');
-    } else if (error.response?.status === 413) {
+    if (response.status === 400) {
+      throw new Error(data.error || 'Invalid file or request');
+    }
+    if (response.status === 413) {
       throw new Error('File size exceeds 10MB limit');
-    } else if (error.response?.status === 401) {
-      throw new Error('You must be authenticated to upload files');
-    } else if (error.message?.includes('CORS') || error.message?.includes('cors')) {
-      throw new Error('Upload failed due to network error. Please try again.');
-    } else {
-      throw new Error(`Upload failed: ${error.response?.data?.message || error.message || 'Unknown error'}`);
     }
+    if (response.status === 401) {
+      throw new Error('You must be authenticated to upload files');
+    }
+    throw new Error(data.error || 'Upload failed');
+  } catch (error: any) {
+    const message = error?.message ?? 'Unknown error';
+    if (String(message).includes('CORS') || String(message).includes('cors')) {
+      throw new Error('Upload failed due to network error. Please try again.');
+    }
+    if (error instanceof Error) throw error;
+    throw new Error(`Upload failed: ${message}`);
   }
 }
 
@@ -165,7 +186,7 @@ export const communityService = {
     content: string,
     animeId?: string,
     animeName?: string,
-    mediaFiles?: File[]
+    mediaFiles?: MediaFileInput[]
   ): Promise<Post> {
     const db = getDb();
     if (!db) {
@@ -181,17 +202,20 @@ export const communityService = {
     }
 
     const { collection, addDoc } = require('firebase/firestore');
-    const postData = {
+    const postDataBase = {
       userId: user.uid,
       userName: user.displayName || 'Anonymous',
-      userPhoto: user.photoURL || undefined,
       content,
-      animeId: animeId || undefined,
-      animeName: animeName || undefined,
-      media: media || undefined,
       likes: [],
       commentCount: 0,
       createdAt: Date.now(),
+    };
+    const postData = {
+      ...postDataBase,
+      ...(user.photoURL ? { userPhoto: user.photoURL } : {}),
+      ...(animeId ? { animeId } : {}),
+      ...(animeName ? { animeName } : {}),
+      ...(media && media.length > 0 ? { media } : {}),
     };
 
     const docRef = await addDoc(collection(db, 'posts'), postData);
@@ -262,7 +286,7 @@ export const communityService = {
                 postId,
                 actorId: postAuthor.uid,
                 actorName: postAuthor.displayName || 'Anonymous',
-                actorPhoto: postAuthor.photoURL || undefined,
+                ...(postAuthor.photoURL ? { actorPhoto: postAuthor.photoURL } : {}),
               },
             })
           );
@@ -368,12 +392,15 @@ export const communityService = {
 
     const { collection, addDoc, doc, updateDoc, increment } = require('firebase/firestore');
 
-    const commentData = {
+    const commentDataBase = {
       userId: user.uid,
       userName: user.displayName || 'Anonymous',
-      userPhoto: user.photoURL || undefined,
       content,
       createdAt: Date.now(),
+    };
+    const commentData = {
+      ...commentDataBase,
+      ...(user.photoURL ? { userPhoto: user.photoURL } : {}),
     };
 
     const commentRef = await addDoc(
@@ -442,7 +469,7 @@ export const communityService = {
               commentId,
               actorId: commentAuthor.uid,
               actorName: commentAuthor.displayName || 'Anonymous',
-              actorPhoto: commentAuthor.photoURL || undefined,
+              ...(commentAuthor.photoURL ? { actorPhoto: commentAuthor.photoURL } : {}),
             },
           })
         );
@@ -474,7 +501,7 @@ export const communityService = {
                 commentId,
                 actorId: commentAuthor.uid,
                 actorName: commentAuthor.displayName || 'Anonymous',
-                actorPhoto: commentAuthor.photoURL || undefined,
+                ...(commentAuthor.photoURL ? { actorPhoto: commentAuthor.photoURL } : {}),
               },
             })
           );
@@ -583,6 +610,7 @@ export const communityService = {
       callback(posts);
     }, (err: any) => {
       console.error('Posts subscription error:', err);
+      callback([]);
     });
 
     return unsubscribe;

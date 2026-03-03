@@ -17,9 +17,9 @@ export interface UseStreamSocketResult {
   status: StreamStatus;
   streamingData: StreamingData | null;
   selectedSource: StreamingSource | null;
-  requestSources: (episodeId: string, category: 'sub' | 'dub') => void;
+  requestSources: (episodeId: string, category: 'sub' | 'dub', options?: { skipCache?: boolean; failedServer?: string }) => void;
   disconnect: () => void;
-  retry: () => void;
+  retry: (options?: { skipCache?: boolean; failedServer?: string }) => void;
 }
 
 interface WSMessage {
@@ -35,7 +35,7 @@ interface WSMessage {
 export function useStreamSocket(): UseStreamSocketResult {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastRequestRef = useRef<{ episodeId: string; category: 'sub' | 'dub' } | null>(null);
+  const lastRequestRef = useRef<{ episodeId: string; category: 'sub' | 'dub'; skipCache?: boolean } | null>(null);
 
   const [status, setStatus] = useState<StreamStatus>({
     isConnected: false,
@@ -81,11 +81,13 @@ export function useStreamSocket(): UseStreamSocketResult {
 
         // If there was a pending request, send it
         if (lastRequestRef.current) {
-          const { episodeId, category } = lastRequestRef.current;
+          const { episodeId, category, skipCache, failedServer } = lastRequestRef.current;
           ws.send(JSON.stringify({
             type: 'get_sources',
             episodeId,
             category,
+            skipCache: skipCache === true,
+            failedServer: failedServer || undefined,
           }));
         }
       };
@@ -221,13 +223,13 @@ export function useStreamSocket(): UseStreamSocketResult {
   }, [getWsUrl]);
 
   // Request sources via WebSocket
-  const requestSources = useCallback((episodeId: string, category: 'sub' | 'dub') => {
-    lastRequestRef.current = { episodeId, category };
+  const requestSources = useCallback((episodeId: string, category: 'sub' | 'dub', options?: { skipCache?: boolean; failedServer?: string }) => {
+    lastRequestRef.current = { episodeId, category, skipCache: options?.skipCache, failedServer: options?.failedServer };
 
     setStatus(prev => ({
       ...prev,
       isLoading: true,
-      message: 'Connecting...',
+      message: options?.skipCache ? 'Trying next server...' : 'Connecting...',
       error: null,
     }));
     setStreamingData(null);
@@ -238,6 +240,8 @@ export function useStreamSocket(): UseStreamSocketResult {
         type: 'get_sources',
         episodeId,
         category,
+        skipCache: options?.skipCache === true,
+        failedServer: options?.failedServer || undefined,
       }));
     } else {
       connect();
@@ -265,11 +269,11 @@ export function useStreamSocket(): UseStreamSocketResult {
     });
   }, []);
 
-  // Retry last request
-  const retry = useCallback(() => {
+  // Retry last request (e.g. after playback error). skipCache: true + failedServer avoid returning same stream in a loop.
+  const retry = useCallback((options?: { skipCache?: boolean; failedServer?: string }) => {
     if (lastRequestRef.current) {
       const { episodeId, category } = lastRequestRef.current;
-      requestSources(episodeId, category);
+      requestSources(episodeId, category, options);
     }
   }, [requestSources]);
 

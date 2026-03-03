@@ -50,6 +50,13 @@
       "expo-font",
       "expo-updates",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow AniStream to access your photos and videos for community posts.",
+          "cameraPermission": "Allow AniStream to use the camera for community posts."
+        }
+      ],
+      [
         "expo-notifications",
         {
           "color": "#e50914"

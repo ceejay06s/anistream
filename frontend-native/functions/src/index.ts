@@ -15,71 +15,73 @@ export const sendPushOnNotification = functions.firestore
     const userId: string = notification.userId;
     if (!userId) return;
 
-    // Fetch the user's stored FCM / Expo push token
+    // Fetch all user push tokens (multi-device support)
     const tokenSnap = await admin
       .firestore()
-      .doc(`users/${userId}/tokens/push`)
+      .collection(`users/${userId}/tokens`)
       .get();
+    if (tokenSnap.empty) return;
 
-    if (!tokenSnap.exists) return;
-
-    const { token, platform } = tokenSnap.data() as {
-      token: string;
-      platform: string;
-    };
-    if (!token) return;
+    const tokens = tokenSnap.docs
+      .map((d) => d.data()?.token as string | undefined)
+      .filter((t): t is string => Boolean(t && typeof t === 'string'));
+    if (tokens.length === 0) return;
 
     const animeId: string = notification.data?.animeId || '';
     const postId: string = notification.data?.postId || '';
+    const expoTokens = tokens.filter((t) => t.startsWith('ExponentPushToken['));
+    const fcmTokens = tokens.filter((t) => !t.startsWith('ExponentPushToken['));
 
-    // Expo push tokens start with "ExponentPushToken[" — use Expo's push API
-    if (token.startsWith('ExponentPushToken[')) {
-      await sendExpoNotification(token, notification.title, notification.body, {
-        animeId,
-        postId,
-        type: notification.type,
-      });
-      return;
+    if (expoTokens.length > 0) {
+      await Promise.all(
+        expoTokens.map(async (token) =>
+          sendExpoNotification(token, notification.title, notification.body, {
+            animeId,
+            postId,
+            type: notification.type,
+          })
+        )
+      );
     }
 
-    // FCM token — send via Firebase Admin Messaging
-    await admin.messaging().send({
-      token,
-      notification: {
-        title: notification.title || 'AniStream',
-        body: notification.body || '',
-      },
-      data: {
-        animeId,
-        postId,
-        type: notification.type || '',
-      },
-      webpush: {
+    if (fcmTokens.length > 0) {
+      await admin.messaging().sendEachForMulticast({
+        tokens: fcmTokens,
         notification: {
-          icon: '/icon-192.png',
-          badge: '/icon-192.png',
-          tag: snap.id,
+          title: notification.title || 'AniStream',
+          body: notification.body || '',
         },
-        fcmOptions: {
-          link: animeId ? `/detail/${animeId}` : postId ? `/community` : '/',
+        data: {
+          animeId,
+          postId,
+          type: notification.type || '',
         },
-      },
-      android: {
-        notification: {
-          icon: 'notification_icon',
-          color: '#e50914',
-          channelId: 'default',
-        },
-      },
-      apns: {
-        payload: {
-          aps: {
-            badge: 1,
-            sound: 'default',
+        webpush: {
+          notification: {
+            icon: '/icon-192.png',
+            badge: '/icon-192.png',
+            tag: snap.id,
+          },
+          fcmOptions: {
+            link: animeId ? `/detail/${animeId}` : postId ? `/community` : '/',
           },
         },
-      },
-    });
+        android: {
+          notification: {
+            color: '#e50914',
+            channelId: 'default',
+          },
+        },
+        apns: {
+          payload: {
+            aps: {
+              badge: 1,
+              sound: 'default',
+            },
+          },
+        },
+      });
+    }
   });
 
 /** Send via Expo's push notification service (for native apps built with Expo Go / bare). */

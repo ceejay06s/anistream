@@ -26,6 +26,7 @@ export interface VideoPlayerProps {
   animeId?: string;
   episodeNumber?: string;
   fullEpisodeId?: string;
+  iframeEmbedUrl?: string | null;
   subtitleTracks?: SubtitleTrack[];
   // Callback to request new source when current one fails
   onRequestNewSource?: () => void;

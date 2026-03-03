@@ -21,6 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { VideoPlayer } from '@/components/VideoPlayer';
 import { streamingApi, StreamingData, StreamingSource, animeApi, Episode, AnimeInfo } from '@/services/api';
 import { useStreamSocket } from '@/hooks/useStreamSocket';
+import { shouldRenderPlayer } from '@/components/playerFallback';
 import { useAuth } from '@/context/AuthContext';
 import { communityService, Post, Comment } from '@/services/communityService';
 import { executeRecaptcha } from '@/utils/recaptcha';
@@ -94,6 +95,7 @@ export default function WatchScreen() {
   const [restError, setRestError] = useState<string | null>(null);
   const [restStreamingData, setRestStreamingData] = useState<StreamingData | null>(null);
   const [restSelectedSource, setRestSelectedSource] = useState<StreamingSource | null>(null);
+  const [restIframeFallback, setRestIframeFallback] = useState<string | null>(null);
 
   // Combined state
   const loading = useWebSocket ? wsStatus.isLoading : restLoading;
@@ -105,6 +107,7 @@ export default function WatchScreen() {
   const serverIndex = wsStatus.serverIndex;
   const totalServers = wsStatus.totalServers;
   const fromCache = wsStatus.fromCache;
+  const iframeFallbackUrl = useWebSocket ? wsStatus.iframeFallback : restIframeFallback;
 
   // Timeout state for auto-retry with 30-second limit
   const [retryTimedOut, setRetryTimedOut] = useState(false);
@@ -427,6 +430,7 @@ export default function WatchScreen() {
     // Use the full episodeId from HiAnime (contains database ID) if available
     // Otherwise construct it from anime id and episode number
     const episodeIdStr = fullEpisodeId;
+    setRestIframeFallback(null);
 
     if (useWebSocket) {
       // Use WebSocket for real-time server cycling
@@ -442,6 +446,7 @@ export default function WatchScreen() {
     try {
       setRestLoading(true);
       setRestError(null);
+      setRestIframeFallback(null);
 
       const data = await streamingApi.getSources(episodeId, 'hd-1', category);
 
@@ -449,25 +454,37 @@ export default function WatchScreen() {
         setRestStreamingData(data);
         setRestSelectedSource(data.sources[0]);
       } else {
-        setRestError(category === 'dub'
-          ? 'No dubbed version available. Try switching to SUB.'
-          : 'No video sources available.');
+        const embedUrl = await streamingApi.getEmbedUrl(episodeId, 'hd-2', category);
+        if (embedUrl) {
+          setRestIframeFallback(embedUrl);
+          setRestStreamingData(data || { sources: [] });
+          setRestSelectedSource(null);
+          setRestError(null);
+        } else {
+          setRestError(category === 'dub'
+            ? 'No dubbed version available. Try switching to SUB.'
+            : 'No video sources available.');
+        }
       }
     } catch (err: any) {
-      setRestError(err.message || 'Failed to load video');
+      const embedUrl = await streamingApi.getEmbedUrl(episodeId, 'hd-2', category);
+      if (embedUrl) {
+        setRestIframeFallback(embedUrl);
+        setRestError(null);
+      } else {
+        setRestError(err.message || 'Failed to load video');
+      }
     } finally {
       setRestLoading(false);
     }
   };
 
-  // Handle request for new source when streaming fails (403 error)
-  // WebSocket will handle the retry logic on the backend
+  // Handle request for new source when streaming fails (e.g. 403, playback error)
+  // Skip cache so we don't keep returning the same failing source (retry loop)
   const handleRequestNewSource = () => {
     if (useWebSocket) {
-      // WebSocket handles retries automatically
-      wsRetry();
+      wsRetry({ skipCache: true, failedServer: currentServer ?? undefined });
     } else {
-      // REST fallback - just retry
       loadSources();
     }
   };
@@ -540,7 +557,7 @@ export default function WatchScreen() {
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={() => {
             if (useWebSocket) {
-              wsRetry();
+              wsRetry({ skipCache: true, failedServer: currentServer ?? undefined });
             } else {
               loadSources();
             }
@@ -844,7 +861,7 @@ export default function WatchScreen() {
   // Render video player section
   const renderVideoPlayer = () => (
     <View style={[styles.playerContainer, isDesktopWeb && styles.playerContainerWeb]}>
-      {retryTimedOut && !selectedSource ? (
+      {retryTimedOut && !selectedSource && !iframeFallbackUrl ? (
         // Timeout error state
         <View style={styles.timeoutContainer}>
           <Ionicons name="cloud-offline-outline" size={48} color="#e50914" />
@@ -857,7 +874,7 @@ export default function WatchScreen() {
               setRetryElapsed(0);
               retryStartTimeRef.current = null;
               if (useWebSocket) {
-                wsRetry();
+                wsRetry({ skipCache: true, failedServer: currentServer ?? undefined });
               } else {
                 loadSources();
               }
@@ -867,38 +884,25 @@ export default function WatchScreen() {
             <Text style={styles.retryServerButtonText}>Try Again</Text>
           </TouchableOpacity>
         </View>
-      ) : loading && !selectedSource ? (
-        // Loading state with poster cover
-        <ImageBackground
-          source={animeInfo?.poster ? { uri: animeInfo.poster } : undefined}
-          style={styles.videoLoadingContainer}
-          imageStyle={styles.videoLoadingCoverImage}
-          resizeMode="stretch"
-        >
-          {/* Dark overlay */}
+      ) : loading && !selectedSource && !iframeFallbackUrl ? (
+        // Same container as player – show only spinner (no panel; expo-video loading state)
+        <View style={styles.videoLoadingContainer}>
+          {animeInfo?.poster ? (
+            <Image
+              source={{ uri: animeInfo.poster }}
+              style={StyleSheet.absoluteFill}
+              resizeMode="cover"
+            />
+          ) : null}
           <View style={styles.videoLoadingOverlay} />
-          {animeInfo?.name && (
-            <Text style={styles.videoLoadingTitle} numberOfLines={1}>{animeInfo.name}</Text>
-          )}
           <ActivityIndicator size="large" color="#e50914" />
-          <Text style={styles.videoLoadingText}>Finding working server...</Text>
-          {retryMessage && (
-            <Text style={styles.videoLoadingMessage}>{retryMessage}</Text>
-          )}
-          {retryElapsed > 0 && (
-            <Text style={styles.retryCounterText}>
-              Trying servers... {retryElapsed}s / 30s
-            </Text>
-          )}
-          {totalServers > 0 && (
-            <Text style={styles.serverProgressText}>
-              Server {serverIndex + 1} of {totalServers}
-            </Text>
-          )}
-        </ImageBackground>
-      ) : selectedSource ? (
+        </View>
+      ) : shouldRenderPlayer({
+        selectedSourceUrl: selectedSource?.url,
+        iframeFallbackUrl,
+      }) ? (
         <VideoPlayer
-          source={selectedSource.url}
+          source={selectedSource?.url || ''}
           autoPlay={true}
           onError={(err) => console.error('Player error:', err)}
           onReady={() => {
@@ -907,6 +911,7 @@ export default function WatchScreen() {
           animeId={id}
           episodeNumber={episodeNumber}
           fullEpisodeId={fullEpisodeId}
+          iframeEmbedUrl={iframeFallbackUrl}
           subtitleTracks={streamingData?.tracks?.map(t => ({
             url: t.url,
             lang: t.lang,
@@ -938,7 +943,7 @@ export default function WatchScreen() {
             style={styles.retryServerButton}
             onPress={() => {
               if (useWebSocket) {
-                wsRetry();
+                wsRetry({ skipCache: true, failedServer: currentServer ?? undefined });
               } else {
                 loadSources();
               }
@@ -991,9 +996,13 @@ export default function WatchScreen() {
       {isDesktopWeb ? (
         <View style={styles.webLayout}>
           {/* Left side - Video Player + Details + Community (75%) */}
-          <ScrollView style={styles.webMainSection}>
+          <ScrollView
+            style={styles.webMainSection}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={true}
+          >
             {renderVideoPlayer()}
-            {renderMainContent()}
+            <View style={styles.detailsWrapper}>{renderMainContent()}</View>
           </ScrollView>
 
           {/* Right side - Episode List + Recommendations (25%) */}
@@ -1003,9 +1012,13 @@ export default function WatchScreen() {
         </View>
       ) : (
         // Mobile/Tablet/Narrow web: Stacked layout
-        <ScrollView style={styles.scrollView}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={true}
+        >
           {renderVideoPlayer()}
-          {renderDetailsSection()}
+          <View style={styles.detailsWrapper}>{renderDetailsSection()}</View>
         </ScrollView>
       )}
 
@@ -1144,6 +1157,15 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
+  detailsWrapper: {
+    ...Platform.select({
+      web: { minHeight: 400 },
+      default: {},
+    }),
   },
   centered: {
     flex: 1,

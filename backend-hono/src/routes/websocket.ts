@@ -11,7 +11,11 @@ export interface StreamRequest {
   type: 'get_sources';
   episodeId: string;
   category: 'sub' | 'dub';
-  clientId: string;
+  clientId?: string;
+  /** When true, skip cache and try next servers (e.g. after playback error) to avoid retry loop */
+  skipCache?: boolean;
+  /** Server that just failed (e.g. during playback); skip it when skipCache is true to avoid returning same stream */
+  failedServer?: string;
 }
 
 export interface StreamResponse {
@@ -27,18 +31,39 @@ export interface StreamResponse {
 // Server priority for streaming
 const SERVER_PRIORITY = ['hd-1', 'hd-2', 'megacloud', 'streamsb', 'streamtape'];
 
+function normalizeServerName(name: string): string {
+  return name?.toLowerCase().replace(/[^a-z0-9-]/g, '-') || '';
+}
+
 // Try to get working sources by cycling through servers
 async function findWorkingSources(
   episodeId: string,
   category: 'sub' | 'dub',
-  sendMessage: (msg: StreamResponse) => void
+  sendMessage: (msg: StreamResponse) => void,
+  options?: { skipCache?: boolean; failedServer?: string }
 ): Promise<any> {
   const failedServersThisRequest: string[] = [];
+  const skipCache = options?.skipCache === true;
 
-  // Check cache for known-good server
-  const cached = await getCachedServer(episodeId, category);
+  // When retrying after playback error, skip cache and optionally the server that just failed
+  let cached: Awaited<ReturnType<typeof getCachedServer>> = null;
+  if (skipCache) {
+    const fromCache = await getCachedServer(episodeId, category);
+    if (fromCache?.server) {
+      failedServersThisRequest.push(fromCache.server);
+      await markServerFailed(episodeId, category, fromCache.server);
+    }
+    const clientFailedServer = options?.failedServer ? normalizeServerName(options.failedServer) : null;
+    if (clientFailedServer && !failedServersThisRequest.includes(clientFailedServer)) {
+      failedServersThisRequest.push(clientFailedServer);
+      await markServerFailed(episodeId, category, clientFailedServer);
+    }
+  } else {
+    cached = await getCachedServer(episodeId, category);
+  }
 
-  if (cached && cached.server) {
+  // Use cache only if the cached server isn't already in the failed list
+  if (cached && cached.server && !cached.failedServers?.includes(cached.server)) {
     sendMessage({
       type: 'status',
       message: `Trying cached server: ${cached.server.toUpperCase()}`,
@@ -198,13 +223,14 @@ export function createWebSocketServer(server: any) {
         if (message.type === 'get_sources') {
           sendMessage({
             type: 'status',
-            message: 'Searching for sources...',
+            message: message.skipCache ? 'Trying next servers (skipping cache)...' : 'Searching for sources...',
           });
 
           const sources = await findWorkingSources(
             message.episodeId,
             message.category,
-            sendMessage
+            sendMessage,
+            { skipCache: message.skipCache, failedServer: message.failedServer }
           );
 
           if (sources) {

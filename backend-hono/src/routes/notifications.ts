@@ -84,66 +84,81 @@ notificationRoutes.post('/send-push', async (c) => {
       return c.json({ error: 'Firebase not initialized' }, 500);
     }
 
-    // Fetch the recipient's push token
-    const tokenSnap = await firestoreDb.doc(`users/${userId}/tokens/push`).get();
-    if (!tokenSnap.exists) {
+    // Fetch all recipient push tokens (multi-device support)
+    const tokenSnap = await firestoreDb.collection(`users/${userId}/tokens`).get();
+    if (tokenSnap.empty) {
       return c.json({ sent: false, reason: 'no_token' });
     }
 
-    const tokenData = tokenSnap.data() as { token: string; platform: string } | undefined;
-    const token = tokenData?.token;
-    if (!token) {
+    const tokens = tokenSnap.docs
+      .map((d) => d.data()?.token as string | undefined)
+      .filter((t): t is string => Boolean(t && typeof t === 'string'));
+    if (tokens.length === 0) {
       return c.json({ sent: false, reason: 'no_token' });
     }
 
     const animeId = data?.animeId ?? '';
     const postId = data?.postId ?? '';
+    const expoTokens = tokens.filter((t) => t.startsWith('ExponentPushToken['));
+    const fcmTokens = tokens.filter((t) => !t.startsWith('ExponentPushToken['));
+    let sentCount = 0;
 
-    // Expo push token (native apps via Expo Go / standalone)
-    if (token.startsWith('ExponentPushToken[')) {
-      const expoRes = await fetch('https://exp.host/--/api/v2/push/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: token,
-          sound: 'default',
-          title,
-          body,
-          data: data ?? {},
-        }),
-      });
-      const expoResult = await expoRes.json();
-      return c.json({ sent: true, platform: 'expo', result: expoResult });
+    // Expo push tokens (native apps via Expo Go / standalone)
+    if (expoTokens.length > 0) {
+      await Promise.all(
+        expoTokens.map(async (token) => {
+          await fetch('https://exp.host/--/api/v2/push/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              to: token,
+              sound: 'default',
+              title,
+              body,
+              data: data ?? {},
+            }),
+          });
+        })
+      );
+      sentCount += expoTokens.length;
     }
 
-    // FCM token (web + native FCM)
-    await admin.messaging().send({
-      token,
-      notification: { title, body },
-      data: data ?? {},
-      webpush: {
-        notification: {
-          icon: '/icon-192.png',
-          badge: '/icon-192.png',
-          tag: `${userId}-${Date.now()}`,
+    // FCM tokens (web + native FCM)
+    if (fcmTokens.length > 0) {
+      const response = await admin.messaging().sendEachForMulticast({
+        tokens: fcmTokens,
+        notification: { title, body },
+        data: data ?? {},
+        webpush: {
+          notification: {
+            icon: '/icon-192.png',
+            badge: '/icon-192.png',
+            tag: `${userId}-${Date.now()}`,
+          },
+          fcmOptions: {
+            link: animeId ? `/detail/${animeId}` : postId ? '/community' : '/',
+          },
         },
-        fcmOptions: {
-          link: animeId ? `/detail/${animeId}` : postId ? '/community' : '/',
+        android: {
+          notification: {
+            color: '#e50914',
+            channelId: 'default',
+          },
         },
-      },
-      android: {
-        notification: {
-          icon: 'notification_icon',
-          color: '#e50914',
-          channelId: 'default',
+        apns: {
+          payload: { aps: { badge: 1, sound: 'default' } },
         },
-      },
-      apns: {
-        payload: { aps: { badge: 1, sound: 'default' } },
-      },
-    });
+      });
+      sentCount += response.successCount;
+    }
 
-    return c.json({ sent: true, platform: 'fcm' });
+    return c.json({
+      sent: sentCount > 0,
+      sentCount,
+      totalTokens: tokens.length,
+      expoTokens: expoTokens.length,
+      fcmTokens: fcmTokens.length,
+    });
   } catch (error: any) {
     console.error('Error sending push notification:', error);
     return c.json({ error: error.message ?? 'Failed to send push' }, 500);

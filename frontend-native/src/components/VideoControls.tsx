@@ -10,6 +10,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 
 const isWeb = Platform.OS === 'web';
+const shouldUseNativeDriver = !isWeb;
 
 export interface SubtitleTrack {
   url: string;
@@ -133,7 +134,7 @@ export function VideoControls({
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 200,
-      useNativeDriver: true,
+      useNativeDriver: shouldUseNativeDriver,
     }).start();
 
     if (isPlaying && !isLocked) {
@@ -141,7 +142,7 @@ export function VideoControls({
         Animated.timing(fadeAnim, {
           toValue: 0,
           duration: 300,
-          useNativeDriver: true,
+          useNativeDriver: shouldUseNativeDriver,
         }).start(() => setShowControls(false));
       }, 3000);
     }

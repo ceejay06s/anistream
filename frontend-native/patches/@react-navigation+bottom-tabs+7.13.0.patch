@@ -1,0 +1,18 @@
+diff --git a/node_modules/@react-navigation/bottom-tabs/src/views/BottomTabBar.tsx b/node_modules/@react-navigation/bottom-tabs/src/views/BottomTabBar.tsx
+index 55b9c8f..196ee46 100644
+--- a/node_modules/@react-navigation/bottom-tabs/src/views/BottomTabBar.tsx
++++ b/node_modules/@react-navigation/bottom-tabs/src/views/BottomTabBar.tsx
+@@ -381,11 +381,11 @@ export function BottomTabBar({
+               },
+             ],
+         tabBarStyle,
++        { pointerEvents: isTabBarHidden ? 'none' : 'auto' },
+       ]}
+-      pointerEvents={isTabBarHidden ? 'none' : 'auto'}
+       onLayout={sidebar ? undefined : handleLayout}
+     >
+-      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
++      <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
+         {tabBarBackgroundElement}
+       </View>
+       <View
