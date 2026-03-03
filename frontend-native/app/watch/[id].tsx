@@ -479,14 +479,12 @@ export default function WatchScreen() {
     }
   };
 
-  // Handle request for new source when streaming fails (403 error)
-  // WebSocket will handle the retry logic on the backend
+  // Handle request for new source when streaming fails (e.g. 403, playback error)
+  // Skip cache so we don't keep returning the same failing source (retry loop)
   const handleRequestNewSource = () => {
     if (useWebSocket) {
-      // WebSocket handles retries automatically
-      wsRetry();
+      wsRetry({ skipCache: true, failedServer: currentServer ?? undefined });
     } else {
-      // REST fallback - just retry
       loadSources();
     }
   };
@@ -559,7 +557,7 @@ export default function WatchScreen() {
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={() => {
             if (useWebSocket) {
-              wsRetry();
+              wsRetry({ skipCache: true, failedServer: currentServer ?? undefined });
             } else {
               loadSources();
             }
@@ -876,7 +874,7 @@ export default function WatchScreen() {
               setRetryElapsed(0);
               retryStartTimeRef.current = null;
               if (useWebSocket) {
-                wsRetry();
+                wsRetry({ skipCache: true, failedServer: currentServer ?? undefined });
               } else {
                 loadSources();
               }
@@ -945,7 +943,7 @@ export default function WatchScreen() {
             style={styles.retryServerButton}
             onPress={() => {
               if (useWebSocket) {
-                wsRetry();
+                wsRetry({ skipCache: true, failedServer: currentServer ?? undefined });
               } else {
                 loadSources();
               }

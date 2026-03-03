@@ -100,6 +100,8 @@ export function VideoPlayer({
   const [autoSkip, setAutoSkip] = useState(false);
   const autoSkippedIntroRef = useRef(false);
   const autoSkippedOutroRef = useRef(false);
+  const lastRequestNewSourceRef = useRef<{ url: string; at: number } | null>(null);
+  const REQUEST_NEW_SOURCE_COOLDOWN_MS = 3000;
 
   const showStreamError = (message: string) => {
     console.log('Stream error:', message);
@@ -358,11 +360,19 @@ export function VideoPlayer({
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
               if (onRequestNewSource) {
-                // Network error (including 403), request new source
+                const now = Date.now();
+                const last = lastRequestNewSourceRef.current;
+                const sameUrlRecently = last && last.url === source && (now - last.at) < REQUEST_NEW_SOURCE_COOLDOWN_MS;
+                if (sameUrlRecently) {
+                  console.log('Skipping request new source (cooldown) to avoid loop');
+                  hls.destroy();
+                  showStreamError('Network error loading video stream. Try another server or use iframe.');
+                  break;
+                }
+                lastRequestNewSourceRef.current = { url: source, at: now };
                 console.log(`Network error (${is403 ? '403' : 'other'}), requesting new source...`);
                 hls.destroy();
                 setIsLoading(true);
-                // Small delay before requesting new source to avoid hammering servers
                 setTimeout(() => {
                   onRequestNewSource();
                 }, 500);
@@ -381,6 +391,16 @@ export function VideoPlayer({
               break;
             default:
               if (onRequestNewSource) {
+                const now = Date.now();
+                const last = lastRequestNewSourceRef.current;
+                const sameUrlRecently = last && last.url === source && (now - last.at) < REQUEST_NEW_SOURCE_COOLDOWN_MS;
+                if (sameUrlRecently) {
+                  console.log('Skipping request new source (cooldown) to avoid loop');
+                  hls.destroy();
+                  showStreamError('Failed to load video stream. Try another server or use iframe.');
+                  break;
+                }
+                lastRequestNewSourceRef.current = { url: source, at: now };
                 console.log('Fatal error, requesting new source...');
                 hls.destroy();
                 setIsLoading(true);
@@ -436,14 +456,15 @@ export function VideoPlayer({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source, autoPlay, useIframe, retryCount]);
 
-  // Reset seek state and auto-skip flags when source changes
+  // Reset seek state, auto-skip flags, and request-new-source cooldown when source changes
   useEffect(() => {
     hasSeekToInitial.current = false;
     autoSkippedIntroRef.current = false;
     autoSkippedOutroRef.current = false;
+    lastRequestNewSourceRef.current = null;
   }, [source]);
 
-  // Auto-skip intro/outro when enabled
+  // Auto-skip intro/outro when enabled (at timestamp or when toggle turned on while in range)
   useEffect(() => {
     if (!autoSkip) return;
     if (intro && currentTime >= intro.start && currentTime < intro.end && !autoSkippedIntroRef.current) {
