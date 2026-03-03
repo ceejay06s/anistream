@@ -998,9 +998,13 @@ export default function WatchScreen() {
       {isDesktopWeb ? (
         <View style={styles.webLayout}>
           {/* Left side - Video Player + Details + Community (75%) */}
-          <ScrollView style={styles.webMainSection}>
+          <ScrollView
+            style={styles.webMainSection}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={true}
+          >
             {renderVideoPlayer()}
-            {renderMainContent()}
+            <View style={styles.detailsWrapper}>{renderMainContent()}</View>
           </ScrollView>
 
           {/* Right side - Episode List + Recommendations (25%) */}
@@ -1010,9 +1014,13 @@ export default function WatchScreen() {
         </View>
       ) : (
         // Mobile/Tablet/Narrow web: Stacked layout
-        <ScrollView style={styles.scrollView}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={true}
+        >
           {renderVideoPlayer()}
-          {renderDetailsSection()}
+          <View style={styles.detailsWrapper}>{renderDetailsSection()}</View>
         </ScrollView>
       )}
 
@@ -1151,6 +1159,15 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
+  detailsWrapper: {
+    ...Platform.select({
+      web: { minHeight: 400 },
+      default: {},
+    }),
   },
   centered: {
     flex: 1,

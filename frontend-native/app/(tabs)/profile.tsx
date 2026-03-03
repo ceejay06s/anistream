@@ -115,6 +115,13 @@ export default function ProfileScreen() {
       setTimeout(() => setUpdateStatus(null), 3000);
       return;
     }
+    if (!Updates.isEnabled) {
+      setUpdateStatus(
+        'OTA updates are not available in this build. Use an EAS Build (preview/production) to get updates.'
+      );
+      setTimeout(() => setUpdateStatus(null), 5000);
+      return;
+    }
 
     setCheckingUpdate(true);
     setUpdateStatus(null);
@@ -134,8 +141,8 @@ export default function ProfileScreen() {
       }
     } catch (error: any) {
       console.error('Update check failed:', error);
-      setUpdateStatus('Failed to check for updates');
-      setTimeout(() => setUpdateStatus(null), 3000);
+      setUpdateStatus(`Update check failed: ${error?.message ?? 'Unknown error'}`);
+      setTimeout(() => setUpdateStatus(null), 5000);
     } finally {
       setCheckingUpdate(false);
     }
@@ -1575,7 +1582,12 @@ export default function ProfileScreen() {
                     </View>
                     <View>
                       <Text style={styles.netflixCardRowTitle}>Check for Update</Text>
-                      <Text style={styles.netflixCardRowSubtitle}>Version 2.0.4</Text>
+                      <Text style={styles.netflixCardRowSubtitle}>
+                        Version 2.0.4
+                        {Platform.OS !== 'web' && Updates.isEnabled && Updates.channel
+                          ? ` · Channel: ${Updates.channel}`
+                          : ''}
+                      </Text>
                     </View>
                   </View>
                   {checkingUpdate ? (

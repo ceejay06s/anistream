@@ -14,6 +14,11 @@
     "deploy:web": "npx expo export --platform web && firebase deploy --only hosting && eas deploy --prod",
     "deploy:firebase": "npx expo export --platform web && firebase deploy --only hosting",
     "deploy:all": "npm run build:web && firebase deploy --only firestore,hosting && eas deploy --prod",
+    "eas:build": "eas build --platform all --profile production",
+    "eas:build:android": "eas build --platform android --profile production",
+    "eas:build:preview": "eas build --platform android --profile preview",
+    "eas:update": "eas update --branch production --auto",
+    "eas:update:preview": "eas update --branch preview --auto",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
