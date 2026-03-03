@@ -2,9 +2,18 @@ import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import { communityService, Post, Comment } from '../communityService';
 import { Platform } from 'react-native';
 
-// Mock Firebase
+// Mock Firebase (app: {} so getDb runs; getFirestore returns null to avoid loading real Firestore ESM)
 jest.mock('@/config/firebase', () => ({
   app: {},
+}));
+
+jest.mock('firebase/firestore', () => ({
+  getFirestore: () => null,
+  collection: () => ({}),
+  query: () => ({}),
+  orderBy: () => ({}),
+  limit: () => ({}),
+  onSnapshot: () => () => {},
 }));
 
 // Mock axios
@@ -118,17 +127,28 @@ describe('Community Service', () => {
     });
   });
 
-  describe('formatTimeAgo', () => {
-    it('should format time ago correctly', () => {
-      const now = Date.now();
-      const oneMinuteAgo = now - 60 * 1000;
-      const oneHourAgo = now - 60 * 60 * 1000;
-      const oneDayAgo = now - 24 * 60 * 60 * 1000;
+  describe('subscribeToPosts', () => {
+    it('returns an unsubscribe function that can be called without throwing', () => {
+      const callback = jest.fn();
+      const unsub = communityService.subscribeToPosts(30, callback);
+      expect(unsub).toBeDefined();
+      expect(typeof unsub).toBe('function');
+      expect(() => unsub()).not.toThrow();
+    });
 
-      // These would require actual implementation testing
-      expect(oneMinuteAgo).toBeLessThan(now);
-      expect(oneHourAgo).toBeLessThan(now);
-      expect(oneDayAgo).toBeLessThan(now);
+    it('invokes callback with an array (posts or empty)', () => {
+      const callback = jest.fn();
+      communityService.subscribeToPosts(30, callback);
+      expect(callback).toHaveBeenCalled();
+      expect(Array.isArray(callback.mock.calls[0][0])).toBe(true);
+    });
+  });
+
+  describe('formatTimeAgo', () => {
+    it('returns a string for recent timestamps', () => {
+      const now = Date.now();
+      expect(communityService.formatTimeAgo(now)).toBeDefined();
+      expect(typeof communityService.formatTimeAgo(now - 60000)).toBe('string');
     });
   });
 });
