@@ -70,7 +70,14 @@ export default function CommunityScreen() {
       setLoading(false);
       setRefreshing(false);
     });
-    return () => unsubscribe();
+    const timeoutId = setTimeout(() => {
+      setLoading(false);
+      setRefreshing(false);
+    }, 10000);
+    return () => {
+      unsubscribe();
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   const handleRefresh = useCallback(() => {

@@ -1,7 +1,7 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View, Text, StyleSheet, Platform, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, Platform, Image, Animated, Easing } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
@@ -57,6 +57,7 @@ function AppContent() {
   const { loading: authLoading } = useAuth();
   const [appReady, setAppReady] = useState(false);
   const [splashHidden, setSplashHidden] = useState(false);
+  const progressAnim = useRef(new Animated.Value(0)).current;
   // On web or DEV, skip update check immediately; on native production wait for it
   const [updateChecked, setUpdateChecked] = useState(
     Platform.OS === 'web' || __DEV__
@@ -80,19 +81,38 @@ function AppContent() {
     return () => clearTimeout(timeoutId);
   }, []);
 
-  // Mark app as ready when auth is loaded AND update check finished
+  // Progress bar: animate 0 → 0.85 over 2.5s while loading (smooth indeterminate feel)
   useEffect(() => {
-    if (!authLoading && updateChecked) {
-      setAppReady(true);
-    }
-  }, [authLoading, updateChecked]);
+    Animated.timing(progressAnim, {
+      toValue: 0.85,
+      duration: 2500,
+      useNativeDriver: false,
+      easing: Easing.out(Easing.cubic),
+    }).start();
+  }, [progressAnim]);
+
+  // When auth + update ready, animate progress to 100% then mark app ready
+  useEffect(() => {
+    if (authLoading || !updateChecked) return;
+    Animated.timing(progressAnim, {
+      toValue: 1,
+      duration: 200,
+      useNativeDriver: false,
+      easing: Easing.out(Easing.ease),
+    }).start(({ finished }) => {
+      if (finished) setAppReady(true);
+    });
+  }, [authLoading, updateChecked, progressAnim]);
 
   // Fallback: never stay on splash longer than 8s (e.g. auth or update check stuck on Android)
   useEffect(() => {
     const maxWaitMs = 8000;
-    const id = setTimeout(() => setAppReady(true), maxWaitMs);
+    const id = setTimeout(() => {
+      progressAnim.setValue(1);
+      setAppReady(true);
+    }, maxWaitMs);
     return () => clearTimeout(id);
-  }, []);
+  }, [progressAnim]);
 
   // Hide splash screen when app is ready
   const onLayoutRootView = useCallback(async () => {
@@ -106,6 +126,10 @@ function AppContent() {
 
   // Show loading screen while initializing (only on web after JS loads)
   if (!appReady) {
+    const progressWidth = progressAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: ['0%', '100%'],
+    });
     return (
       <View style={styles.loadingContainer}>
         <Image
@@ -113,7 +137,9 @@ function AppContent() {
           style={styles.loadingLogo}
           resizeMode="contain"
         />
-        <ActivityIndicator size="large" color="#e50914" style={styles.loadingSpinner} />
+        <View style={styles.progressTrack}>
+          <Animated.View style={[styles.progressFill, { width: progressWidth }]} />
+        </View>
       </View>
     );
   }
@@ -167,8 +193,18 @@ const styles = StyleSheet.create({
     height: 60,
     marginBottom: 32,
   },
-  loadingSpinner: {
-    marginTop: 16,
+  progressTrack: {
+    width: 240,
+    height: 4,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginTop: 24,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#e50914',
+    borderRadius: 2,
   },
   offlineBanner: {
     flexDirection: 'row',
