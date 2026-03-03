@@ -589,6 +589,7 @@ export const communityService = {
       callback(posts);
     }, (err: any) => {
       console.error('Posts subscription error:', err);
+      callback([]);
     });
 
     return unsubscribe;

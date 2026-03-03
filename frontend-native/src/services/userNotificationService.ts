@@ -216,6 +216,7 @@ export const userNotificationService = {
   ): () => void {
     const db = getDb();
     if (!db) {
+      callback([]);
       return () => {};
     }
 
@@ -234,11 +235,15 @@ export const userNotificationService = {
           ...doc.data(),
         }));
         callback(notifications);
+      }, (err: any) => {
+        console.error('Notifications subscription error:', err);
+        callback([]);
       });
 
       return unsubscribe;
     } catch (err) {
       console.error('Failed to subscribe to notifications:', err);
+      callback([]);
       return () => {};
     }
   },
@@ -252,6 +257,7 @@ export const userNotificationService = {
   ): () => void {
     const db = getDb();
     if (!db) {
+      callback(0);
       return () => {};
     }
 
@@ -265,11 +271,15 @@ export const userNotificationService = {
 
       const unsubscribe = onSnapshot(q, (snapshot: any) => {
         callback(snapshot.size);
+      }, (err: any) => {
+        console.error('Unread count subscription error:', err);
+        callback(0);
       });
 
       return unsubscribe;
     } catch (err) {
       console.error('Failed to subscribe to unread count:', err);
+      callback(0);
       return () => {};
     }
   },

@@ -26,7 +26,7 @@ export default function TabLayout() {
         },
         tabBarActiveTintColor: '#e50914',
         tabBarInactiveTintColor: '#888',
-        tabBarShowLabel: Platform.OS !== 'web',
+        tabBarShowLabel: Platform.OS === 'web',
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '500',

@@ -51,7 +51,11 @@ export default function NotificationsScreen() {
         setLoading(false);
       }
     );
-    return () => unsubscribe();
+    const timeoutId = setTimeout(() => setLoading(false), 10000);
+    return () => {
+      unsubscribe();
+      clearTimeout(timeoutId);
+    };
   }, [user]);
 
   const handleMarkAllRead = useCallback(async () => {
