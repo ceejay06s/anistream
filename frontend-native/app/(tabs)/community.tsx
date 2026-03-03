@@ -14,12 +14,14 @@ import {
   KeyboardAvoidingView,
   ScrollView,
   Dimensions,
+  Linking,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
-import { communityService, Post, Comment, MediaItem } from '@/services/communityService';
+import { communityService, Post, Comment, MediaItem, type MediaFileInput } from '@/services/communityService';
 import { userNotificationService } from '@/services/userNotificationService';
 import { executeRecaptcha } from '@/utils/recaptcha';
 import { isRecaptchaEnabled, RECAPTCHA_SITE_KEY } from '@/config/recaptcha';
@@ -48,7 +50,8 @@ export default function CommunityScreen() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newPostContent, setNewPostContent] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [selectedMedia, setSelectedMedia] = useState<{ file: File; preview: string; type: 'image' | 'video' }[]>([]);
+  type SelectedMediaItem = { file?: File; uri?: string; preview: string; type: 'image' | 'video'; name?: string };
+  const [selectedMedia, setSelectedMedia] = useState<SelectedMediaItem[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Ref to prevent modal from reopening immediately after closing
@@ -92,7 +95,9 @@ export default function CommunityScreen() {
     setShowCreateModal(false);
     // Clean up previews when closing
     setSelectedMedia((prev) => {
-      prev.forEach((m) => URL.revokeObjectURL(m.preview));
+      if (Platform.OS === 'web' && typeof URL !== 'undefined' && URL.revokeObjectURL) {
+        prev.forEach((m) => URL.revokeObjectURL(m.preview));
+      }
       return [];
     });
     setNewPostContent('');
@@ -150,11 +155,41 @@ export default function CommunityScreen() {
   const removeMedia = (index: number) => {
     setSelectedMedia((prev) => {
       const updated = [...prev];
-      URL.revokeObjectURL(updated[index].preview);
+      if (Platform.OS === 'web' && typeof URL !== 'undefined' && URL.revokeObjectURL) {
+        URL.revokeObjectURL(updated[index].preview);
+      }
       updated.splice(index, 1);
       return updated;
     });
   };
+
+  const pickMediaNative = useCallback(async (mediaTypes: 'images' | 'videos' | 'all') => {
+    if (selectedMedia.length >= 4) return;
+    try {
+      const { launchImageLibraryAsync, requestMediaLibraryPermissionsAsync } = await import('expo-image-picker');
+      const { status } = await requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        console.warn('Media library permission denied');
+        return;
+      }
+      const result = await launchImageLibraryAsync({
+        mediaTypes: mediaTypes === 'all' ? ['images', 'videos'] : mediaTypes === 'images' ? ['images'] : ['videos'],
+        allowsMultipleSelection: true,
+        selectionLimit: 4 - selectedMedia.length,
+        videoMaxDuration: 60,
+      });
+      if (result.canceled) return;
+      const newItems: SelectedMediaItem[] = result.assets.map((asset) => ({
+        uri: asset.uri,
+        preview: asset.uri,
+        type: (asset.type ?? 'image') === 'video' ? 'video' : 'image',
+        name: asset.fileName ?? undefined,
+      }));
+      setSelectedMedia((prev) => [...prev, ...newItems].slice(0, 4));
+    } catch (err) {
+      console.error('Failed to pick media:', err);
+    }
+  }, [selectedMedia.length]);
 
   const handleCreatePost = async () => {
     if (!user || (!newPostContent.trim() && selectedMedia.length === 0)) return;
@@ -177,7 +212,11 @@ export default function CommunityScreen() {
         }
       }
 
-      const mediaFiles = selectedMedia.map((m) => m.file);
+      const mediaFiles: MediaFileInput[] = selectedMedia.map((m) =>
+        m.file
+          ? m.file
+          : { uri: m.uri!, type: m.type === 'video' ? 'video/mp4' : 'image/jpeg', name: m.name }
+      );
       const newPost = await communityService.createPost(
         { uid: user.uid, displayName: user.displayName, photoURL: user.photoURL },
         newPostContent.trim(),
@@ -188,12 +227,20 @@ export default function CommunityScreen() {
       setPosts([newPost, ...posts]);
       // Clear form and close modal first
       setNewPostContent('');
-      // Clean up previews
-      selectedMedia.forEach((m) => URL.revokeObjectURL(m.preview));
+      // Clean up previews (web only)
+      if (Platform.OS === 'web' && typeof URL !== 'undefined' && URL.revokeObjectURL) {
+        selectedMedia.forEach((m) => URL.revokeObjectURL(m.preview));
+      }
       setSelectedMedia([]);
       handleCloseCreateModal();
     } catch (err) {
       console.error('Failed to create post:', err);
+      const message = err instanceof Error ? err.message : 'Post failed. Try again.';
+      if (Platform.OS === 'web') {
+        alert(message);
+      } else {
+        Alert.alert('Post failed', message);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -343,7 +390,7 @@ export default function CommunityScreen() {
               >
                 {mediaItem.type === 'image' ? (
                   <Image source={{ uri: mediaItem.url }} style={styles.mediaImage} resizeMode="cover" />
-                ) : (
+                ) : Platform.OS === 'web' ? (
                   <View style={styles.videoContainer}>
                     <video
                       src={mediaItem.url}
@@ -351,6 +398,15 @@ export default function CommunityScreen() {
                       controls
                     />
                   </View>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.videoContainer, styles.videoPlaceholder]}
+                    onPress={() => Linking.openURL(mediaItem.url)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="play-circle" size={48} color="#fff" />
+                    <Text style={styles.videoPlaceholderText}>Tap to play video</Text>
+                  </TouchableOpacity>
                 )}
               </View>
             ))}
@@ -412,7 +468,7 @@ export default function CommunityScreen() {
 
   // Comments Modal rendered inline to prevent recreation issues
 
-  // Not logged in view
+  // Not logged in view (web: full prompt + list; native: fall through to main content so list still renders)
   if (!user && Platform.OS === 'web') {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
@@ -433,7 +489,6 @@ export default function CommunityScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Still show posts to non-logged in users */}
         <Text style={styles.browseText}>Browse Community Posts</Text>
         <FlatList
           data={posts}
@@ -525,7 +580,7 @@ export default function CommunityScreen() {
 
             <View style={styles.modalFooter}>
               <View style={styles.footerLeft}>
-                {Platform.OS === 'web' && (
+                {Platform.OS === 'web' ? (
                   <>
                     <input
                       ref={fileInputRef as any}
@@ -545,6 +600,23 @@ export default function CommunityScreen() {
                     <TouchableOpacity
                       style={[styles.mediaButton, selectedMedia.length >= 4 && styles.mediaButtonDisabled]}
                       onPress={() => fileInputRef.current?.click()}
+                      disabled={selectedMedia.length >= 4}
+                    >
+                      <Ionicons name="videocam-outline" size={22} color={selectedMedia.length >= 4 ? '#444' : '#888'} />
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <>
+                    <TouchableOpacity
+                      style={[styles.mediaButton, selectedMedia.length >= 4 && styles.mediaButtonDisabled]}
+                      onPress={() => pickMediaNative('images')}
+                      disabled={selectedMedia.length >= 4}
+                    >
+                      <Ionicons name="image-outline" size={22} color={selectedMedia.length >= 4 ? '#444' : '#888'} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.mediaButton, selectedMedia.length >= 4 && styles.mediaButtonDisabled]}
+                      onPress={() => pickMediaNative('videos')}
                       disabled={selectedMedia.length >= 4}
                     >
                       <Ionicons name="videocam-outline" size={22} color={selectedMedia.length >= 4 ? '#444' : '#888'} />
@@ -1219,6 +1291,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
     borderRadius: 8,
     overflow: 'hidden',
+  },
+  videoPlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: 120,
+  },
+  videoPlaceholderText: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 12,
+    marginTop: 8,
   },
   // Media preview in create modal
   mediaPreviewContainer: {
