@@ -23,20 +23,24 @@ const Analytics = Platform.OS === 'web'
   ? require('@vercel/analytics/react').Analytics
   : () => null;
 
-// OTA Updates — checks during splash screen and auto-applies silently
+// OTA Updates — checks during splash screen and auto-applies silently.
+// Only runs in native release builds when expo-updates is enabled (EAS Build with channel).
 async function checkAndApplyUpdate(): Promise<void> {
   if (Platform.OS === 'web' || __DEV__) return;
   try {
     const Updates = require('expo-updates');
+    if (!Updates.isEnabled) {
+      // Updates disabled: missing/invalid config, or not an EAS build with updates
+      return;
+    }
     const update = await Updates.checkForUpdateAsync();
     if (update.isAvailable) {
       await Updates.fetchUpdateAsync();
-      // Silently reload — user sees the new version on next launch instead of a prompt
       await Updates.reloadAsync();
     }
   } catch (err) {
     // Silently fail — updates are non-critical
-    console.log('OTA update check failed:', err);
+    console.warn('OTA update check failed:', err);
   }
 }
 
@@ -58,28 +62,27 @@ function AppContent() {
   const [appReady, setAppReady] = useState(false);
   const [splashHidden, setSplashHidden] = useState(false);
   const progressAnim = useRef(new Animated.Value(0)).current;
-  // On web or DEV, skip update check immediately; on native production wait for it
-  const [updateChecked, setUpdateChecked] = useState(
-    Platform.OS === 'web' || __DEV__
-  );
+  // On web or DEV, skip update check. On native release, wait for check (or timeout).
+  const isUpdatesRelevant = Platform.OS !== 'web' && !__DEV__;
+  const [updateChecked, setUpdateChecked] = useState(!isUpdatesRelevant);
 
   // Web: Firestore subscription → browser Notification API + FCM registration
   useBrowserNotifications();
   // Native (Android/iOS): Expo push token registration + foreground handler + tap navigation
   useNativeNotifications();
 
-  // Run OTA update check during splash — silently applies if available.
-  // Use a timeout so local/standalone builds never hang (checkForUpdateAsync can block on Android).
+  // Run OTA update check during splash when updates are relevant (native release).
+  // Timeout so app never hangs if the update server is slow or unreachable.
   useEffect(() => {
-    if (Platform.OS === 'web' || __DEV__) return;
-    const timeoutMs = 5000;
+    if (!isUpdatesRelevant) return;
+    const timeoutMs = 8000;
     const timeoutId = setTimeout(() => setUpdateChecked(true), timeoutMs);
     checkAndApplyUpdate().finally(() => {
       clearTimeout(timeoutId);
       setUpdateChecked(true);
     });
     return () => clearTimeout(timeoutId);
-  }, []);
+  }, [isUpdatesRelevant]);
 
   // Progress bar: animate 0 → 0.85 over 2.5s while loading (smooth indeterminate feel)
   useEffect(() => {

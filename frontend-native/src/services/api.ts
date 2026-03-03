@@ -1,16 +1,21 @@
 import axios, { AxiosError } from 'axios';
+import { Platform } from 'react-native';
 
-// Use environment variable for production, fallback to localhost for development
+const PRODUCTION_API_URL = 'https://anistream-backend-blme.onrender.com';
+
+// Use environment variable for production, fallback by platform
 const getBaseUrl = () => {
-  // Check for environment variable (set at build time via EAS or Expo)
   if (process.env.EXPO_PUBLIC_API_URL) {
     return process.env.EXPO_PUBLIC_API_URL;
   }
-  // Production detection for web builds (Vercel, etc.)
-  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
-    return 'https://anistream-backend-blme.onrender.com';
+  // Native (Android/iOS): always use production so device/emulator never hits localhost
+  if (Platform.OS === 'android' || Platform.OS === 'ios') {
+    return PRODUCTION_API_URL;
   }
-  // Fallback to localhost for development
+  // Web: production if not localhost
+  if (typeof window !== 'undefined' && window.location?.hostname !== 'localhost' && window.location?.hostname !== '127.0.0.1') {
+    return PRODUCTION_API_URL;
+  }
   return 'http://localhost:8801';
 };
 
@@ -21,7 +26,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 15000,
+  timeout: 30000, // 30s for slow backend/aniwatch proxy
 });
 
 // Retry logic for failed requests

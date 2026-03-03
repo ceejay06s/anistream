@@ -181,21 +181,35 @@ const isSubtitleFile = (url: string): boolean => {
 const DEFAULT_BROWSER_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
 
-const chooseRefererOrigin = (decodedUrl: string, isSegment: boolean, isImage: boolean) => {
+// Referer/origin for embed pages (HD-1/MegaCloud streams expect these)
+const EMBED_REFERER_MEGACLOUD = { referer: 'https://megacloud.blog/', origin: 'https://megacloud.blog' };
+const EMBED_REFERER_HIANIME = { referer: 'https://hianime.to/', origin: 'https://hianime.to' };
+
+const chooseRefererOrigin = (
+  decodedUrl: string,
+  isSegment: boolean,
+  isImage: boolean,
+  isM3U8: boolean
+) => {
   try {
     const target = new URL(decodedUrl);
-    return {
-      referer: `${target.origin}/`,
-      origin: target.origin,
-    };
-  } catch {
-    if (isSegment) {
-      return { referer: 'https://megacloud.blog/', origin: 'https://megacloud.blog' };
+    const streamOrigin = { referer: `${target.origin}/`, origin: target.origin };
+    // M3U8 and segments: use embed referer so CDN accepts (stream host often rejects own origin)
+    if (isSegment || isM3U8) {
+      return EMBED_REFERER_MEGACLOUD;
     }
     if (isImage) {
-      return { referer: 'https://hianime.to/', origin: 'https://hianime.to' };
+      return EMBED_REFERER_HIANIME;
     }
-    return { referer: 'https://hianime.to/', origin: 'https://hianime.to' };
+    return streamOrigin;
+  } catch {
+    if (isSegment || isM3U8) {
+      return EMBED_REFERER_MEGACLOUD;
+    }
+    if (isImage) {
+      return EMBED_REFERER_HIANIME;
+    }
+    return EMBED_REFERER_HIANIME;
   }
 };
 
@@ -214,7 +228,7 @@ streamingRoutes.get('/proxy', async (c) => {
     const isSubtitle = isSubtitleFile(decodedUrl);
     const isImage = /\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?|$)/i.test(decodedUrl);
     const requestRange = c.req.header('range');
-    const { referer, origin } = chooseRefererOrigin(decodedUrl, isSegment, isImage);
+    const { referer, origin } = chooseRefererOrigin(decodedUrl, isSegment, isImage, isM3U8);
 
     console.log(`Proxying ${isM3U8 ? 'M3U8' : isSubtitle ? 'subtitle' : isImage ? 'image' : isSegment ? 'segment' : 'video'}: ${decodedUrl.substring(0, 100)}...`);
 
@@ -230,26 +244,51 @@ streamingRoutes.get('/proxy', async (c) => {
       baseHeaders['Range'] = requestRange;
     }
 
-    // Subtitles are often hosted on different infra with stricter referer/origin handling.
-    // Retry once with simpler headers before failing.
-    const requestAttempts = isSubtitle
-      ? [
-          { headers: baseHeaders, useHeaderGenerator: false },
-          {
-            headers: {
-              'User-Agent': DEFAULT_BROWSER_UA,
-              'Accept': 'text/vtt,text/plain;q=0.9,*/*;q=0.8',
-              ...(requestRange ? { 'Range': requestRange } : {}),
-            },
-            useHeaderGenerator: false,
+    // Build request attempts: subtitles and M3U8 get multiple referer/header strategies.
+    let requestAttempts: Array<{ headers: Record<string, string>; useHeaderGenerator: boolean }>;
+    if (isSubtitle) {
+      requestAttempts = [
+        { headers: baseHeaders, useHeaderGenerator: false },
+        {
+          headers: {
+            'User-Agent': DEFAULT_BROWSER_UA,
+            'Accept': 'text/vtt,text/plain;q=0.9,*/*;q=0.8',
+            ...(requestRange ? { 'Range': requestRange } : {}),
           },
-        ]
-      : [
-          {
-            headers: baseHeaders,
-            useHeaderGenerator: true,
+          useHeaderGenerator: false,
+        },
+      ];
+    } else if (isM3U8) {
+      // M3U8: try embed referer with header generator, then without, then stream origin, then hianime.
+      let streamOriginHeaders: Record<string, string> = baseHeaders;
+      try {
+        const target = new URL(decodedUrl);
+        streamOriginHeaders = {
+          ...baseHeaders,
+          'Referer': `${target.origin}/`,
+          'Origin': target.origin,
+        };
+      } catch {
+        // keep baseHeaders (megacloud)
+      }
+      requestAttempts = [
+        { headers: baseHeaders, useHeaderGenerator: true },
+        { headers: baseHeaders, useHeaderGenerator: false },
+        { headers: streamOriginHeaders, useHeaderGenerator: false },
+        {
+          headers: {
+            ...baseHeaders,
+            'Referer': EMBED_REFERER_HIANIME.referer,
+            'Origin': EMBED_REFERER_HIANIME.origin,
           },
-        ];
+          useHeaderGenerator: false,
+        },
+      ];
+    } else {
+      requestAttempts = [
+        { headers: baseHeaders, useHeaderGenerator: true },
+      ];
+    }
 
     let response: any = null;
     let lastError: any = null;
@@ -274,15 +313,21 @@ streamingRoutes.get('/proxy', async (c) => {
           headers: attempt.headers,
         });
 
-        if (response.statusCode >= 400 && isSubtitle && index < requestAttempts.length - 1) {
-          console.warn(`Subtitle proxy attempt ${index + 1} failed with ${response.statusCode}, retrying...`);
-          continue;
+        if (response.statusCode >= 400 && index < requestAttempts.length - 1) {
+          if (isSubtitle || isM3U8) {
+            console.warn(
+              `${isM3U8 ? 'M3U8' : 'Subtitle'} proxy attempt ${index + 1} failed with ${response.statusCode}, retrying...`
+            );
+            continue;
+          }
         }
         break;
       } catch (err: any) {
         lastError = err;
-        if (isSubtitle && index < requestAttempts.length - 1) {
-          console.warn(`Subtitle proxy attempt ${index + 1} threw ${err.message}, retrying...`);
+        if (index < requestAttempts.length - 1 && (isSubtitle || isM3U8)) {
+          console.warn(
+            `${isM3U8 ? 'M3U8' : 'Subtitle'} proxy attempt ${index + 1} threw ${err.message}, retrying...`
+          );
           continue;
         }
       }
