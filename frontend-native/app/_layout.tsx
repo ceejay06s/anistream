@@ -5,6 +5,8 @@ import { View, Text, StyleSheet, Platform, Image, Animated, Easing } from 'react
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { DebugProvider, addDebugError } from '@/context/DebugContext';
+import { DebugErrorBoundary, DebugPanelWithButton } from '@/components/DebugPanel';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useBrowserNotifications } from '@/hooks/useBrowserNotifications';
 import { useNativeNotifications } from '@/hooks/useNativeNotifications';
@@ -99,6 +101,27 @@ function AppContent() {
   // Native (Android/iOS): Expo push token registration + foreground handler + tap navigation
   useNativeNotifications();
 
+  // Global error handlers → debug panel
+  useEffect(() => {
+    const ErrorUtils = (globalThis as { ErrorUtils?: { getGlobalHandler?: () => (err: Error, isFatal?: string) => void; setGlobalHandler: (fn: (err: Error, isFatal?: string) => void) => void } }).ErrorUtils;
+    if (ErrorUtils) {
+      const prev = ErrorUtils.getGlobalHandler?.();
+      ErrorUtils.setGlobalHandler((err: Error, isFatal?: string) => {
+        addDebugError(err, 'unhandled');
+        prev?.(err, isFatal);
+      });
+    }
+    if (typeof globalThis.addEventListener === 'function') {
+      const onRejection = (e: PromiseRejectionEvent) => {
+        const err = e?.reason ?? new Error('Unhandled promise rejection');
+        addDebugError(err instanceof Error ? err : new Error(String(err)), 'promise');
+      };
+      globalThis.addEventListener('unhandledrejection', onRejection);
+      return () => globalThis.removeEventListener('unhandledrejection', onRejection);
+    }
+    return undefined;
+  }, []);
+
   // Run OTA update check during splash when updates are relevant (native release).
   // Timeout so app never hangs if the update server is slow or unreachable.
   useEffect(() => {
@@ -185,19 +208,22 @@ function AppContent() {
       {Platform.OS === 'web' && <SpeedInsights />}
       {Platform.OS === 'web' && <Analytics />}
       <OfflineBanner />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: '#000' },
-          animation: 'slide_from_right',
-        }}
-      >
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="detail/[id]" options={{ headerShown: false }} />
-        <Stack.Screen name="watch/[id]" options={{ headerShown: false }} />
-        <Stack.Screen name="policy" options={{ headerShown: false }} />
-        <Stack.Screen name="terms" options={{ headerShown: false }} />
-      </Stack>
+      <DebugPanelWithButton />
+      <DebugErrorBoundary>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: '#000' },
+            animation: 'slide_from_right',
+          }}
+        >
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="detail/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="watch/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="policy" options={{ headerShown: false }} />
+          <Stack.Screen name="terms" options={{ headerShown: false }} />
+        </Stack>
+      </DebugErrorBoundary>
     </View>
   );
 }
@@ -206,7 +232,9 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <SafeAreaProvider>
-        <AppContent />
+        <DebugProvider>
+          <AppContent />
+        </DebugProvider>
       </SafeAreaProvider>
     </AuthProvider>
   );
