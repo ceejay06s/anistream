@@ -184,6 +184,8 @@ const DEFAULT_BROWSER_UA =
 // Referer/origin for embed pages (HD-1/MegaCloud streams expect these)
 const EMBED_REFERER_MEGACLOUD = { referer: 'https://megacloud.blog/', origin: 'https://megacloud.blog' };
 const EMBED_REFERER_HIANIME = { referer: 'https://hianime.to/', origin: 'https://hianime.to' };
+// Rapid-cloud / fogtwist / crimsonstorm _v7 streams often require this
+const EMBED_REFERER_RAPID_CLOUD = { referer: 'https://rapid-cloud.co/', origin: 'https://rapid-cloud.co' };
 
 const chooseRefererOrigin = (
   decodedUrl: string,
@@ -193,9 +195,12 @@ const chooseRefererOrigin = (
 ) => {
   try {
     const target = new URL(decodedUrl);
+    const host = (target.hostname || '').toLowerCase();
+    const isRapidCloudCdn = /^(.*\.)?(fogtwist21\.xyz|crimsonstorm18\.pro|rapid-cloud\.co)$/i.test(host);
     const streamOrigin = { referer: `${target.origin}/`, origin: target.origin };
     // M3U8 and segments: use embed referer so CDN accepts (stream host often rejects own origin)
     if (isSegment || isM3U8) {
+      if (isRapidCloudCdn) return EMBED_REFERER_RAPID_CLOUD;
       return EMBED_REFERER_MEGACLOUD;
     }
     if (isImage) {
@@ -259,7 +264,7 @@ streamingRoutes.get('/proxy', async (c) => {
         },
       ];
     } else if (isM3U8) {
-      // M3U8: try embed referer with header generator, then without, then stream origin, then hianime.
+      // M3U8: try multiple referer strategies (embed pages + stream origin).
       let streamOriginHeaders: Record<string, string> = baseHeaders;
       try {
         const target = new URL(decodedUrl);
@@ -271,10 +276,21 @@ streamingRoutes.get('/proxy', async (c) => {
       } catch {
         // keep baseHeaders (megacloud)
       }
+      const isRapidCloudCdn = /\.(fogtwist21\.xyz|crimsonstorm18\.pro|rapid-cloud\.co)(\/|$)/i.test(decodedUrl);
       requestAttempts = [
         { headers: baseHeaders, useHeaderGenerator: true },
         { headers: baseHeaders, useHeaderGenerator: false },
         { headers: streamOriginHeaders, useHeaderGenerator: false },
+        ...(isRapidCloudCdn
+          ? [{
+              headers: {
+                ...baseHeaders,
+                'Referer': EMBED_REFERER_RAPID_CLOUD.referer,
+                'Origin': EMBED_REFERER_RAPID_CLOUD.origin,
+              },
+              useHeaderGenerator: false,
+            }]
+          : []),
         {
           headers: {
             ...baseHeaders,

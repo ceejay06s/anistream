@@ -13,17 +13,23 @@ const app = new Hono();
 // Middleware
 app.use('*', logger());
 app.use('*', cors({
-  origin: [
-    'http://localhost:8800',
-    'http://localhost:5173',
-    'http://localhost:8081',
-    'http://localhost:19006',
-    'https://anistream-pink.vercel.app',
-    'https://anistream.expo.app',
-    'https://aniwatch-76fd3.web.app',
-    'https://anistream--cjdycx6tzo.expo.app',
-    'https://anistream-oz3xd4n0i-kuris-projects-e157a786.vercel.app',
-  ],
+  origin: (origin: string) => {
+    if (!origin) return undefined;
+    const allowed = [
+      'http://localhost:8800',
+      'http://localhost:5173',
+      'http://localhost:8081',
+      'http://localhost:19006',
+      'https://anistream-pink.vercel.app',
+      'https://anistream.expo.app',
+      'https://aniwatch-76fd3.web.app',
+      'https://anistream-oz3xd4n0i-kuris-projects-e157a786.vercel.app',
+    ];
+    if (allowed.includes(origin)) return origin;
+    // Allow any Expo preview/deploy URL (anistream--*.expo.app)
+    if (/^https:\/\/anistream--[a-z0-9]+\.expo\.app$/.test(origin)) return origin;
+    return undefined;
+  },
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization', 'X-Secret-Token'],
 }));

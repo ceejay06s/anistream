@@ -18,7 +18,7 @@ export function CommunityPostVideo({ url, style }: CommunityPostVideoProps) {
         style={styles.video}
         contentFit="contain"
         nativeControls
-        allowsFullscreen
+        fullscreenOptions={{ enable: true }}
       />
     </View>
   );

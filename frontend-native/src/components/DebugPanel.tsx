@@ -64,21 +64,24 @@ function copyEntryToClipboard(entry: DebugErrorEntry) {
 }
 
 export function DebugPanelUI({ errors, onClear, visible, onToggle }: Props) {
+  const showFab = errors.length > 0 || visible;
   return (
     <>
-      <TouchableOpacity
-        activeOpacity={0.8}
-        onPress={onToggle}
-        style={styles.fab}
-        accessibilityLabel="Open debug panel"
-      >
-        <Ionicons name="bug" size={24} color="#fff" />
-        {errors.length > 0 && (
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{errors.length > 99 ? '99+' : errors.length}</Text>
-          </View>
-        )}
-      </TouchableOpacity>
+      {showFab && (
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={onToggle}
+          style={styles.fab}
+          accessibilityLabel="Open debug panel"
+        >
+          <Ionicons name="bug" size={24} color="#fff" />
+          {errors.length > 0 && (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{errors.length > 99 ? '99+' : errors.length}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      )}
 
       <Modal
         visible={visible}

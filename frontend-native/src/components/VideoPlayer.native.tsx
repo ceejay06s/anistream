@@ -249,7 +249,7 @@ export function VideoPlayer({
         style={styles.video}
         contentFit="fill"
         nativeControls={!isLocked}
-        allowsFullscreen
+        fullscreenOptions={{ enable: true }}
         allowsPictureInPicture
         onFullscreenEnter={handleFullscreenEnter}
         onFullscreenExit={handleFullscreenExit}
