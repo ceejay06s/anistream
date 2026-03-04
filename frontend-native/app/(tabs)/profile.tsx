@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import Constants from 'expo-constants';
 import { useAuth } from '@/context/AuthContext';
 import { savedAnimeService, SavedAnime, CollectionStatus, COLLECTION_LABELS } from '@/services/savedAnimeService';
 import { getProxiedImageUrl } from '@/utils/imageProxy';
@@ -108,6 +109,9 @@ export default function ProfileScreen() {
   // Update states
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<string | null>(null);
+  const appVersion = Constants.expoConfig?.version ?? 'unknown';
+  const updateChannel = Updates.channel ?? 'none';
+  const updateRuntimeVersion = Updates.runtimeVersion ?? 'unknown';
 
   const handleCheckForUpdate = async () => {
     if (Platform.OS === 'web') {
@@ -117,14 +121,14 @@ export default function ProfileScreen() {
     }
     if (!Updates.isEnabled) {
       setUpdateStatus(
-        'OTA updates are not available in this build. Use an EAS Build (preview/production) to get updates.'
+        `OTA is disabled in this build (channel: ${updateChannel}, runtime: ${updateRuntimeVersion}). Use an EAS preview/production build, not Expo Go/dev server.`
       );
       setTimeout(() => setUpdateStatus(null), 5000);
       return;
     }
 
     setCheckingUpdate(true);
-    setUpdateStatus(null);
+    setUpdateStatus(`Checking for updates... (channel: ${updateChannel}, runtime: ${updateRuntimeVersion})`);
 
     try {
       const update = await Updates.checkForUpdateAsync();
@@ -136,7 +140,7 @@ export default function ProfileScreen() {
           await Updates.reloadAsync();
         }, 1000);
       } else {
-        setUpdateStatus('You have the latest version!');
+        setUpdateStatus(`You already have the latest update for ${updateChannel} (${updateRuntimeVersion}).`);
         setTimeout(() => setUpdateStatus(null), 3000);
       }
     } catch (error: any) {
@@ -1583,9 +1587,9 @@ export default function ProfileScreen() {
                     <View>
                       <Text style={styles.netflixCardRowTitle}>Check for Update</Text>
                       <Text style={styles.netflixCardRowSubtitle}>
-                        Version 2.0.4
-                        {Platform.OS !== 'web' && Updates.isEnabled && Updates.channel
-                          ? ` · Channel: ${Updates.channel}`
+                        Version {appVersion}
+                        {Platform.OS !== 'web'
+                          ? ` · Channel: ${updateChannel} · Runtime: ${updateRuntimeVersion}`
                           : ''}
                       </Text>
                     </View>

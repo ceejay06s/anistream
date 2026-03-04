@@ -24,23 +24,51 @@ const Analytics = Platform.OS === 'web'
   : () => null;
 
 // OTA Updates — checks during splash screen and auto-applies silently.
-// Only runs in native release builds when expo-updates is enabled (EAS Build with channel).
-async function checkAndApplyUpdate(): Promise<void> {
-  if (Platform.OS === 'web' || __DEV__) return;
+// Logs skip reasons so channel/runtime mismatches are easier to diagnose.
+type OtaCheckResult =
+  | 'skipped_web'
+  | 'skipped_dev'
+  | 'updates_disabled'
+  | 'no_update_available'
+  | 'update_applied'
+  | 'check_failed';
+
+async function checkAndApplyUpdate(): Promise<OtaCheckResult> {
+  if (Platform.OS === 'web') return 'skipped_web';
   try {
     const Updates = require('expo-updates');
+    const channel = Updates.channel ?? 'none';
+    const runtimeVersion = Updates.runtimeVersion ?? 'unknown';
+
+    if (__DEV__) {
+      console.info(
+        `[OTA] Skipping startup check in __DEV__ (channel=${channel}, runtime=${runtimeVersion}).`
+      );
+      return 'skipped_dev';
+    }
+
     if (!Updates.isEnabled) {
-      // Updates disabled: missing/invalid config, or not an EAS build with updates
-      return;
+      console.info(
+        `[OTA] expo-updates is disabled (channel=${channel}, runtime=${runtimeVersion}).`
+      );
+      return 'updates_disabled';
     }
+
+    console.info(`[OTA] Checking for update (channel=${channel}, runtime=${runtimeVersion}).`);
     const update = await Updates.checkForUpdateAsync();
-    if (update.isAvailable) {
-      await Updates.fetchUpdateAsync();
-      await Updates.reloadAsync();
+    if (!update.isAvailable) {
+      console.info('[OTA] No update available.');
+      return 'no_update_available';
     }
+
+    console.info('[OTA] Update found. Fetching...');
+    await Updates.fetchUpdateAsync();
+    console.info('[OTA] Update downloaded. Reloading app...');
+    await Updates.reloadAsync();
+    return 'update_applied';
   } catch (err) {
-    // Silently fail — updates are non-critical
     console.warn('OTA update check failed:', err);
+    return 'check_failed';
   }
 }
 
@@ -62,8 +90,8 @@ function AppContent() {
   const [appReady, setAppReady] = useState(false);
   const [splashHidden, setSplashHidden] = useState(false);
   const progressAnim = useRef(new Animated.Value(0)).current;
-  // On web or DEV, skip update check. On native release, wait for check (or timeout).
-  const isUpdatesRelevant = Platform.OS !== 'web' && !__DEV__;
+  // On native, run startup check and let checkAndApplyUpdate decide skip reasons.
+  const isUpdatesRelevant = Platform.OS !== 'web';
   const [updateChecked, setUpdateChecked] = useState(!isUpdatesRelevant);
 
   // Web: Firestore subscription → browser Notification API + FCM registration
@@ -77,10 +105,14 @@ function AppContent() {
     if (!isUpdatesRelevant) return;
     const timeoutMs = 8000;
     const timeoutId = setTimeout(() => setUpdateChecked(true), timeoutMs);
-    checkAndApplyUpdate().finally(() => {
-      clearTimeout(timeoutId);
-      setUpdateChecked(true);
-    });
+    checkAndApplyUpdate()
+      .then(result => {
+        console.info(`[OTA] Startup check result: ${result}`);
+      })
+      .finally(() => {
+        clearTimeout(timeoutId);
+        setUpdateChecked(true);
+      });
     return () => clearTimeout(timeoutId);
   }, [isUpdatesRelevant]);
 

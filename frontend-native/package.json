@@ -17,8 +17,10 @@
     "eas:build": "eas build --platform all --profile production",
     "eas:build:android": "eas build --platform android --profile production",
     "eas:build:preview": "eas build --platform android --profile preview",
-    "eas:update": "eas update --branch production --auto",
+    "eas:update": "npm run eas:update:production",
+    "eas:update:production": "eas update --branch production --auto",
     "eas:update:preview": "eas update --branch preview --auto",
+    "eas:update:development": "eas update --branch development --auto",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
