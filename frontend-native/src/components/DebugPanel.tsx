@@ -91,25 +91,28 @@ export function DebugPanelUI({ errors, onClear, visible, onToggle }: Props) {
       >
         <Pressable style={styles.modalBackdrop} onPress={onToggle}>
           <Pressable style={styles.panel} onPress={(e) => e.stopPropagation()}>
-            <View style={styles.panelHeader}>
-              <Text style={styles.panelTitle}>Debug</Text>
-              <View style={styles.panelActions}>
-                {errors.length > 0 && (
-                  <TouchableOpacity onPress={onClear} style={styles.clearBtn}>
-                    <Ionicons name="trash-outline" size={20} color="#fff" />
-                    <Text style={styles.clearBtnText}>Clear</Text>
+            <View style={styles.panelInner}>
+              <View style={styles.panelHeader}>
+                <Text style={styles.panelTitle}>Debug</Text>
+                <View style={styles.panelActions}>
+                  {errors.length > 0 && (
+                    <TouchableOpacity onPress={onClear} style={styles.clearBtn}>
+                      <Ionicons name="trash-outline" size={20} color="#fff" />
+                      <Text style={styles.clearBtnText}>Clear</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity onPress={onToggle} style={styles.closeBtn}>
+                    <Ionicons name="close" size={24} color="#fff" />
                   </TouchableOpacity>
-                )}
-                <TouchableOpacity onPress={onToggle} style={styles.closeBtn}>
-                  <Ionicons name="close" size={24} color="#fff" />
-                </TouchableOpacity>
+                </View>
               </View>
-            </View>
-            <ScrollView
-              style={styles.scroll}
-              contentContainerStyle={styles.scrollContent}
-              showsVerticalScrollIndicator={true}
-            >
+              <ScrollView
+                style={styles.scroll}
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={true}
+                bounces={true}
+                nestedScrollEnabled={true}
+              >
               {errors.length === 0 ? (
                 <Text style={styles.empty}>No errors captured.</Text>
               ) : (
@@ -144,7 +147,8 @@ export function DebugPanelUI({ errors, onClear, visible, onToggle }: Props) {
                   </View>
                 ))
               )}
-            </ScrollView>
+              </ScrollView>
+            </View>
           </Pressable>
         </Pressable>
       </Modal>
@@ -222,6 +226,11 @@ const styles = StyleSheet.create({
       web: { boxShadow: '-4px 0 24px rgba(0,0,0,0.5)' },
     }),
   },
+  panelInner: {
+    flex: 1,
+    flexDirection: 'column',
+    minHeight: 0,
+  },
   panelHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -260,6 +269,7 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flex: 1,
+    minHeight: 0,
   },
   scrollContent: {
     padding: 12,

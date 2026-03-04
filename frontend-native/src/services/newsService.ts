@@ -15,8 +15,16 @@ export const newsService = {
     try {
       const { API_BASE_URL } = require('./api');
       const res = await fetch(`${API_BASE_URL}/api/news?limit=${limit}`);
+      // 404 or non-JSON (e.g. HTML error page) -> fallback without throwing
+      if (!res.ok) {
+        return this.getMockNews();
+      }
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        return this.getMockNews();
+      }
       const data = await res.json().catch(() => ({}));
-      if (data.success && Array.isArray(data.news)) {
+      if (data && data.success === true && Array.isArray(data.news)) {
         return data.news;
       }
       return this.getMockNews();
@@ -32,8 +40,11 @@ export const newsService = {
       const res = await fetch(
         `${API_BASE_URL}/api/news?animeId=${encodeURIComponent(animeId)}&limit=${limit}`
       );
+      if (!res.ok) return [];
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) return [];
       const data = await res.json().catch(() => ({}));
-      if (data.success && Array.isArray(data.news)) {
+      if (data && data.success === true && Array.isArray(data.news)) {
         return data.news;
       }
       return [];

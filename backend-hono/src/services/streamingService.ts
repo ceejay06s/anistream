@@ -183,6 +183,41 @@ export async function getEpisodeSources(
   }
 }
 
+export interface ParallelSourcesResult {
+  server: string;
+  data: StreamingData;
+}
+
+/**
+ * Fetch sources from multiple servers in parallel; returns the first successful
+ * result (by server order) that has non-empty sources. Use to get a working
+ * stream quickly instead of trying servers one-by-one.
+ */
+export async function getEpisodeSourcesParallel(
+  episodeId: string,
+  servers: string[],
+  category: 'sub' | 'dub' | 'raw'
+): Promise<ParallelSourcesResult | null> {
+  if (servers.length === 0) return null;
+
+  const results = await Promise.allSettled(
+    servers.map((server) =>
+      getEpisodeSources(episodeId, server, category).then((data) => ({ server, data }))
+    )
+  );
+
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i];
+    if (r.status === 'fulfilled' && r.value?.data?.sources?.length) {
+      const { server, data } = r.value;
+      console.log(`Parallel: first working stream from server: ${server} (${data.sources.length} sources)`);
+      return { server, data };
+    }
+  }
+
+  return null;
+}
+
 /**
  * Try fallback consumet APIs when aniwatch fails
  */

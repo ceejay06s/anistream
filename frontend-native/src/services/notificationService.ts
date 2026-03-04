@@ -132,6 +132,7 @@ export const notificationService = {
     if (Platform.OS === 'web' && messaging) {
       const { onMessage } = require('firebase/messaging');
       const unsubscribe = onMessage(messaging, (payload: any) => {
+        if (!payload) return;
         callback({
           title: payload.notification?.title || '',
           body: payload.notification?.body || '',
@@ -146,6 +147,7 @@ export const notificationService = {
         const Notifications = require('expo-notifications');
         const subscription = Notifications.addNotificationReceivedListener(
           (notification: any) => {
+            if (!notification?.request?.content) return;
             callback({
               title: notification.request.content.title || '',
               body: notification.request.content.body || '',
@@ -168,7 +170,7 @@ export const notificationService = {
         const Notifications = require('expo-notifications');
         const subscription = Notifications.addNotificationResponseReceivedListener(
           (response: any) => {
-            const animeId = response.notification.request.content.data?.animeId;
+            const animeId = response?.notification?.request?.content?.data?.animeId;
             if (animeId) {
               callback(animeId);
             }

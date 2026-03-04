@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { getEpisodeSources, getEpisodeServers } from '../services/streamingService.js';
+import { getEpisodeSources, getEpisodeServers, getEpisodeSourcesParallel } from '../services/streamingService.js';
 import { getCachedSources, setCachedSources } from '../services/streamCache.js';
 import { gotScraping } from 'got-scraping';
 
@@ -14,6 +14,7 @@ streamingRoutes.get('/sources', async (c) => {
   const requestedServer = c.req.query('server') || 'hd-1';
   const category = c.req.query('category') || 'sub';
   const fallback = c.req.query('fallback') === 'true';
+  const parallel = c.req.query('parallel') !== 'false'; // default true: try servers in parallel when no cache
 
   if (!episodeId) {
     return c.json({
@@ -46,27 +47,44 @@ streamingRoutes.get('/sources', async (c) => {
     }
   }
 
-  // 2) API (stream proxy) then other fallback APIs (inside getEpisodeSources)
-  for (const serverToTry of serversToTry) {
-    try {
-      console.log(`Trying server: ${serverToTry} for episode: ${episodeId}`);
-      const sources = await getEpisodeSources(episodeId, serverToTry, category as 'sub' | 'dub' | 'raw');
+  // 2) API (stream proxy) then other fallback APIs — parallel or sequential
+  const cat = category as 'sub' | 'dub' | 'raw';
 
-      if (sources && sources.sources.length > 0) {
-        console.log(`Success with server: ${serverToTry}, found ${sources.sources.length} sources`);
-        await setCachedSources(episodeId, serverToTry, category as 'sub' | 'dub' | 'raw', sources);
-        return c.json({
-          success: true,
-          data: sources,
-          server: serverToTry,
-          fromCache: false,
-          triedServers: serversToTry.slice(0, serversToTry.indexOf(serverToTry) + 1),
-        });
+  if (parallel && serversToTry.length > 1) {
+    const result = await getEpisodeSourcesParallel(episodeId, serversToTry, cat);
+    if (result) {
+      await setCachedSources(episodeId, result.server, cat, result.data);
+      return c.json({
+        success: true,
+        data: result.data,
+        server: result.server,
+        fromCache: false,
+        parallel: true,
+        triedServers: serversToTry,
+      });
+    }
+  } else {
+    for (const serverToTry of serversToTry) {
+      try {
+        console.log(`Trying server: ${serverToTry} for episode: ${episodeId}`);
+        const sources = await getEpisodeSources(episodeId, serverToTry, cat);
+
+        if (sources && sources.sources.length > 0) {
+          console.log(`Success with server: ${serverToTry}, found ${sources.sources.length} sources`);
+          await setCachedSources(episodeId, serverToTry, cat, sources);
+          return c.json({
+            success: true,
+            data: sources,
+            server: serverToTry,
+            fromCache: false,
+            triedServers: serversToTry.slice(0, serversToTry.indexOf(serverToTry) + 1),
+          });
+        }
+
+        console.log(`Server ${serverToTry} returned no sources, trying next...`);
+      } catch (error: any) {
+        console.log(`Server ${serverToTry} failed: ${error.message}, trying next...`);
       }
-
-      console.log(`Server ${serverToTry} returned no sources, trying next...`);
-    } catch (error: any) {
-      console.log(`Server ${serverToTry} failed: ${error.message}, trying next...`);
     }
   }
 

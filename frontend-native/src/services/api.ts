@@ -1,25 +1,32 @@
 import axios, { AxiosError } from 'axios';
 import { Platform } from 'react-native';
 
-const PRODUCTION_API_URL = 'https://anistream-backend-blme.onrender.com';
+const PRIMARY_API_URL = 'https://anistream-backend-blme.onrender.com';
+const BACKUP_API_URL = 'https://anistream-production-79aa.up.railway.app';
 
 // Use environment variable for production, fallback by platform
-const getBaseUrl = () => {
+function getInitialBaseUrl(): string {
   if (process.env.EXPO_PUBLIC_API_URL) {
     return process.env.EXPO_PUBLIC_API_URL;
   }
   // Native (Android/iOS): always use production so device/emulator never hits localhost
   if (Platform.OS === 'android' || Platform.OS === 'ios') {
-    return PRODUCTION_API_URL;
+    return PRIMARY_API_URL;
   }
   // Web: production if not localhost
   if (typeof window !== 'undefined' && window.location?.hostname !== 'localhost' && window.location?.hostname !== '127.0.0.1') {
-    return PRODUCTION_API_URL;
+    return PRIMARY_API_URL;
   }
   return 'http://localhost:8801';
-};
+}
 
-export const API_BASE_URL = getBaseUrl();
+// Mutable so we can switch to backup when Render fails; consumers read current value
+export let API_BASE_URL = getInitialBaseUrl();
+
+const useBackup = (): boolean => {
+  const url = getInitialBaseUrl();
+  return url === PRIMARY_API_URL;
+};
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -38,27 +45,37 @@ api.interceptors.response.use(
   async (error: AxiosError) => {
     const config = error.config as any;
 
-    // Don't retry if no config or already retried max times
-    if (!config || config._retryCount >= MAX_RETRIES) {
+    if (!config) {
       return Promise.reject(error);
     }
 
-    // Only retry on 500 errors or network errors
-    const shouldRetry =
-      error.response?.status === 500 ||
-      error.response?.status === 502 ||
-      error.response?.status === 503 ||
-      !error.response;
+    const retriable =
+      !error.response ||
+      error.response.status === 500 ||
+      error.response.status === 502 ||
+      error.response.status === 503 ||
+      error.response.status === 504;
 
-    if (!shouldRetry) {
+    // If Render failed and we have a backup, try Railway once
+    if (
+      retriable &&
+      useBackup() &&
+      API_BASE_URL === PRIMARY_API_URL &&
+      !config._triedBackup
+    ) {
+      config._triedBackup = true;
+      API_BASE_URL = BACKUP_API_URL;
+      api.defaults.baseURL = BACKUP_API_URL;
+      return api(config);
+    }
+
+    // Standard retry: same host
+    if (config._retryCount >= MAX_RETRIES || !retriable) {
       return Promise.reject(error);
     }
 
     config._retryCount = (config._retryCount || 0) + 1;
-
-    // Wait before retrying
     await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * config._retryCount));
-
     return api(config);
   }
 );

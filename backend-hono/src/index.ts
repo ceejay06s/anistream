@@ -49,6 +49,14 @@ app.get('/api', (c) => {
   return c.json({ status: 'ok' });
 });
 
+// Health: list key routes so deployment can be verified (e.g. /api/news must be present)
+app.get('/api/health', (c) =>
+  c.json({
+    ok: true,
+    routes: ['/api', '/api/health', '/api/news', '/api/news/ping', '/api/anime', '/api/streaming'],
+  })
+);
+
 // GET /api/news (inlined so it always deploys with index)
 // Hit /api/news/ping to confirm this deploy is live
 app.get('/api/news/ping', (c) => c.json({ ok: true, message: 'news route deployed' }));

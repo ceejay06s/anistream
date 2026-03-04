@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { upgradeWebSocket } from 'hono/cloudflare-workers';
-import { getEpisodeSources, getEpisodeServers } from '../services/streamingService.js';
+import { getEpisodeSources, getEpisodeServers, getEpisodeSourcesParallel } from '../services/streamingService.js';
 import { WebSocketServer, WebSocket as WS } from 'ws';
 import { getCachedServer, setCachedServer, markServerFailed, isCacheEnabled, getCachedSources, setCachedSources } from '../services/streamCache.js';
 
@@ -153,7 +153,25 @@ async function findWorkingSources(
     totalServers,
   });
 
-  // Try each server until one works
+  // Try all servers in parallel first to get a working stream quickly
+  if (serversToTry.length > 1) {
+    sendMessage({ type: 'status', message: 'Testing streams in parallel...', totalServers });
+    const parallelResult = await getEpisodeSourcesParallel(episodeId, serversToTry, category);
+    if (parallelResult) {
+      const { server, data } = parallelResult;
+      const idx = serversToTry.indexOf(server);
+      await setCachedServer(episodeId, category, server, failedServersThisRequest);
+      await setCachedSources(episodeId, server, category, data);
+      return {
+        ...data,
+        usedServer: server,
+        serverIndex: idx >= 0 ? idx : 0,
+        totalServers,
+      };
+    }
+  }
+
+  // Fallback: try each server sequentially
   for (let i = 0; i < serversToTry.length; i++) {
     const server = serversToTry[i];
 
