@@ -188,10 +188,16 @@ export interface ParallelSourcesResult {
   data: StreamingData;
 }
 
+/** Max servers to query at once (avoids flooding upstream). Env: STREAMING_PARALLEL_CONCURRENCY, default 3. */
+const MAX_PARALLEL_CONCURRENCY = Math.max(1, Math.min(5, parseInt(process.env.STREAMING_PARALLEL_CONCURRENCY || '3', 10) || 3));
+
+/** Delay in ms between batches when using parallel (spread load). Env: STREAMING_PARALLEL_BATCH_DELAY_MS, default 200. */
+const PARALLEL_BATCH_DELAY_MS = Math.max(0, parseInt(process.env.STREAMING_PARALLEL_BATCH_DELAY_MS || '200', 10) || 200);
+
 /**
- * Fetch sources from multiple servers in parallel; returns the first successful
- * result (by server order) that has non-empty sources. Use to get a working
- * stream quickly instead of trying servers one-by-one.
+ * Fetch sources from multiple servers in parallel batches; returns the first
+ * successful result (by server order). Caps concurrency to avoid flooding
+ * upstream (e.g. 3 at a time, then next batch if needed).
  */
 export async function getEpisodeSourcesParallel(
   episodeId: string,
@@ -200,18 +206,25 @@ export async function getEpisodeSourcesParallel(
 ): Promise<ParallelSourcesResult | null> {
   if (servers.length === 0) return null;
 
-  const results = await Promise.allSettled(
-    servers.map((server) =>
-      getEpisodeSources(episodeId, server, category).then((data) => ({ server, data }))
-    )
-  );
+  for (let offset = 0; offset < servers.length; offset += MAX_PARALLEL_CONCURRENCY) {
+    const batch = servers.slice(offset, offset + MAX_PARALLEL_CONCURRENCY);
+    const results = await Promise.allSettled(
+      batch.map((server) =>
+        getEpisodeSources(episodeId, server, category).then((data) => ({ server, data }))
+      )
+    );
 
-  for (let i = 0; i < results.length; i++) {
-    const r = results[i];
-    if (r.status === 'fulfilled' && r.value?.data?.sources?.length) {
-      const { server, data } = r.value;
-      console.log(`Parallel: first working stream from server: ${server} (${data.sources.length} sources)`);
-      return { server, data };
+    for (let i = 0; i < results.length; i++) {
+      const r = results[i];
+      if (r.status === 'fulfilled' && r.value?.data?.sources?.length) {
+        const { server, data } = r.value;
+        console.log(`Parallel: working stream from server: ${server} (${data.sources.length} sources)`);
+        return { server, data };
+      }
+    }
+
+    if (offset + MAX_PARALLEL_CONCURRENCY < servers.length && PARALLEL_BATCH_DELAY_MS > 0) {
+      await new Promise((resolve) => setTimeout(resolve, PARALLEL_BATCH_DELAY_MS));
     }
   }
 

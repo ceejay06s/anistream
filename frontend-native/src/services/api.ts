@@ -219,13 +219,23 @@ export const animeApi = {
 
 // Streaming API
 export const streamingApi = {
+  /** Get streaming sources. Uses parallel server tries by default (capped on backend to avoid flooding). */
   getSources: async (
     episodeId: string,
     server: string = 'hd-1',
-    category: string = 'sub'
+    category: string = 'sub',
+    options?: { fallback?: boolean; parallel?: boolean }
   ): Promise<StreamingData> => {
+    const fallback = options?.fallback !== false;
+    const parallel = options?.parallel !== false;
     const response = await api.get('/api/streaming/sources', {
-      params: { episodeId, server, category, fallback: 'true' },
+      params: {
+        episodeId,
+        server,
+        category,
+        fallback: fallback ? 'true' : 'false',
+        ...(fallback && { parallel: parallel ? 'true' : 'false' }),
+      },
     });
     const data = response.data.data || { sources: [] };
 
