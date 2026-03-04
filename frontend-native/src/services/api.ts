@@ -1,32 +1,50 @@
 import axios, { AxiosError } from 'axios';
 import { Platform } from 'react-native';
 
-const PRIMARY_API_URL = 'https://anistream-backend-blme.onrender.com';
-const BACKUP_API_URL = 'https://anistream-production-79aa.up.railway.app';
+const DEFAULT_PRIMARY_API_URL = 'https://anistream-backend-blme.onrender.com';
+const DEFAULT_BACKUP_API_URL = 'https://anistream-production-79aa.up.railway.app';
 
-// Use environment variable for production, fallback by platform
+function getPrimaryUrl(): string {
+  return process.env.EXPO_PUBLIC_API_URL?.trim() || DEFAULT_PRIMARY_API_URL;
+}
+
+/** Backup API URLs; use ";" as separator in EXPO_PUBLIC_BACKUP_API_URL. */
+function getBackupUrls(): string[] {
+  const raw = process.env.EXPO_PUBLIC_BACKUP_API_URL?.trim() || '';
+  if (!raw) return [DEFAULT_BACKUP_API_URL];
+  return raw.split(';').map((u) => u.trim()).filter(Boolean);
+}
+
+function isParallelBackendsEnabled(): boolean {
+  const v = (process.env.EXPO_PUBLIC_USE_PARALLEL_BACKENDS ?? '').trim().toLowerCase();
+  return v === 'true' || v === '1';
+}
+
+// Use env or default primary; localhost when dev
 function getInitialBaseUrl(): string {
-  if (process.env.EXPO_PUBLIC_API_URL) {
-    return process.env.EXPO_PUBLIC_API_URL;
+  if (process.env.EXPO_PUBLIC_API_URL?.trim()) {
+    return process.env.EXPO_PUBLIC_API_URL.trim();
   }
-  // Native (Android/iOS): always use production so device/emulator never hits localhost
   if (Platform.OS === 'android' || Platform.OS === 'ios') {
-    return PRIMARY_API_URL;
+    return DEFAULT_PRIMARY_API_URL;
   }
-  // Web: production if not localhost
   if (typeof window !== 'undefined' && window.location?.hostname !== 'localhost' && window.location?.hostname !== '127.0.0.1') {
-    return PRIMARY_API_URL;
+    return DEFAULT_PRIMARY_API_URL;
   }
   return 'http://localhost:8801';
 }
 
-// Mutable so we can switch to backup when Render fails; consumers read current value
+// Mutable so we can switch to backup when primary fails; consumers read current value
 export let API_BASE_URL = getInitialBaseUrl();
 
 const useBackup = (): boolean => {
-  const url = getInitialBaseUrl();
-  return url === PRIMARY_API_URL;
+  const primary = getPrimaryUrl();
+  const backups = getBackupUrls().filter((u) => u !== primary);
+  return getInitialBaseUrl() === primary && backups.length > 0;
 };
+
+/** Whether to hit primary + all backups in parallel and use first success. */
+const useParallelBackends = (): boolean => isParallelBackendsEnabled() && useBackup();
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -56,17 +74,35 @@ api.interceptors.response.use(
       error.response.status === 503 ||
       error.response.status === 504;
 
-    // If Render failed and we have a backup, try Railway once
+    // If primary failed and we have backups, try all backups in parallel once
     if (
       retriable &&
       useBackup() &&
-      API_BASE_URL === PRIMARY_API_URL &&
+      API_BASE_URL === getPrimaryUrl() &&
       !config._triedBackup
     ) {
       config._triedBackup = true;
-      API_BASE_URL = BACKUP_API_URL;
-      api.defaults.baseURL = BACKUP_API_URL;
-      return api(config);
+      const backups = getBackupUrls().filter((u) => u !== getPrimaryUrl());
+      if (backups.length === 0) return Promise.reject(error);
+      if (backups.length === 1) {
+        API_BASE_URL = backups[0];
+        api.defaults.baseURL = backups[0];
+        return api(config);
+      }
+      try {
+        const path = (config.url || '').replace(config.baseURL || '', '') || '/';
+        const response = await Promise.any(
+          backups.map((baseURL) => api.get(path, { ...config, baseURL, params: config.params }))
+        );
+        const winner = response.config?.baseURL;
+        if (winner) {
+          API_BASE_URL = winner;
+          api.defaults.baseURL = winner;
+        }
+        return response;
+      } catch {
+        return Promise.reject(error);
+      }
     }
 
     // Standard retry: same host
@@ -79,6 +115,32 @@ api.interceptors.response.use(
     return api(config);
   }
 );
+
+/**
+ * Run the same GET request against primary + all backup backends in parallel;
+ * return the first successful response and set API_BASE_URL to the winner.
+ */
+async function getWithParallelBackends(path: string, config: { params?: Record<string, string> }): Promise<any> {
+  const primary = getPrimaryUrl();
+  const backups = getBackupUrls().filter((u) => u !== primary);
+  const urls = [primary, ...backups];
+  if (urls.length <= 1) {
+    return api.get(path, { ...config, params: config.params });
+  }
+  const req = (baseURL: string) =>
+    api.get(path, { ...config, baseURL, params: config.params });
+  try {
+    const response = await Promise.any(urls.map((url) => req(url)));
+    const winnerBase = response.config?.baseURL;
+    if (winnerBase) {
+      API_BASE_URL = winnerBase;
+      api.defaults.baseURL = winnerBase;
+    }
+    return response;
+  } catch {
+    throw new Error('All API backends failed');
+  }
+}
 
 export interface Anime {
   id: string;
@@ -224,21 +286,24 @@ export const streamingApi = {
     episodeId: string,
     server: string = 'hd-1',
     category: string = 'sub',
-    options?: { fallback?: boolean; parallel?: boolean }
+    options?: { fallback?: boolean; parallel?: boolean; parallelBackends?: boolean }
   ): Promise<StreamingData> => {
     const fallback = options?.fallback !== false;
     const parallel = options?.parallel !== false;
-    const response = await api.get('/api/streaming/sources', {
-      params: {
-        episodeId,
-        server,
-        category,
-        fallback: fallback ? 'true' : 'false',
-        ...(fallback && { parallel: parallel ? 'true' : 'false' }),
-      },
-    });
+    const parallelBackends = options?.parallelBackends !== false && useParallelBackends();
+    const params = {
+      episodeId,
+      server,
+      category,
+      fallback: fallback ? 'true' : 'false',
+      ...(fallback && { parallel: parallel ? 'true' : 'false' }),
+    };
+    const response = parallelBackends
+      ? await getWithParallelBackends('/api/streaming/sources', { params })
+      : await api.get('/api/streaming/sources', { params });
     const data = response.data.data || { sources: [] };
 
+    // Proxy URLs use API_BASE_URL (set to winner when parallelBackends was used)
     // Proxy URLs through backend to handle CORS and required headers
     // This is needed for both web (CORS) and mobile (some servers block direct access)
     // Proxy video sources
