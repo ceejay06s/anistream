@@ -11,6 +11,7 @@ import {
   Platform,
   ScrollView,
   Modal,
+  RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -57,6 +58,7 @@ export default function SearchScreen() {
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [showGenreModal, setShowGenreModal] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const hasActiveFilters = () => {
     return (
@@ -358,18 +360,46 @@ export default function SearchScreen() {
       )}
 
       {/* Results */}
-      {loading ? (
+      {loading && !refreshing ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color="#e50914" />
         </View>
       ) : searched && results.length === 0 ? (
-        <View style={styles.centered}>
+        <ScrollView
+          style={styles.flex1}
+          contentContainerStyle={[styles.centered, styles.centeredScroll]}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={async () => {
+                setRefreshing(true);
+                await handleSearch();
+                setRefreshing(false);
+              }}
+              tintColor="#e50914"
+            />
+          }
+        >
           <Ionicons name="search-outline" size={48} color="#444" />
           <Text style={styles.noResultsText}>No results found</Text>
           <Text style={styles.noResultsHint}>Try different keywords or filters</Text>
-        </View>
+        </ScrollView>
       ) : !searched ? (
-        <View style={styles.centered}>
+        <ScrollView
+          style={styles.flex1}
+          contentContainerStyle={[styles.centered, styles.centeredScroll]}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={async () => {
+                setRefreshing(true);
+                await handleSearch();
+                setRefreshing(false);
+              }}
+              tintColor="#e50914"
+            />
+          }
+        >
           <Ionicons name="search-outline" size={48} color="#444" />
           <Text style={styles.noResultsText}>Search for anime</Text>
           <Text style={styles.noResultsHint}>
@@ -377,7 +407,7 @@ export default function SearchScreen() {
               ? 'Click Filter to search with current filters'
               : 'Enter a title or use filters'}
           </Text>
-        </View>
+        </ScrollView>
       ) : (
         <FlatList
           data={results}
@@ -389,6 +419,17 @@ export default function SearchScreen() {
           columnWrapperStyle={styles.animeRow}
           ListHeaderComponent={
             <Text style={styles.resultsCount}>{results.length} results</Text>
+          }
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={async () => {
+                setRefreshing(true);
+                await handleSearch();
+                setRefreshing(false);
+              }}
+              tintColor="#e50914"
+            />
           }
         />
       )}
@@ -403,10 +444,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
+  flex1: {
+    flex: 1,
+  },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  centeredScroll: {
+    flexGrow: 1,
   },
   header: {
     padding: 16,

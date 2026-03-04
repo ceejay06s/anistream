@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, ScrollView, Platform } from 'react-native';
+import { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Platform, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { TouchableOpacity } from 'react-native';
@@ -6,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 export default function PrivacyPolicyScreen() {
   const router = useRouter();
+  const [refreshing, setRefreshing] = useState(false);
 
   return (
     <View style={styles.container}>
@@ -26,6 +28,16 @@ export default function PrivacyPolicyScreen() {
         style={styles.scrollView}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              setTimeout(() => setRefreshing(false), 400);
+            }}
+            tintColor="#e50914"
+          />
+        }
       >
         <Text style={styles.lastUpdated}>
           Last Updated: {new Date().toLocaleDateString()}

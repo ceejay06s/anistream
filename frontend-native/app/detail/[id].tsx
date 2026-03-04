@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Platform,
   Modal,
+  RefreshControl,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -47,6 +48,7 @@ export default function DetailScreen() {
   const [savedStatus, setSavedStatus] = useState<SavedAnime | null>(null);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [savingStatus, setSavingStatus] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Clean up Expo Router internal params from URL on web
   useEffect(() => {
@@ -138,11 +140,11 @@ export default function DetailScreen() {
     }
   };
 
-  const loadAnimeData = async () => {
+  const loadAnimeData = async (isRefresh = false) => {
     if (!id) return;
 
     try {
-      setLoading(true);
+      if (!isRefresh) setLoading(true);
       setError(null);
 
       const [info, episodeList] = await Promise.all([
@@ -152,12 +154,21 @@ export default function DetailScreen() {
 
       setAnimeInfo(info);
       setEpisodes(episodeList);
+      if (user && isRefresh) {
+        checkSavedStatus();
+      }
     } catch (err: any) {
       console.error('Failed to load anime data:', err);
       setError('Failed to load anime details');
     } finally {
       setLoading(false);
     }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadAnimeData(true);
+    setRefreshing(false);
   };
 
   const handleBack = () => {
@@ -458,7 +469,7 @@ export default function DetailScreen() {
     }
   };
 
-  if (loading) {
+  if (loading && !refreshing) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#e50914" />
@@ -549,7 +560,12 @@ export default function DetailScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusModal />
-      <ScrollView style={styles.scrollView}>
+      <ScrollView
+        style={styles.scrollView}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#e50914" />
+        }
+      >
         {/* Header with back button */}
         <View style={styles.header}>
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>

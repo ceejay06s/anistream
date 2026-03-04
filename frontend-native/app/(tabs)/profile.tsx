@@ -13,6 +13,7 @@ import {
   Linking,
   FlatList,
   Modal,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -105,6 +106,7 @@ export default function ProfileScreen() {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [updatingAccount, setUpdatingAccount] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const profilePhotoInputRef = useRef<HTMLInputElement>(null);
 
   // Update states
@@ -1369,7 +1371,19 @@ export default function ProfileScreen() {
         <UpdateProfileModal />
         <DeleteAccountModal />
 
-        <ScrollView>
+        <ScrollView
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={async () => {
+                setRefreshing(true);
+                await loadSavedAnime();
+                setRefreshing(false);
+              }}
+              tintColor="#e50914"
+            />
+          }
+        >
           {/* Netflix-style Profile Header */}
           <View style={styles.netflixHeader}>
             <View style={styles.netflixHeaderTop}>
@@ -1793,7 +1807,19 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              setTimeout(() => setRefreshing(false), 400);
+            }}
+            tintColor="#e50914"
+          />
+        }
+      >
         <View style={styles.header}>
           <Text style={styles.headerTitle}>
             {authMode === 'passwordless' ? 'Sign In' : authMode === 'login' ? 'Sign In' : 'Create Account'}

@@ -8,6 +8,7 @@ import {
   Image,
   ActivityIndicator,
   Platform,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -36,6 +37,7 @@ export default function NotificationsScreen() {
 
   const [notifications, setNotifications] = useState<UserNotification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
 
   useEffect(() => {
@@ -88,6 +90,17 @@ export default function NotificationsScreen() {
   }, []);
 
   const unreadCount = notifications.filter(n => !n.read).length;
+
+  const onRefresh = useCallback(async () => {
+    if (!user) return;
+    setRefreshing(true);
+    try {
+      const data = await userNotificationService.getNotifications(user.uid);
+      setNotifications(data);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [user]);
 
   const renderItem = useCallback(({ item }: { item: UserNotification }) => {
     const config = TYPE_CONFIG[item.type] ?? { icon: 'notifications-outline', color: '#888' };
@@ -203,6 +216,13 @@ export default function NotificationsScreen() {
           removeClippedSubviews={true}
           maxToRenderPerBatch={10}
           initialNumToRender={15}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#e50914"
+            />
+          }
         />
       )}
     </SafeAreaView>

@@ -5,6 +5,7 @@ import { animeRoutes } from './routes/anime.js';
 import { streamingRoutes } from './routes/streaming.js';
 import { recaptchaRoutes } from './routes/recaptcha.js';
 import { notificationRoutes } from './routes/notifications.js';
+import { newsRoutes } from './routes/news.js';
 import { uploadRoutes } from './routes/upload.js';
 import { createWebSocketServer } from './routes/websocket.js';
 
@@ -52,6 +53,7 @@ app.route('/api/anime', animeRoutes);
 app.route('/api/streaming', streamingRoutes);
 app.route('/api/recaptcha', recaptchaRoutes);
 app.route('/api/notifications', notificationRoutes);
+app.route('/api/news', newsRoutes);
 app.route('/api/upload', uploadRoutes);
 
 // 404 handler

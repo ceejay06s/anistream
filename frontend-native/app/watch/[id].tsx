@@ -14,6 +14,7 @@ import {
   ImageBackground,
   KeyboardAvoidingView,
   useWindowDimensions,
+  RefreshControl,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -56,6 +57,7 @@ export default function WatchScreen() {
   const [loadingPosts, setLoadingPosts] = useState(false);
   const [loadingComments, setLoadingComments] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Watch history for resume functionality
   const [resumeTimestamp, setResumeTimestamp] = useState<number | null>(null);
@@ -278,6 +280,16 @@ export default function WatchScreen() {
       setLoadingPosts(false);
     }
   };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([
+      loadEpisodes(),
+      loadAnimeInfo(),
+      loadEpisodePosts(),
+    ]);
+    setRefreshing(false);
+  }, [id]);
 
   const loadComments = async (postId?: string) => {
     // Use selected post ID or create episode-specific post ID
@@ -1000,6 +1012,9 @@ export default function WatchScreen() {
             style={styles.webMainSection}
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={true}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#e50914" />
+            }
           >
             {renderVideoPlayer()}
             <View style={styles.detailsWrapper}>{renderMainContent()}</View>
@@ -1016,6 +1031,9 @@ export default function WatchScreen() {
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={true}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#e50914" />
+          }
         >
           {renderVideoPlayer()}
           <View style={styles.detailsWrapper}>{renderDetailsSection()}</View>

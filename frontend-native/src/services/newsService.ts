@@ -1,15 +1,3 @@
-import { Platform } from 'react-native';
-import { app } from '@/config/firebase';
-
-// Lazy initialization to avoid module load order issues
-function getDb() {
-  if (!app) {
-    return null;
-  }
-  const { getFirestore } = require('firebase/firestore');
-  return getFirestore(app);
-}
-
 export interface NewsItem {
   id: string;
   title: string;
@@ -24,54 +12,31 @@ export interface NewsItem {
 
 export const newsService = {
   async getNews(limit: number = 20): Promise<NewsItem[]> {
-    const db = getDb();
-    if (!db) {
-      // Return mock data for now
-      return this.getMockNews();
-    }
-
     try {
-      const { collection, query, orderBy, limit: limitQuery, getDocs } = require('firebase/firestore');
-      const q = query(
-        collection(db, 'news'),
-        orderBy('createdAt', 'desc'),
-        limitQuery(limit)
-      );
-
-      const snapshot = await getDocs(q);
-      if (snapshot.empty) {
-        return this.getMockNews();
+      const { API_BASE_URL } = require('./api');
+      const res = await fetch(`${API_BASE_URL}/api/news?limit=${limit}`);
+      const data = await res.json().catch(() => ({}));
+      if (data.success && Array.isArray(data.news)) {
+        return data.news;
       }
-
-      return snapshot.docs.map((doc: any) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+      return this.getMockNews();
     } catch (err) {
       console.error('Failed to fetch news:', err);
       return this.getMockNews();
     }
   },
 
-  async getNewsForAnime(animeId: string): Promise<NewsItem[]> {
-    const db = getDb();
-    if (!db) {
-      return [];
-    }
-
+  async getNewsForAnime(animeId: string, limit: number = 20): Promise<NewsItem[]> {
     try {
-      const { collection, query, where, orderBy, getDocs } = require('firebase/firestore');
-      const q = query(
-        collection(db, 'news'),
-        where('animeId', '==', animeId),
-        orderBy('createdAt', 'desc')
+      const { API_BASE_URL } = require('./api');
+      const res = await fetch(
+        `${API_BASE_URL}/api/news?animeId=${encodeURIComponent(animeId)}&limit=${limit}`
       );
-
-      const snapshot = await getDocs(q);
-      return snapshot.docs.map((doc: any) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+      const data = await res.json().catch(() => ({}));
+      if (data.success && Array.isArray(data.news)) {
+        return data.news;
+      }
+      return [];
     } catch (err) {
       console.error('Failed to fetch news for anime:', err);
       return [];
