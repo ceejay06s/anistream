@@ -460,7 +460,12 @@ export default function WatchScreen() {
       setRestError(null);
       setRestIframeFallback(null);
 
-      const data = await streamingApi.getSources(episodeId, 'hd-1', category);
+      const data = await streamingApi.getSources(
+        episodeId,
+        'hd-1',
+        category,
+        Platform.OS !== 'web' ? { fallback: true, parallel: true, parallelBackends: true } : undefined
+      );
 
       if (data && data.sources && data.sources.length > 0) {
         setRestStreamingData(data);

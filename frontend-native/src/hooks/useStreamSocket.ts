@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { API_BASE_URL, StreamingData, StreamingSource } from '../services/api';
+import { Platform } from 'react-native';
+import { API_BASE_URL, StreamingData, StreamingSource, electBackendForWebSocket } from '../services/api';
 
 export interface StreamStatus {
   isConnected: boolean;
@@ -59,10 +60,18 @@ export function useStreamSocket(): UseStreamSocketResult {
     return `${wsUrl}/ws/stream`;
   }, []);
 
-  // Connect to WebSocket
-  const connect = useCallback(() => {
+  // Connect to WebSocket (on native, elect best backend first so WS uses parallel backends)
+  const connect = useCallback(async () => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       return;
+    }
+
+    if (Platform.OS !== 'web') {
+      try {
+        await electBackendForWebSocket();
+      } catch {
+        // Keep current API_BASE_URL
+      }
     }
 
     const wsUrl = getWsUrl();

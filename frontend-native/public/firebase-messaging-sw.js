@@ -17,14 +17,15 @@ const messaging = firebase.messaging();
 
 // Handle background messages
 messaging.onBackgroundMessage((payload) => {
+  if (!payload || typeof payload !== 'object') return;
   console.log('[firebase-messaging-sw.js] Received background message:', payload);
 
-  const notificationTitle = payload.notification?.title || 'AniStream';
+  const notificationTitle = payload.notification?.title || payload.title || 'AniStream';
   const notificationOptions = {
-    body: payload.notification?.body || '',
+    body: payload.notification?.body || payload.body || '',
     icon: '/icon-192.png',
     badge: '/icon-192.png',
-    data: payload.data,
+    data: payload.data || {},
     tag: payload.data?.animeId || 'anistream-notification',
   };
 

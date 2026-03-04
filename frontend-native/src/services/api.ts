@@ -142,6 +142,34 @@ async function getWithParallelBackends(path: string, config: { params?: Record<s
   }
 }
 
+/**
+ * On native (Android/iOS), hit primary + backup backends in parallel and set
+ * API_BASE_URL to the first that responds. Call before opening the WebSocket
+ * so the socket connects to the best backend. No-op when parallel backends
+ * disabled or only one URL.
+ */
+export async function electBackendForWebSocket(): Promise<void> {
+  if (Platform.OS === 'web') return;
+  const primary = getPrimaryUrl();
+  const backups = getBackupUrls().filter((u) => u !== primary);
+  if (backups.length === 0) return;
+  const urls = [primary, ...backups];
+  if (urls.length <= 1) return;
+  if (!isParallelBackendsEnabled()) return;
+  try {
+    const health = (baseURL: string) =>
+      api.get('/api', { baseURL, timeout: 8000 });
+    const response = await Promise.any(urls.map((url) => health(url)));
+    const winner = response.config?.baseURL;
+    if (winner) {
+      API_BASE_URL = winner;
+      api.defaults.baseURL = winner;
+    }
+  } catch {
+    // Keep current API_BASE_URL
+  }
+}
+
 export interface Anime {
   id: string;
   name: string;

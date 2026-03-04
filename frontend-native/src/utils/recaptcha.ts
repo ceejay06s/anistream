@@ -73,20 +73,25 @@ function loadRecaptchaScript(): Promise<void> {
     script.onload = () => {
       scriptLoaded = true;
       scriptLoading = false;
-      // Wait for grecaptcha.enterprise to be available
-      const checkInterval = setInterval(() => {
-        if (window.grecaptcha?.enterprise) {
+      try {
+        const checkInterval = setInterval(() => {
+          if (typeof window !== 'undefined' && window.grecaptcha?.enterprise) {
+            clearInterval(checkInterval);
+            resolve();
+          }
+        }, 100);
+        setTimeout(() => {
           clearInterval(checkInterval);
-          resolve();
-        }
-      }, 100);
-      // Timeout after 5 seconds
-      setTimeout(() => {
-        clearInterval(checkInterval);
-        if (!window.grecaptcha?.enterprise) {
-          reject(new Error('reCAPTCHA Enterprise script loaded but grecaptcha.enterprise is not available'));
-        }
-      }, 5000);
+          if (typeof window !== 'undefined' && window.grecaptcha?.enterprise) {
+            resolve();
+          } else {
+            reject(new Error('reCAPTCHA Enterprise script loaded but grecaptcha.enterprise is not available'));
+          }
+        }, 5000);
+      } catch (e) {
+        scriptLoading = false;
+        reject(e instanceof Error ? e : new Error('reCAPTCHA load failed'));
+      }
     };
     script.onerror = () => {
       scriptLoading = false;

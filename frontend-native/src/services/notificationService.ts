@@ -131,13 +131,18 @@ export const notificationService = {
     const messaging = getMessagingInstance();
     if (Platform.OS === 'web' && messaging) {
       const { onMessage } = require('firebase/messaging');
-      const unsubscribe = onMessage(messaging, (payload: any) => {
-        if (!payload) return;
-        callback({
-          title: payload.notification?.title || '',
-          body: payload.notification?.body || '',
-          data: payload.data,
-        });
+      const unsubscribe = onMessage(messaging, (message: any) => {
+        const payload = message?.payload ?? message;
+        if (!payload || typeof payload !== 'object') return;
+        try {
+          callback({
+            title: payload.notification?.title ?? payload.title ?? '',
+            body: payload.notification?.body ?? payload.body ?? '',
+            data: payload.data,
+          });
+        } catch (err) {
+          console.warn('Notification handler error:', err);
+        }
       });
       return unsubscribe;
     }
