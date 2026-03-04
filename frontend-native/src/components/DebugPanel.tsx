@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { addDebugError, useDebug, type DebugErrorEntry } from '@/context/DebugContext';
+import { copyToClipboard } from '@/utils/copyToClipboard';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PANEL_WIDTH = Math.min(360, SCREEN_WIDTH * 0.9);
@@ -55,6 +56,11 @@ export class DebugErrorBoundary extends Component<
     }
     return this.props.children;
   }
+}
+
+function copyEntryToClipboard(entry: DebugErrorEntry) {
+  const text = [entry.message, entry.stack].filter(Boolean).join('\n\n');
+  copyToClipboard(text);
 }
 
 export function DebugPanelUI({ errors, onClear, visible, onToggle }: Props) {
@@ -107,12 +113,22 @@ export function DebugPanelUI({ errors, onClear, visible, onToggle }: Props) {
                 errors.map((entry) => (
                   <View key={entry.id} style={styles.entry}>
                     <View style={styles.entryHeader}>
-                      <View style={[styles.sourceChip, entry.source === 'promise' && styles.sourceChipPromise]}>
+                      <View style={[styles.sourceChip, entry.source === 'promise' && styles.sourceChipPromise, entry.source === 'console' && styles.sourceChipConsole]}>
                         <Text style={styles.sourceChipText}>{entry.source}</Text>
                       </View>
-                      <Text style={styles.entryTime}>
-                        {new Date(entry.timestamp).toLocaleTimeString()}
-                      </Text>
+                      <View style={styles.entryHeaderRight}>
+                        <TouchableOpacity
+                          onPress={() => copyEntryToClipboard(entry)}
+                          style={styles.copyBtn}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Ionicons name="copy-outline" size={18} color="#fff" />
+                          <Text style={styles.copyBtnText}>Copy</Text>
+                        </TouchableOpacity>
+                        <Text style={styles.entryTime}>
+                          {new Date(entry.timestamp).toLocaleTimeString()}
+                        </Text>
+                      </View>
                     </View>
                     <Text style={styles.entryMessage} selectable>
                       {entry.message}
@@ -265,6 +281,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 6,
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  entryHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  copyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    backgroundColor: '#333',
+  },
+  copyBtnText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600',
   },
   sourceChip: {
     backgroundColor: '#333',
@@ -274,6 +311,9 @@ const styles = StyleSheet.create({
   },
   sourceChipPromise: {
     backgroundColor: '#7c2d12',
+  },
+  sourceChipConsole: {
+    backgroundColor: '#854d0e',
   },
   sourceChipText: {
     color: '#ccc',

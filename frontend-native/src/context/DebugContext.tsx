@@ -6,14 +6,20 @@ export interface DebugErrorEntry {
   message: string;
   stack?: string;
   timestamp: number;
-  source: 'boundary' | 'unhandled' | 'promise';
+  source: 'boundary' | 'unhandled' | 'promise' | 'console';
 }
 
 const listeners = new Set<() => void>();
 let errors: DebugErrorEntry[] = [];
 
 function notify() {
-  listeners.forEach((cb) => cb());
+  // Defer so we don't setState during render (avoids "Cannot update a component while rendering another")
+  const cbs = Array.from(listeners);
+  if (typeof queueMicrotask !== 'undefined') {
+    queueMicrotask(() => cbs.forEach((cb) => cb()));
+  } else {
+    setTimeout(() => cbs.forEach((cb) => cb()), 0);
+  }
 }
 
 export function addDebugError(

@@ -101,7 +101,7 @@ function AppContent() {
   // Native (Android/iOS): Expo push token registration + foreground handler + tap navigation
   useNativeNotifications();
 
-  // Global error handlers → debug panel
+  // Global error handlers + console.error/warn → debug panel
   useEffect(() => {
     const ErrorUtils = (globalThis as { ErrorUtils?: { getGlobalHandler?: () => (err: Error, isFatal?: string) => void; setGlobalHandler: (fn: (err: Error, isFatal?: string) => void) => void } }).ErrorUtils;
     if (ErrorUtils) {
@@ -111,15 +111,39 @@ function AppContent() {
         prev?.(err, isFatal);
       });
     }
+    const onRejection = (e: PromiseRejectionEvent) => {
+      const err = e?.reason ?? new Error('Unhandled promise rejection');
+      addDebugError(err instanceof Error ? err : new Error(String(err)), 'promise');
+    };
     if (typeof globalThis.addEventListener === 'function') {
-      const onRejection = (e: PromiseRejectionEvent) => {
-        const err = e?.reason ?? new Error('Unhandled promise rejection');
-        addDebugError(err instanceof Error ? err : new Error(String(err)), 'promise');
-      };
       globalThis.addEventListener('unhandledrejection', onRejection);
-      return () => globalThis.removeEventListener('unhandledrejection', onRejection);
     }
-    return undefined;
+
+    // Console catch: pipe console.error / console.warn into debug panel
+    const origError = console.error;
+    const origWarn = console.warn;
+    const toMessage = (args: unknown[]): { message: string; stack?: string } => {
+      const first = args[0];
+      if (first instanceof Error) return { message: first.message, stack: first.stack };
+      const message = args.map((a) => (typeof a === 'object' && a !== null && 'message' in a && typeof (a as Error).message === 'string' ? (a as Error).message : String(a))).join(' ');
+      return { message: message || 'console.error' };
+    };
+    console.error = (...args: unknown[]) => {
+      addDebugError(toMessage(args), 'console');
+      origError.apply(console, args);
+    };
+    console.warn = (...args: unknown[]) => {
+      addDebugError(toMessage(args), 'console');
+      origWarn.apply(console, args);
+    };
+
+    return () => {
+      if (typeof globalThis.removeEventListener === 'function') {
+        globalThis.removeEventListener('unhandledrejection', onRejection);
+      }
+      console.error = origError;
+      console.warn = origWarn;
+    };
   }, []);
 
   // Run OTA update check during splash when updates are relevant (native release).
