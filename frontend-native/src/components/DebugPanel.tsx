@@ -64,7 +64,7 @@ function copyEntryToClipboard(entry: DebugErrorEntry) {
 }
 
 export function DebugPanelUI({ errors, onClear, visible, onToggle }: Props) {
-  const showFab = errors.length > 0 || visible;
+  const showFab = errors.length > 0;
   return (
     <>
       {showFab && (

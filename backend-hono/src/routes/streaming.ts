@@ -196,7 +196,7 @@ const chooseRefererOrigin = (
   try {
     const target = new URL(decodedUrl);
     const host = (target.hostname || '').toLowerCase();
-    const isRapidCloudCdn = /^(.*\.)?(fogtwist21\.xyz|crimsonstorm18\.pro|rapid-cloud\.co)$/i.test(host);
+    const isRapidCloudCdn = /^(.*\.)?(fogtwist21\.xyz|crimsonstorm18\.(pro|live)|rapid-cloud\.co|sunburst93\.live|haildrop77\.pro|stormshade84\.live|rainveil36\.xyz)$/i.test(host);
     const streamOrigin = { referer: `${target.origin}/`, origin: target.origin };
     // M3U8 and segments: use embed referer so CDN accepts (stream host often rejects own origin)
     if (isSegment || isM3U8) {
@@ -276,7 +276,7 @@ streamingRoutes.get('/proxy', async (c) => {
       } catch {
         // keep baseHeaders (megacloud)
       }
-      const isRapidCloudCdn = /\.(fogtwist21\.xyz|crimsonstorm18\.pro|rapid-cloud\.co)(\/|$)/i.test(decodedUrl);
+      const isRapidCloudCdn = /(fogtwist21\.xyz|crimsonstorm18\.(pro|live)|rapid-cloud\.co|sunburst93\.live|haildrop77\.pro|stormshade84\.live|rainveil36\.xyz)(\/|$)/i.test(decodedUrl);
       requestAttempts = [
         { headers: baseHeaders, useHeaderGenerator: true },
         { headers: baseHeaders, useHeaderGenerator: false },
