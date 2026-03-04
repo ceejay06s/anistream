@@ -1,10 +1,5 @@
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import { uploadProfilePhoto, deleteProfilePhoto } from '../profileService';
-import axios from 'axios';
-
-// Mock axios
-jest.mock('axios');
-const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 // Mock API_BASE_URL
 jest.mock('../api', () => ({
@@ -17,60 +12,59 @@ describe('Profile Service', () => {
   });
 
   describe('uploadProfilePhoto', () => {
-    it('should upload profile photo successfully', async () => {
+    it('should upload profile photo successfully (web File)', async () => {
       const mockFile = new File(['test'], 'photo.jpg', { type: 'image/jpeg' });
-      const mockResponse = {
-        data: {
-          success: true,
-          url: 'https://example.com/photo.jpg',
-        },
-      };
-
-      mockedAxios.post.mockResolvedValue(mockResponse);
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true, url: 'https://example.com/photo.jpg' }),
+      });
+      global.fetch = mockFetch;
 
       const url = await uploadProfilePhoto(mockFile, 'user123');
 
       expect(url).toBe('https://example.com/photo.jpg');
-      expect(mockedAxios.post).toHaveBeenCalledWith(
+      expect(mockFetch).toHaveBeenCalledWith(
         'http://localhost:8801/api/upload/file',
-        expect.any(FormData),
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        }
+        expect.objectContaining({ method: 'POST' })
+      );
+    });
+
+    it('should upload profile photo successfully (native uri)', async () => {
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true, url: 'https://example.com/photo.jpg' }),
+      });
+      global.fetch = mockFetch;
+
+      const url = await uploadProfilePhoto(
+        { uri: 'file:///photo.jpg', type: 'image/jpeg', name: 'photo.jpg' },
+        'user123'
+      );
+
+      expect(url).toBe('https://example.com/photo.jpg');
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://localhost:8801/api/upload/file',
+        expect.objectContaining({ method: 'POST' })
       );
     });
 
     it('should handle upload errors', async () => {
       const mockFile = new File(['test'], 'photo.jpg', { type: 'image/jpeg' });
-      const mockError = {
-        response: {
-          status: 400,
-          data: { error: 'File too large' },
-        },
-      };
-
-      mockedAxios.post.mockRejectedValue(mockError);
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        json: async () => ({ error: 'File too large' }),
+      });
+      global.fetch = mockFetch;
 
       await expect(uploadProfilePhoto(mockFile, 'user123')).rejects.toThrow();
     });
 
-    it('should include userId and folder in FormData', async () => {
-      const mockFile = new File(['test'], 'photo.jpg', { type: 'image/jpeg' });
-      const mockResponse = {
-        data: {
-          success: true,
-          url: 'https://example.com/photo.jpg',
-        },
-      };
-
-      mockedAxios.post.mockResolvedValue(mockResponse);
-
-      await uploadProfilePhoto(mockFile, 'user123');
-
-      const formDataCall = mockedAxios.post.mock.calls[0][1] as FormData;
-      expect(formDataCall).toBeInstanceOf(FormData);
+    it('should reject non-image file', async () => {
+      const mockFile = new File(['test'], 'doc.pdf', { type: 'application/pdf' });
+      await expect(uploadProfilePhoto(mockFile, 'user123')).rejects.toThrow('File must be an image');
     });
   });
 

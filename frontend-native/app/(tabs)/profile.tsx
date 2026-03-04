@@ -101,6 +101,7 @@ export default function ProfileScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [newDisplayName, setNewDisplayName] = useState('');
   const [selectedPhotoFile, setSelectedPhotoFile] = useState<File | null>(null);
+  const [selectedPhotoUri, setSelectedPhotoUri] = useState<string | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [updatingAccount, setUpdatingAccount] = useState(false);
@@ -622,18 +623,46 @@ export default function ProfileScreen() {
   };
 
   const handleRemovePhoto = () => {
-    if (photoPreview) {
+    if (photoPreview && Platform.OS === 'web') {
       URL.revokeObjectURL(photoPreview);
     }
     setSelectedPhotoFile(null);
+    setSelectedPhotoUri(null);
     setPhotoPreview(null);
     if (profilePhotoInputRef.current) {
       profilePhotoInputRef.current.value = '';
     }
   };
 
+  const handlePickPhotoNative = async () => {
+    try {
+      const { launchImageLibraryAsync, requestMediaLibraryPermissionsAsync } = await import('expo-image-picker');
+      const { status } = await requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        setError('Photo library permission is required to change profile photo.');
+        setTimeout(() => setError(''), 5000);
+        return;
+      }
+      const result = await launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+      if (result.canceled || !result.assets[0]) return;
+      const uri = result.assets[0].uri;
+      setSelectedPhotoUri(uri);
+      setPhotoPreview(uri);
+    } catch (err: any) {
+      console.error('Profile photo pick failed:', err);
+      setError(err?.message || 'Failed to open photo library');
+      setTimeout(() => setError(''), 5000);
+    }
+  };
+
   const handleUpdateProfile = async () => {
-    if (!newDisplayName.trim() && !selectedPhotoFile) {
+    const hasPhoto = selectedPhotoFile || selectedPhotoUri;
+    if (!newDisplayName.trim() && !hasPhoto) {
       setError('Please enter a display name or upload a photo');
       return;
     }
@@ -643,9 +672,13 @@ export default function ProfileScreen() {
     try {
       let photoUrlToUse: string | undefined = undefined;
 
-      // Upload photo file if selected
       if (selectedPhotoFile && user) {
         photoUrlToUse = await uploadProfilePhoto(selectedPhotoFile, user.uid);
+      } else if (selectedPhotoUri && user) {
+        photoUrlToUse = await uploadProfilePhoto(
+          { uri: selectedPhotoUri, type: 'image/jpeg', name: 'photo.jpg' },
+          user.uid
+        );
       }
 
       await updateProfile(
@@ -1045,8 +1078,44 @@ export default function ProfileScreen() {
             />
             
             <Text style={styles.inputLabel}>Profile Photo</Text>
-            
-            {/* Drag and Drop Area */}
+
+            {/* Native: expo-image-picker */}
+            {Platform.OS !== 'web' && (
+              <View style={styles.nativePhotoSection}>
+                {(photoPreview || user?.photoURL) ? (
+                  <View style={styles.photoPreviewContainer}>
+                    <Image
+                      source={{ uri: photoPreview || user?.photoURL || '' }}
+                      style={styles.photoPreview}
+                      resizeMode="cover"
+                    />
+                    <TouchableOpacity
+                      style={styles.removePhotoButton}
+                      onPress={handleRemovePhoto}
+                    >
+                      <Ionicons name="close-circle" size={24} color="#e50914" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.changePhotoButton}
+                      onPress={handlePickPhotoNative}
+                    >
+                      <Ionicons name="camera-outline" size={18} color="#fff" />
+                      <Text style={styles.changePhotoButtonText}>Change</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.uploadButton}
+                    onPress={handlePickPhotoNative}
+                  >
+                    <Ionicons name="camera-outline" size={20} color="#fff" />
+                    <Text style={styles.uploadButtonText}>Choose Photo</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
+            {/* Drag and Drop Area (Web only) */}
             {Platform.OS === 'web' && (
               <View
                 style={[
@@ -1114,8 +1183,8 @@ export default function ProfileScreen() {
               </View>
             )}
 
-            {/* Current Photo (if no new photo selected) */}
-            {!photoPreview && user?.photoURL && (
+            {/* Current Photo on web (native shows it in nativePhotoSection) */}
+            {!photoPreview && user?.photoURL && Platform.OS === 'web' && (
               <View style={styles.currentPhotoContainer}>
                 <Text style={styles.currentPhotoLabel}>Current Photo:</Text>
                 <Image
@@ -1319,6 +1388,7 @@ export default function ProfileScreen() {
               onPress={() => {
                 setNewDisplayName(user?.displayName || '');
                 setSelectedPhotoFile(null);
+                setSelectedPhotoUri(null);
                 setPhotoPreview(null);
                 setIsDragging(false);
                 setShowUpdateProfile(true);
@@ -1346,6 +1416,7 @@ export default function ProfileScreen() {
               onPress={() => {
                 setNewDisplayName(user?.displayName || '');
                 setSelectedPhotoFile(null);
+                setSelectedPhotoUri(null);
                 setPhotoPreview(null);
                 setIsDragging(false);
                 setShowUpdateProfile(true);
@@ -2534,6 +2605,9 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(229, 9, 20, 0.3)',
   },
   // Photo Upload Styles
+  nativePhotoSection: {
+    marginVertical: 16,
+  },
   photoPreviewContainer: {
     position: 'relative',
     alignSelf: 'center',

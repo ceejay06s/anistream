@@ -1,6 +1,13 @@
 import { Platform } from 'react-native';
 import { app } from '@/config/firebase';
 
+/** Web: File; Native: { uri, type?, name? } for FormData (expo-image-picker result) */
+export type ProfilePhotoInput = File | { uri: string; type?: string; name?: string };
+
+function isNativePhotoInput(input: ProfilePhotoInput): input is { uri: string; type?: string; name?: string } {
+  return typeof input === 'object' && 'uri' in input && typeof (input as any).uri === 'string';
+}
+
 // Lazy initialization to avoid module load order issues
 function getStorage() {
   if (!app) {
@@ -11,57 +18,68 @@ function getStorage() {
 }
 
 /**
- * Uploads a profile photo to Firebase Storage via backend proxy
- * This avoids CORS issues and doesn't require Blaze plan
- * @param file The image file to upload
+ * Uploads a profile photo to Firebase Storage via backend proxy.
+ * Supports web (File) and native (expo-image-picker uri object).
+ * @param file The image file (web) or { uri, type?, name? } (native)
  * @param userId The user's ID
  * @returns The download URL of the uploaded photo
  */
 export async function uploadProfilePhoto(
-  file: File,
+  file: ProfilePhotoInput,
   userId: string
 ): Promise<string> {
-  // Use backend proxy to avoid CORS issues (no Blaze plan needed)
   const { API_BASE_URL } = require('./api');
-  const axios = require('axios');
 
-  // Validate file type
+  if (isNativePhotoInput(file)) {
+    const type = file.type || 'image/jpeg';
+    if (!type.startsWith('image/')) {
+      throw new Error('File must be an image');
+    }
+    const formData = new FormData();
+    formData.append('file', {
+      uri: file.uri,
+      type,
+      name: file.name || 'photo.jpg',
+    } as any);
+    formData.append('userId', userId);
+    formData.append('folder', 'profiles');
+
+    const response = await fetch(`${API_BASE_URL}/api/upload/file`, {
+      method: 'POST',
+      body: formData,
+      headers: {},
+    });
+    const data = await response.json().catch(() => ({}));
+    if (data.success) return data.url;
+    if (response.status === 400) throw new Error(data.error || 'Invalid file or request');
+    if (response.status === 413) throw new Error('Image size must be less than 5MB');
+    throw new Error(data.error || 'Upload failed');
+  }
+
+  // Web: File
   if (!file.type.startsWith('image/')) {
     throw new Error('File must be an image');
   }
-
-  // Validate file size (max 5MB for profile photos)
   const maxSize = 5 * 1024 * 1024; // 5MB
   if (file.size > maxSize) {
     throw new Error('Image size must be less than 5MB');
   }
 
-  try {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('userId', userId);
-    formData.append('folder', 'profiles');
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('userId', userId);
+  formData.append('folder', 'profiles');
 
-    const response = await axios.post(`${API_BASE_URL}/api/upload/file`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-
-    if (response.data.success) {
-      return response.data.url;
-    } else {
-      throw new Error(response.data.error || 'Upload failed');
-    }
-  } catch (error: any) {
-    if (error.response?.status === 400) {
-      throw new Error(error.response.data.error || 'Invalid file or request');
-    } else if (error.response?.status === 413) {
-      throw new Error('Image size must be less than 5MB');
-    } else {
-      throw new Error(`Upload failed: ${error.response?.data?.message || error.message || 'Unknown error'}`);
-    }
-  }
+  const response = await fetch(`${API_BASE_URL}/api/upload/file`, {
+    method: 'POST',
+    body: formData,
+    headers: {},
+  });
+  const data = await response.json().catch(() => ({}));
+  if (data.success) return data.url;
+  if (response.status === 400) throw new Error(data.error || 'Invalid file or request');
+  if (response.status === 413) throw new Error('Image size must be less than 5MB');
+  throw new Error(data.error || 'Upload failed');
 }
 
 /**
