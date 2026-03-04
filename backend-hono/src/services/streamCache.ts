@@ -31,6 +31,67 @@ function getCacheKey(episodeId: string, category: string): string {
   return `stream:${normalizedId}:${category}`;
 }
 
+/** Key for full source response cache: "stream:sources:{episodeId}:{server}:{category}" */
+function getSourcesCacheKey(episodeId: string, server: string, category: string): string {
+  const normalizedId = episodeId.replace(/[?&=]/g, ':');
+  return `stream:sources:${normalizedId}:${server}:${category}`;
+}
+
+/** Cached full streaming response (sources, tracks, headers, etc.) */
+export interface CachedStreamingData {
+  sources: Array<{ url: string; quality: string; isM3U8: boolean }>;
+  headers?: Record<string, string>;
+  tracks?: Array<{ url: string; lang: string }>;
+  intro?: { start: number; end: number };
+  outro?: { start: number; end: number };
+  embedURL?: string;
+}
+
+const SOURCES_CACHE_TTL_SEC = 2 * 60 * 60; // 2 hours
+
+/**
+ * Get cached streaming sources (full response) for an episode.
+ * Returns null on miss or if Redis is not configured.
+ */
+export async function getCachedSources(
+  episodeId: string,
+  server: string,
+  category: string
+): Promise<CachedStreamingData | null> {
+  if (!redis) return null;
+  try {
+    const key = getSourcesCacheKey(episodeId, server, category);
+    const cached = await redis.get<CachedStreamingData>(key);
+    if (cached?.sources?.length) {
+      console.log(`[StreamCache] Sources cache HIT: ${key}`);
+      return cached;
+    }
+    return null;
+  } catch (err) {
+    console.error('[StreamCache] Sources cache read error:', err);
+    return null;
+  }
+}
+
+/**
+ * Store streaming sources response in cache.
+ */
+export async function setCachedSources(
+  episodeId: string,
+  server: string,
+  category: string,
+  data: CachedStreamingData
+): Promise<void> {
+  if (!redis || !data?.sources?.length) return;
+  try {
+    const key = getSourcesCacheKey(episodeId, server, category);
+    await redis.set(key, data, { ex: SOURCES_CACHE_TTL_SEC });
+    console.log(`[StreamCache] Cached sources for ${key} (${data.sources.length} sources)`);
+  } catch (err) {
+    console.error('[StreamCache] Sources cache write error:', err);
+  }
+}
+
 /**
  * Get cached server info for an episode
  */

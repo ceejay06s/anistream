@@ -5,9 +5,10 @@ import { animeRoutes } from './routes/anime.js';
 import { streamingRoutes } from './routes/streaming.js';
 import { recaptchaRoutes } from './routes/recaptcha.js';
 import { notificationRoutes } from './routes/notifications.js';
-import { newsRoutes } from './routes/news.js';
 import { uploadRoutes } from './routes/upload.js';
 import { createWebSocketServer } from './routes/websocket.js';
+import { serve } from '@hono/node-server';
+import { firestoreDb } from './config/firebase.js';
 
 const app = new Hono();
 
@@ -48,12 +49,39 @@ app.get('/api', (c) => {
   return c.json({ status: 'ok' });
 });
 
+// GET /api/news (inlined so it always deploys with index)
+// Hit /api/news/ping to confirm this deploy is live
+app.get('/api/news/ping', (c) => c.json({ ok: true, message: 'news route deployed' }));
+app.get('/api/news', async (c) => {
+  try {
+    if (!firestoreDb) {
+      return c.json({ success: true, news: [], message: 'News service unavailable' });
+    }
+    const limit = Math.min(Number(c.req.query('limit')) || 20, 50);
+    const animeId = c.req.query('animeId') || undefined;
+    const newsRef = firestoreDb.collection('news');
+    const snapshot = animeId
+      ? await newsRef.where('animeId', '==', animeId).orderBy('createdAt', 'desc').limit(limit).get()
+      : await newsRef.orderBy('createdAt', 'desc').limit(limit).get();
+    const news = snapshot.docs.map((doc: any) => {
+      const data = doc.data();
+      const createdAt = typeof data.createdAt?.toMillis === 'function'
+        ? data.createdAt.toMillis()
+        : (data.createdAt ?? Date.now());
+      return { id: doc.id, ...data, createdAt };
+    });
+    return c.json({ success: true, news });
+  } catch (error: any) {
+    console.error('Error fetching news:', error);
+    return c.json({ success: false, error: error.message || 'Failed to fetch news', news: [] }, 500);
+  }
+});
+
 // Routes
 app.route('/api/anime', animeRoutes);
 app.route('/api/streaming', streamingRoutes);
 app.route('/api/recaptcha', recaptchaRoutes);
 app.route('/api/notifications', notificationRoutes);
-app.route('/api/news', newsRoutes);
 app.route('/api/upload', uploadRoutes);
 
 // 404 handler
@@ -73,8 +101,6 @@ app.onError((err, c) => {
 const port = Number(process.env.PORT) || 8801;
 
 // Start server
-import { serve } from '@hono/node-server';
-
 const server = serve({
   fetch: app.fetch,
   port,

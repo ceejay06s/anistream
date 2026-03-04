@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { getEpisodeSources, getEpisodeServers } from '../services/streamingService.js';
+import { getCachedSources, setCachedSources } from '../services/streamCache.js';
 import { gotScraping } from 'got-scraping';
 
 export const streamingRoutes = new Hono();
@@ -7,7 +8,7 @@ export const streamingRoutes = new Hono();
 // Server priority order for fallback
 const SERVER_PRIORITY = ['hd-1', 'hd-2', 'megacloud', 'streamsb', 'streamtape'];
 
-// Get episode sources with optional multi-server fallback
+// Get episode sources: cache -> api (stream proxy) -> other fallback APIs (v1, v2, ...)
 streamingRoutes.get('/sources', async (c) => {
   let episodeId = c.req.query('episodeId');
   const requestedServer = c.req.query('server') || 'hd-1';
@@ -21,7 +22,6 @@ streamingRoutes.get('/sources', async (c) => {
   }
 
   // Don't clean episodeId if it's already in the correct format (?ep=)
-  // Only clean if it has other query parameters
   if (episodeId.includes('?') && !episodeId.includes('?ep=')) {
     episodeId = episodeId.split('?')[0];
   }
@@ -31,7 +31,22 @@ streamingRoutes.get('/sources', async (c) => {
     ? SERVER_PRIORITY
     : [requestedServer, ...SERVER_PRIORITY.filter(s => s !== requestedServer)];
 
-  // Try each server until one succeeds
+  // 1) Load from cache first (for each server we would try)
+  for (const serverToTry of serversToTry) {
+    const cached = await getCachedSources(episodeId, serverToTry, category as 'sub' | 'dub' | 'raw');
+    if (cached?.sources?.length) {
+      console.log(`Sources from cache for server: ${serverToTry}`);
+      return c.json({
+        success: true,
+        data: cached,
+        server: serverToTry,
+        fromCache: true,
+        triedServers: [serverToTry],
+      });
+    }
+  }
+
+  // 2) API (stream proxy) then other fallback APIs (inside getEpisodeSources)
   for (const serverToTry of serversToTry) {
     try {
       console.log(`Trying server: ${serverToTry} for episode: ${episodeId}`);
@@ -39,28 +54,28 @@ streamingRoutes.get('/sources', async (c) => {
 
       if (sources && sources.sources.length > 0) {
         console.log(`Success with server: ${serverToTry}, found ${sources.sources.length} sources`);
+        await setCachedSources(episodeId, serverToTry, category as 'sub' | 'dub' | 'raw', sources);
         return c.json({
           success: true,
           data: sources,
           server: serverToTry,
-          triedServers: serversToTry.slice(0, serversToTry.indexOf(serverToTry) + 1)
+          fromCache: false,
+          triedServers: serversToTry.slice(0, serversToTry.indexOf(serverToTry) + 1),
         });
       }
 
       console.log(`Server ${serverToTry} returned no sources, trying next...`);
     } catch (error: any) {
       console.log(`Server ${serverToTry} failed: ${error.message}, trying next...`);
-      // Continue to next server
     }
   }
 
-  // All servers failed
   console.error(`All servers failed for episode: ${episodeId}`);
   return c.json({
     success: false,
     error: 'No streaming sources found from any server',
     data: { sources: [] },
-    triedServers: serversToTry
+    triedServers: serversToTry,
   }, 404);
 });
 

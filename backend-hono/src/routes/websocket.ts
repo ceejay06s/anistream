@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { upgradeWebSocket } from 'hono/cloudflare-workers';
 import { getEpisodeSources, getEpisodeServers } from '../services/streamingService.js';
 import { WebSocketServer, WebSocket as WS } from 'ws';
-import { getCachedServer, setCachedServer, markServerFailed, isCacheEnabled } from '../services/streamCache.js';
+import { getCachedServer, setCachedServer, markServerFailed, isCacheEnabled, getCachedSources, setCachedSources } from '../services/streamCache.js';
 
 // Store active connections
 const connections = new Map<string, WebSocket>();
@@ -45,6 +45,24 @@ async function findWorkingSources(
   const failedServersThisRequest: string[] = [];
   const skipCache = options?.skipCache === true;
 
+  // 1) Load from cache first (full source response) when not retrying after failure
+  if (!skipCache) {
+    for (const server of SERVER_PRIORITY) {
+      const cachedSources = await getCachedSources(episodeId, server, category);
+      if (cachedSources?.sources?.length) {
+        sendMessage({ type: 'status', message: `Sources from cache (${server})` });
+        console.log(`[WS] Sources cache HIT: ${server}`);
+        return {
+          ...cachedSources,
+          usedServer: server,
+          serverIndex: 0,
+          totalServers: 1,
+          fromCache: true,
+        };
+      }
+    }
+  }
+
   // When retrying after playback error, skip cache and optionally the server that just failed
   let cached: Awaited<ReturnType<typeof getCachedServer>> = null;
   if (skipCache) {
@@ -75,8 +93,8 @@ async function findWorkingSources(
 
       if (sources && sources.sources && sources.sources.length > 0) {
         console.log(`[WS] Cache HIT! Server ${cached.server} worked`);
-        // Update cache with new success
         await setCachedServer(episodeId, category, cached.server, failedServersThisRequest);
+        await setCachedSources(episodeId, cached.server, category, sources);
         return {
           ...sources,
           usedServer: cached.server,
@@ -153,8 +171,8 @@ async function findWorkingSources(
 
       if (sources && sources.sources && sources.sources.length > 0) {
         console.log(`[WS] Success with server: ${server}`);
-        // Cache the working server
         await setCachedServer(episodeId, category, server, failedServersThisRequest);
+        await setCachedSources(episodeId, server, category, sources);
         return {
           ...sources,
           usedServer: server,

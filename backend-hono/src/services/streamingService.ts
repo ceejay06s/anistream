@@ -4,12 +4,12 @@ import {
   getEpisodeServersProvider,
 } from './aniwatchApiClient.js';
 
-// Default fallback API endpoints (consumet-based APIs)
+// Fallback order: api-v1 -> api-v2 -> other consumet-style APIs (after stream proxy fails)
 const DEFAULT_FALLBACK_APIS = [
+  'https://api-v1-anime.vercel.app/api',
+  'https://api-v2-anime.vercel.app/api/v2/hianime',
   'https://api.consumet.org/anime/zoro',
   'https://consumet-api.vercel.app/anime/zoro',
-  'https://api-v2-anime.vercel.app/api/v2/hianime',
-  'https://api-v1-anime.vercel.app/api',
 ];
 
 const configuredFallbackApis = (process.env.STREAMING_FALLBACK_APIS || '')
