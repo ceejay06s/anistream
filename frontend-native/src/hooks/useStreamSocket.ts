@@ -33,10 +33,15 @@ interface WSMessage {
   fromCache?: boolean;
 }
 
+const WS_CONNECT_TIMEOUT_MS = 12000;
+const WS_SOURCES_TIMEOUT_MS = 50000;
+
 export function useStreamSocket(): UseStreamSocketResult {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastRequestRef = useRef<{ episodeId: string; category: 'sub' | 'dub'; skipCache?: boolean } | null>(null);
+  const connectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sourcesTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastRequestRef = useRef<{ episodeId: string; category: 'sub' | 'dub'; skipCache?: boolean; failedServer?: string } | null>(null);
 
   const [status, setStatus] = useState<StreamStatus>({
     isConnected: false,
@@ -68,7 +73,10 @@ export function useStreamSocket(): UseStreamSocketResult {
 
     if (Platform.OS !== 'web') {
       try {
-        await electBackendForWebSocket();
+        await Promise.race([
+          electBackendForWebSocket(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Backend election timeout')), 6000)),
+        ]);
       } catch {
         // Keep current API_BASE_URL
       }
@@ -80,15 +88,31 @@ export function useStreamSocket(): UseStreamSocketResult {
     try {
       const ws = new WebSocket(wsUrl);
 
+      connectTimeoutRef.current = setTimeout(() => {
+        connectTimeoutRef.current = null;
+        if (ws.readyState !== WebSocket.OPEN) {
+          ws.close();
+          setStatus(prev => ({
+            ...prev,
+            isLoading: false,
+            error: 'Connection timed out. Try "Use REST API" below.',
+          }));
+        }
+      }, WS_CONNECT_TIMEOUT_MS);
+
       ws.onopen = () => {
+        if (connectTimeoutRef.current) {
+          clearTimeout(connectTimeoutRef.current);
+          connectTimeoutRef.current = null;
+        }
         console.log('[WS] Connected');
         setStatus(prev => ({
           ...prev,
           isConnected: true,
           error: null,
+          message: 'Finding servers...',
         }));
 
-        // If there was a pending request, send it
         if (lastRequestRef.current) {
           const { episodeId, category, skipCache, failedServer } = lastRequestRef.current;
           ws.send(JSON.stringify({
@@ -98,6 +122,15 @@ export function useStreamSocket(): UseStreamSocketResult {
             skipCache: skipCache === true,
             failedServer: failedServer || undefined,
           }));
+          sourcesTimeoutRef.current = setTimeout(() => {
+            sourcesTimeoutRef.current = null;
+            setStatus(prev => {
+              if (prev.isLoading) {
+                return { ...prev, isLoading: false, error: 'Servers took too long. Try "Use REST API" or retry.' };
+              }
+              return prev;
+            });
+          }, WS_SOURCES_TIMEOUT_MS);
         }
       };
 
@@ -126,6 +159,10 @@ export function useStreamSocket(): UseStreamSocketResult {
               break;
 
             case 'sources':
+              if (sourcesTimeoutRef.current) {
+                clearTimeout(sourcesTimeoutRef.current);
+                sourcesTimeoutRef.current = null;
+              }
               if (message.data) {
                 // Proxy M3U8 URLs through backend for all platforms
                 // Web needs this for CORS, mobile needs it because some servers block direct access
@@ -182,6 +219,10 @@ export function useStreamSocket(): UseStreamSocketResult {
               break;
 
             case 'error':
+              if (sourcesTimeoutRef.current) {
+                clearTimeout(sourcesTimeoutRef.current);
+                sourcesTimeoutRef.current = null;
+              }
               setStatus(prev => ({
                 ...prev,
                 isLoading: false,
@@ -195,15 +236,28 @@ export function useStreamSocket(): UseStreamSocketResult {
       };
 
       ws.onerror = (error) => {
+        if (connectTimeoutRef.current) {
+          clearTimeout(connectTimeoutRef.current);
+          connectTimeoutRef.current = null;
+        }
         console.error('[WS] Error:', error);
         setStatus(prev => ({
           ...prev,
           isConnected: false,
+          isLoading: false,
           error: 'Connection error',
         }));
       };
 
       ws.onclose = () => {
+        if (connectTimeoutRef.current) {
+          clearTimeout(connectTimeoutRef.current);
+          connectTimeoutRef.current = null;
+        }
+        if (sourcesTimeoutRef.current) {
+          clearTimeout(sourcesTimeoutRef.current);
+          sourcesTimeoutRef.current = null;
+        }
         console.log('[WS] Disconnected');
         setStatus(prev => ({
           ...prev,
@@ -252,6 +306,16 @@ export function useStreamSocket(): UseStreamSocketResult {
         skipCache: options?.skipCache === true,
         failedServer: options?.failedServer || undefined,
       }));
+      if (sourcesTimeoutRef.current) clearTimeout(sourcesTimeoutRef.current);
+      sourcesTimeoutRef.current = setTimeout(() => {
+        sourcesTimeoutRef.current = null;
+        setStatus(prev => {
+          if (prev.isLoading) {
+            return { ...prev, isLoading: false, error: 'Servers took too long. Try "Use REST API" or retry.' };
+          }
+          return prev;
+        });
+      }, WS_SOURCES_TIMEOUT_MS);
     } else {
       connect();
     }
@@ -261,6 +325,14 @@ export function useStreamSocket(): UseStreamSocketResult {
   const disconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
+    }
+    if (connectTimeoutRef.current) {
+      clearTimeout(connectTimeoutRef.current);
+      connectTimeoutRef.current = null;
+    }
+    if (sourcesTimeoutRef.current) {
+      clearTimeout(sourcesTimeoutRef.current);
+      sourcesTimeoutRef.current = null;
     }
     lastRequestRef.current = null;
     wsRef.current?.close();

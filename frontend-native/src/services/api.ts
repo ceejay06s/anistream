@@ -37,6 +37,12 @@ function getInitialBaseUrl(): string {
 // Mutable so we can switch to backup when primary fails; consumers read current value
 export let API_BASE_URL = getInitialBaseUrl();
 
+/** List of backup API base URLs (excluding current primary). For news/health fallback. */
+export function getBackupApiUrls(): string[] {
+  const primary = getPrimaryUrl();
+  return getBackupUrls().filter((u) => u !== primary);
+}
+
 const useBackup = (): boolean => {
   const primary = getPrimaryUrl();
   const backups = getBackupUrls().filter((u) => u !== primary);

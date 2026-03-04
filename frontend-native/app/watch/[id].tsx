@@ -902,7 +902,7 @@ export default function WatchScreen() {
           </TouchableOpacity>
         </View>
       ) : loading && !selectedSource && !iframeFallbackUrl ? (
-        // Same container as player – show only spinner (no panel; expo-video loading state)
+        // Same container as player – show spinner + option to switch to REST if stuck
         <View style={styles.videoLoadingContainer}>
           {animeInfo?.poster ? (
             <Image
@@ -913,6 +913,18 @@ export default function WatchScreen() {
           ) : null}
           <View style={styles.videoLoadingOverlay} />
           <ActivityIndicator size="large" color="#e50914" />
+          {retryMessage ? <Text style={styles.loadingStatusText}>{retryMessage}</Text> : null}
+          {useWebSocket ? (
+            <TouchableOpacity
+              style={[styles.retryButton, { marginTop: 16, backgroundColor: '#333', paddingVertical: 10, paddingHorizontal: 16 }]}
+              onPress={() => {
+                setUseWebSocket(false);
+                loadSources();
+              }}
+            >
+              <Text style={styles.retryText}>Use REST API instead</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       ) : shouldRenderPlayer({
         selectedSourceUrl: selectedSource?.url,
@@ -1268,6 +1280,13 @@ const styles = StyleSheet.create({
   videoLoadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0, 0, 0, 0.55)',
+  },
+  loadingStatusText: {
+    color: '#aaa',
+    marginTop: 12,
+    fontSize: 13,
+    textAlign: 'center',
+    paddingHorizontal: 20,
   },
   videoLoadingTitle: {
     color: '#fff',

@@ -10,22 +10,37 @@ export interface NewsItem {
   url?: string;
 }
 
+function parseNewsResponse(res: Response, data: unknown): NewsItem[] | null {
+  if (!res.ok) return null;
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) return null;
+  const d = data as { success?: boolean; news?: NewsItem[] };
+  if (d && d.success === true && Array.isArray(d.news)) return d.news;
+  return null;
+}
+
 export const newsService = {
   async getNews(limit: number = 20): Promise<NewsItem[]> {
     try {
-      const { API_BASE_URL } = require('./api');
-      const res = await fetch(`${API_BASE_URL}/api/news?limit=${limit}`);
-      // 404 or non-JSON (e.g. HTML error page) -> fallback without throwing
-      if (!res.ok) {
-        return this.getMockNews();
-      }
-      const contentType = res.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        return this.getMockNews();
-      }
-      const data = await res.json().catch(() => ({}));
-      if (data && data.success === true && Array.isArray(data.news)) {
-        return data.news;
+      const api = require('./api');
+      const base = api.API_BASE_URL;
+      const url = `${base}/api/news?limit=${limit}`;
+      let res = await fetch(url);
+      let data = await res.json().catch(() => ({}));
+      let news = parseNewsResponse(res, data);
+      if (news) return news;
+      // If primary returned 404, try backup API (e.g. Railway) when available
+      const backupUrls = typeof api.getBackupApiUrls === 'function' ? api.getBackupApiUrls() : [];
+      for (const backupBase of backupUrls) {
+        if (backupBase === base) continue;
+        try {
+          res = await fetch(`${backupBase}/api/news?limit=${limit}`);
+          data = await res.json().catch(() => ({}));
+          news = parseNewsResponse(res, data);
+          if (news) return news;
+        } catch {
+          // skip
+        }
       }
       return this.getMockNews();
     } catch (err) {
@@ -36,16 +51,24 @@ export const newsService = {
 
   async getNewsForAnime(animeId: string, limit: number = 20): Promise<NewsItem[]> {
     try {
-      const { API_BASE_URL } = require('./api');
-      const res = await fetch(
-        `${API_BASE_URL}/api/news?animeId=${encodeURIComponent(animeId)}&limit=${limit}`
-      );
-      if (!res.ok) return [];
-      const contentType = res.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) return [];
-      const data = await res.json().catch(() => ({}));
-      if (data && data.success === true && Array.isArray(data.news)) {
-        return data.news;
+      const api = require('./api');
+      const base = api.API_BASE_URL;
+      const q = `animeId=${encodeURIComponent(animeId)}&limit=${limit}`;
+      let res = await fetch(`${base}/api/news?${q}`);
+      let data = await res.json().catch(() => ({}));
+      let news = parseNewsResponse(res, data);
+      if (news) return news;
+      const backupUrls = typeof api.getBackupApiUrls === 'function' ? api.getBackupApiUrls() : [];
+      for (const backupBase of backupUrls) {
+        if (backupBase === base) continue;
+        try {
+          res = await fetch(`${backupBase}/api/news?${q}`);
+          data = await res.json().catch(() => ({}));
+          news = parseNewsResponse(res, data);
+          if (news) return news;
+        } catch {
+          // skip
+        }
       }
       return [];
     } catch (err) {

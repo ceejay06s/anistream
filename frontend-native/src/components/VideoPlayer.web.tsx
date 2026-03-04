@@ -317,8 +317,8 @@ export function VideoPlayer({
         maxSeekHole: 2,
         nudgeOffset: 0.1,
         nudgeMaxRetry: 10,
-        fragLoadingTimeOut: 20000,
-        manifestLoadingTimeOut: 20000,
+        fragLoadingTimeOut: 35000,
+        manifestLoadingTimeOut: 25000,
         xhrSetup: (xhr) => {
           xhr.withCredentials = false;
         },

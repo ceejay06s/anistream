@@ -74,7 +74,7 @@ export const notificationService = {
         const token = await getToken(messaging, {
           vapidKey,
         });
-        return token;
+        return typeof token === 'string' ? token : null;
       } catch (err) {
         console.error('Failed to get FCM token:', err);
         return null;
@@ -130,21 +130,33 @@ export const notificationService = {
   setupForegroundHandler(callback: (payload: NotificationPayload) => void): () => void {
     const messaging = getMessagingInstance();
     if (Platform.OS === 'web' && messaging) {
-      const { onMessage } = require('firebase/messaging');
-      const unsubscribe = onMessage(messaging, (message: any) => {
-        const payload = message?.payload ?? message;
-        if (!payload || typeof payload !== 'object') return;
-        try {
-          callback({
-            title: payload.notification?.title ?? payload.title ?? '',
-            body: payload.notification?.body ?? payload.body ?? '',
-            data: payload.data,
-          });
-        } catch (err) {
-          console.warn('Notification handler error:', err);
-        }
-      });
-      return unsubscribe;
+      try {
+        const { onMessage } = require('firebase/messaging');
+        const unsubscribe = onMessage(messaging, (message: any) => {
+          try {
+            if (message == null || typeof message !== 'object') return;
+            const payload = 'payload' in message && message.payload != null ? message.payload : message;
+            if (!payload || typeof payload !== 'object') return;
+            callback({
+              title: (payload as any).notification?.title ?? (payload as any).title ?? '',
+              body: (payload as any).notification?.body ?? (payload as any).body ?? '',
+              data: (payload as any).data,
+            });
+          } catch (err) {
+            console.warn('Notification handler error:', err);
+          }
+        });
+        return () => {
+          try {
+            unsubscribe();
+          } catch {
+            // no-op
+          }
+        };
+      } catch (err) {
+        console.warn('FCM onMessage setup failed:', err);
+        return () => {};
+      }
     }
 
     if (Platform.OS !== 'web') {
