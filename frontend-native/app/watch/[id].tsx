@@ -116,15 +116,24 @@ export default function WatchScreen() {
   const [retryElapsed, setRetryElapsed] = useState(0);
   const retryStartTimeRef = useRef<number | null>(null);
   const retryTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Count how many times the player has requested a new source (to break retry loops)
+  const requestNewSourceCountRef = useRef(0);
 
   // Start/stop retry timer based on loading state
   useEffect(() => {
     if (loading && !selectedSource) {
-      // Start the retry timer
-      retryStartTimeRef.current = Date.now();
-      setRetryTimedOut(false);
-      setRetryElapsed(0);
+      // Only set the start time on the first load, not on retries — so the 30-second
+      // countdown measures total wall-clock time across all server attempts.
+      if (retryStartTimeRef.current === null) {
+        retryStartTimeRef.current = Date.now();
+        setRetryTimedOut(false);
+        setRetryElapsed(0);
+      }
 
+      // (Re-)start the interval so the counter ticks even after a mid-retry pause.
+      if (retryTimerRef.current) {
+        clearInterval(retryTimerRef.current);
+      }
       retryTimerRef.current = setInterval(() => {
         const elapsed = Math.floor((Date.now() - (retryStartTimeRef.current || Date.now())) / 1000);
         setRetryElapsed(elapsed);
@@ -145,6 +154,10 @@ export default function WatchScreen() {
         retryTimerRef.current = null;
       }
       if (selectedSource) {
+        // A working source was found — reset everything so the next episode
+        // (or an explicit retry after playback error) starts a fresh 30-second window.
+        retryStartTimeRef.current = null;
+        requestNewSourceCountRef.current = 0;
         setRetryTimedOut(false);
         setRetryElapsed(0);
       }
@@ -439,6 +452,10 @@ export default function WatchScreen() {
   const loadSources = () => {
     if (!id) return;
 
+    // Reset retry state for a fresh load (episode change or explicit user retry).
+    retryStartTimeRef.current = null;
+    requestNewSourceCountRef.current = 0;
+
     // Use the full episodeId from HiAnime (contains database ID) if available
     // Otherwise construct it from anime id and episode number
     const episodeIdStr = fullEpisodeId;
@@ -498,7 +515,14 @@ export default function WatchScreen() {
 
   // Handle request for new source when streaming fails (e.g. 403, playback error)
   // Skip cache so we don't keep returning the same failing source (retry loop)
+  const MAX_SOURCE_RETRIES = 5;
   const handleRequestNewSource = () => {
+    requestNewSourceCountRef.current += 1;
+    if (requestNewSourceCountRef.current > MAX_SOURCE_RETRIES) {
+      // All servers have been tried without a playable stream — stop retrying so the
+      // player can settle on its error state (which shows an iframe option on web).
+      return;
+    }
     if (useWebSocket) {
       wsRetry({ skipCache: true, failedServer: currentServer ?? undefined });
     } else {
