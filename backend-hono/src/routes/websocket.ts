@@ -66,7 +66,7 @@ async function findWorkingSources(
   if (!skipCache) {
     for (const server of SERVER_PRIORITY) {
       const cachedSources = await getCachedSources(episodeId, server, category);
-      if (cachedSources?.sources?.length) {
+      if (cachedSources?.sources?.length && !allSourcesFromBlockedCdn(cachedSources)) {
         sendMessage({ type: 'status', message: `Sources from cache (${server})` });
         console.log(`[WS] Sources cache HIT: ${server}`);
         return {
@@ -76,6 +76,9 @@ async function findWorkingSources(
           totalServers: 1,
           fromCache: true,
         };
+      }
+      if (cachedSources?.sources?.length && allSourcesFromBlockedCdn(cachedSources)) {
+        console.log(`[WS] Sources cache HIT but all blocked-CDN for ${server}, skipping`);
       }
     }
   }
