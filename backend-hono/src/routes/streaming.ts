@@ -276,6 +276,14 @@ streamingRoutes.get('/proxy', async (c) => {
       'Accept-Language': 'en-US,en;q=0.9',
       'Referer': referer,
       'Origin': origin,
+      ...(isM3U8 ? {
+        'sec-fetch-dest': 'empty',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-site': 'cross-site',
+        'sec-ch-ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"Windows"',
+      } : {}),
     };
 
     if (requestRange) {
@@ -315,14 +323,24 @@ streamingRoutes.get('/proxy', async (c) => {
         { headers: baseHeaders, useHeaderGenerator: false },
         { headers: streamOriginHeaders, useHeaderGenerator: false },
         ...(isRapidCloudCdn
-          ? [{
-              headers: {
-                ...baseHeaders,
-                'Referer': EMBED_REFERER_RAPID_CLOUD.referer,
-                'Origin': EMBED_REFERER_RAPID_CLOUD.origin,
+          ? [
+              {
+                headers: {
+                  ...baseHeaders,
+                  'Referer': EMBED_REFERER_RAPID_CLOUD.referer,
+                  'Origin': EMBED_REFERER_RAPID_CLOUD.origin,
+                },
+                useHeaderGenerator: true,
               },
-              useHeaderGenerator: false,
-            }]
+              {
+                headers: {
+                  ...baseHeaders,
+                  'Referer': EMBED_REFERER_RAPID_CLOUD.referer,
+                  'Origin': EMBED_REFERER_RAPID_CLOUD.origin,
+                },
+                useHeaderGenerator: false,
+              },
+            ]
           : []),
         {
           headers: {
