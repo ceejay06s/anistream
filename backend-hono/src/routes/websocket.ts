@@ -31,6 +31,23 @@ export interface StreamResponse {
 // Server priority for streaming
 const SERVER_PRIORITY = ['hd-1', 'hd-2', 'megacloud', 'streamsb', 'streamtape'];
 
+// CDN domains known to IP-block datacenter servers (Render.com, Railway, etc.)
+// Matches the same set as the proxy in streaming.ts
+const BLOCKED_CDN_REGEX = /(fogtwist21\.xyz|crimsonstorm18\.(pro|live)|rapid-cloud\.co|sunburst93\.live|haildrop77\.pro|stormshade84\.live|rainveil36\.xyz)/i;
+
+/**
+ * Returns true when every HLS source URL in a result comes from a CDN that is
+ * known to block datacenter IPs. In that case the stream will always 403 at the
+ * proxy layer, so we should skip the server rather than sending it to the client.
+ */
+function allSourcesFromBlockedCdn(sources: any): boolean {
+  if (!sources?.sources?.length) return false;
+  return sources.sources.every((s: any) => {
+    const url: string = s.url || s.file || '';
+    return url && BLOCKED_CDN_REGEX.test(url);
+  });
+}
+
 function normalizeServerName(name: string): string {
   return name?.toLowerCase().replace(/[^a-z0-9-]/g, '-') || '';
 }
@@ -91,7 +108,7 @@ async function findWorkingSources(
       console.log(`[WS] Trying cached server: ${cached.server} (${cached.successCount} previous successes)`);
       const sources = await getEpisodeSources(episodeId, cached.server, category);
 
-      if (sources && sources.sources && sources.sources.length > 0) {
+      if (sources && sources.sources && sources.sources.length > 0 && !allSourcesFromBlockedCdn(sources)) {
         console.log(`[WS] Cache HIT! Server ${cached.server} worked`);
         await setCachedServer(episodeId, category, cached.server, failedServersThisRequest);
         await setCachedSources(episodeId, cached.server, category, sources);
@@ -104,7 +121,8 @@ async function findWorkingSources(
         };
       }
 
-      console.log(`[WS] Cached server ${cached.server} returned no sources, cycling...`);
+      const reason = allSourcesFromBlockedCdn(sources) ? 'only blocked-CDN sources' : 'no sources';
+      console.log(`[WS] Cached server ${cached.server} returned ${reason}, cycling...`);
       failedServersThisRequest.push(cached.server);
       await markServerFailed(episodeId, category, cached.server);
     } catch (err: any) {
@@ -157,7 +175,7 @@ async function findWorkingSources(
   if (serversToTry.length > 1) {
     sendMessage({ type: 'status', message: 'Testing streams in parallel...', totalServers });
     const parallelResult = await getEpisodeSourcesParallel(episodeId, serversToTry, category);
-    if (parallelResult) {
+    if (parallelResult && !allSourcesFromBlockedCdn(parallelResult.data)) {
       const { server, data } = parallelResult;
       const idx = serversToTry.indexOf(server);
       await setCachedServer(episodeId, category, server, failedServersThisRequest);
@@ -168,6 +186,9 @@ async function findWorkingSources(
         serverIndex: idx >= 0 ? idx : 0,
         totalServers,
       };
+    }
+    if (parallelResult) {
+      console.log(`[WS] Parallel result from ${parallelResult.server} has only blocked-CDN sources, falling through to sequential.`);
     }
   }
 
@@ -187,7 +208,7 @@ async function findWorkingSources(
       console.log(`[WS] Trying server ${i + 1}/${totalServers}: ${server}`);
       const sources = await getEpisodeSources(episodeId, server, category);
 
-      if (sources && sources.sources && sources.sources.length > 0) {
+      if (sources && sources.sources && sources.sources.length > 0 && !allSourcesFromBlockedCdn(sources)) {
         console.log(`[WS] Success with server: ${server}`);
         await setCachedServer(episodeId, category, server, failedServersThisRequest);
         await setCachedSources(episodeId, server, category, sources);
@@ -199,7 +220,8 @@ async function findWorkingSources(
         };
       }
 
-      console.log(`[WS] No sources from ${server}, trying next...`);
+      const reason = allSourcesFromBlockedCdn(sources) ? 'only blocked-CDN sources' : 'no sources';
+      console.log(`[WS] ${server} returned ${reason}, trying next...`);
       failedServersThisRequest.push(server);
     } catch (err: any) {
       console.log(`[WS] Error from ${server}: ${err.message}`);

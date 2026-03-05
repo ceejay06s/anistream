@@ -154,10 +154,12 @@ export default function WatchScreen() {
         retryTimerRef.current = null;
       }
       if (selectedSource) {
-        // A working source was found — reset everything so the next episode
-        // (or an explicit retry after playback error) starts a fresh 30-second window.
+        // A working source was found — reset the loading timer so the next
+        // failure (if any) starts a fresh 30-second window.
+        // NOTE: requestNewSourceCountRef is intentionally NOT reset here;
+        // it only resets in loadSources() so consecutive CDN-block failures
+        // across multiple server retries accumulate toward the limit.
         retryStartTimeRef.current = null;
-        requestNewSourceCountRef.current = 0;
         setRetryTimedOut(false);
         setRetryElapsed(0);
       }
