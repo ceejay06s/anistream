@@ -8,6 +8,7 @@ import {
   Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { formatTime } from '@/utils/formatTime';
 
 const isWeb = Platform.OS === 'web';
 const shouldUseNativeDriver = !isWeb;
@@ -156,13 +157,6 @@ export function VideoControls({
       }
     };
   }, [isPlaying, resetHideTimer]);
-
-  const formatTime = (seconds: number): string => {
-    if (!seconds || isNaN(seconds)) return '0:00';
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
 
   const handleProgressClick = (e: any) => {
     if (Platform.OS !== 'web') return;

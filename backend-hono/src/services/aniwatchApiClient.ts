@@ -2,33 +2,23 @@ import axios, { type AxiosInstance } from 'axios';
 import { HiAnime } from 'aniwatch';
 
 type EpisodeCategory = 'sub' | 'dub' | 'raw';
-type ProviderMode = 'api' | 'package' | 'itzzzme-api';
+type ProviderMode = 'api' | 'package';
 
 const DEFAULT_API_URL = 'http://localhost:4000';
 const DEFAULT_API_BASE_PATH = '/api/v2/hianime';
-const DEFAULT_ITZZZME_API_URL = 'http://localhost:3000';
-const DEFAULT_ITZZZME_API_BASE_PATH = '/api';
 const DEFAULT_TIMEOUT_MS = 12000;
 
 const packageClient = new HiAnime.Scraper();
 const provider = ((process.env.ANIWATCH_PROVIDER || 'api').toLowerCase() as ProviderMode);
 const shouldUseApiProvider = provider === 'api';
-const shouldUseItzzzmeProvider = provider === 'itzzzme-api';
 const shouldFallbackToPackage = process.env.ANIWATCH_API_FALLBACK_TO_PACKAGE !== 'false';
 
 const apiBaseUrl = (process.env.ANIWATCH_API_URL || DEFAULT_API_URL).replace(/\/+$/, '');
 const apiBasePath = process.env.ANIWATCH_API_BASE_PATH || DEFAULT_API_BASE_PATH;
-const itzzzmeApiBaseUrl = (process.env.ITZZZME_API_URL || DEFAULT_ITZZZME_API_URL).replace(/\/+$/, '');
-const itzzzmeApiBasePath = process.env.ITZZZME_API_BASE_PATH || DEFAULT_ITZZZME_API_BASE_PATH;
 const apiTimeoutMs = Number(process.env.ANIWATCH_API_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS;
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: `${apiBaseUrl}${apiBasePath}`,
-  timeout: apiTimeoutMs,
-});
-
-const itzzzmeApiClient: AxiosInstance = axios.create({
-  baseURL: `${itzzzmeApiBaseUrl}${itzzzmeApiBasePath}`,
   timeout: apiTimeoutMs,
 });
 
@@ -173,44 +163,12 @@ function normalizeSourcesPayload(payload: any): any {
   };
 }
 
-function parseEpisodeReference(episodeId: string): { animeId: string; episodeNumber: string } {
-  const [animeIdPart, query = ''] = episodeId.split('?');
-  const params = new URLSearchParams(query);
-  const episodeNumber = params.get('ep') || params.get('episode') || '';
-
-  return { animeId: animeIdPart || episodeId, episodeNumber };
-}
-
-async function callItzzzmeServers(episodeId: string): Promise<any> {
-  const { animeId, episodeNumber } = parseEpisodeReference(episodeId);
-
-  const attempts: Array<() => Promise<any>> = [];
-
-  if (episodeNumber) {
-    attempts.push(() => itzzzmeApiClient.get(`/servers/${encodeURIComponent(animeId)}`, { params: { ep: episodeNumber } }));
-  }
-
-  attempts.push(() => itzzzmeApiClient.get('/servers', { params: { id: animeId, ep: episodeNumber || undefined } }));
-  attempts.push(() => itzzzmeApiClient.get(`/servers/${encodeURIComponent(episodeId)}`));
-
-  let lastError: unknown;
-  for (const attempt of attempts) {
-    try {
-      return unwrapResponseData(await attempt());
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  throw lastError || new Error('Failed to fetch episode servers from itzzzme api');
-}
-
 async function withProviderFallback<T>(
   methodName: string,
   upstreamCall: () => Promise<T>,
   packageCall: () => Promise<T>
 ): Promise<T> {
-  if (shouldUseApiProvider || shouldUseItzzzmeProvider) {
+  if (shouldUseApiProvider) {
     try {
       return await upstreamCall();
     } catch (error) {
@@ -233,18 +191,6 @@ export async function searchAnimeProvider(
   return withProviderFallback(
     'search',
     async () => {
-      if (shouldUseItzzzmeProvider) {
-        const response = await itzzzmeApiClient.get('/search', {
-          params: {
-            keyword: query,
-            q: query,
-            page,
-            ...(filters || {}),
-          },
-        });
-        return normalizeAnimesPayload(unwrapResponseData<any>(response));
-      }
-
       const response = await apiClient.get('/search', {
         params: {
           q: query,
@@ -262,13 +208,6 @@ export async function getAnimeInfoProvider(animeId: string): Promise<any> {
   return withProviderFallback(
     'anime info',
     async () => {
-      if (shouldUseItzzzmeProvider) {
-        const response = await itzzzmeApiClient.get('/info', {
-          params: { id: animeId },
-        });
-        return normalizeInfoPayload(unwrapResponseData<any>(response));
-      }
-
       const response = await apiClient.get(`/anime/${encodeURIComponent(animeId)}`);
       return unwrapResponseData<any>(response);
     },
@@ -280,11 +219,6 @@ export async function getAnimeEpisodesProvider(animeId: string): Promise<any> {
   return withProviderFallback(
     'anime episodes',
     async () => {
-      if (shouldUseItzzzmeProvider) {
-        const response = await itzzzmeApiClient.get(`/episodes/${encodeURIComponent(animeId)}`);
-        return normalizeEpisodesPayload(unwrapResponseData<any>(response), animeId);
-      }
-
       const response = await apiClient.get(`/anime/${encodeURIComponent(animeId)}/episodes`);
       return unwrapResponseData<any>(response);
     },
@@ -296,18 +230,6 @@ export async function getHomePageProvider(): Promise<any> {
   return withProviderFallback(
     'home',
     async () => {
-      if (shouldUseItzzzmeProvider) {
-        const response = await itzzzmeApiClient.get('/');
-        const data = unwrapResponseData<any>(response);
-        return {
-          spotlightAnimes: normalizeAnimesPayload(data?.spotlightAnimes || data?.spotlight || []).animes,
-          trendingAnimes: normalizeAnimesPayload(data?.trendingAnimes || data?.trending || []).animes,
-          latestEpisodeAnimes: normalizeAnimesPayload(data?.latestEpisodeAnimes || data?.latest || []).animes,
-          topAiringAnimes: normalizeAnimesPayload(data?.topAiringAnimes || data?.topAiring || []).animes,
-          mostPopularAnimes: normalizeAnimesPayload(data?.mostPopularAnimes || data?.mostPopular || []).animes,
-        };
-      }
-
       const response = await apiClient.get('/home');
       return unwrapResponseData<any>(response);
     },
@@ -319,13 +241,6 @@ export async function getCategoryAnimeProvider(category: string, page: number): 
   return withProviderFallback(
     'category',
     async () => {
-      if (shouldUseItzzzmeProvider) {
-        const response = await itzzzmeApiClient.get(`/category/${encodeURIComponent(category)}`, {
-          params: { page },
-        });
-        return normalizeAnimesPayload(unwrapResponseData<any>(response));
-      }
-
       const response = await apiClient.get(`/category/${encodeURIComponent(category)}`, {
         params: { page },
       });
@@ -339,13 +254,6 @@ export async function getGenreAnimeProvider(genre: string, page: number): Promis
   return withProviderFallback(
     'genre',
     async () => {
-      if (shouldUseItzzzmeProvider) {
-        const response = await itzzzmeApiClient.get(`/genre/${encodeURIComponent(genre)}`, {
-          params: { page },
-        });
-        return normalizeAnimesPayload(unwrapResponseData<any>(response));
-      }
-
       const response = await apiClient.get(`/genre/${encodeURIComponent(genre)}`, {
         params: { page },
       });
@@ -359,13 +267,6 @@ export async function getAZAnimeProvider(letter: string, page: number): Promise<
   return withProviderFallback(
     'azlist',
     async () => {
-      if (shouldUseItzzzmeProvider) {
-        const response = await itzzzmeApiClient.get(`/azlist/${encodeURIComponent(letter)}`, {
-          params: { page },
-        });
-        return normalizeAnimesPayload(unwrapResponseData<any>(response));
-      }
-
       const response = await apiClient.get(`/azlist/${encodeURIComponent(letter)}`, {
         params: { page },
       });
@@ -379,11 +280,6 @@ export async function getEpisodeServersProvider(episodeId: string): Promise<any>
   return withProviderFallback(
     'episode servers',
     async () => {
-      if (shouldUseItzzzmeProvider) {
-        const payload = await callItzzzmeServers(episodeId);
-        return normalizeServersPayload(payload);
-      }
-
       const response = await apiClient.get('/episode/servers', {
         params: { animeEpisodeId: episodeId },
       });
@@ -401,18 +297,6 @@ export async function getEpisodeSourcesProvider(
   return withProviderFallback(
     'episode sources',
     async () => {
-      if (shouldUseItzzzmeProvider) {
-        const { animeId, episodeNumber } = parseEpisodeReference(episodeId);
-        const response = await itzzzmeApiClient.get('/stream', {
-          params: {
-            id: episodeNumber ? `${animeId}?ep=${episodeNumber}` : episodeId,
-            server,
-            type: category,
-          },
-        });
-        return normalizeSourcesPayload(unwrapResponseData<any>(response));
-      }
-
       const response = await apiClient.get('/episode/sources', {
         params: {
           animeEpisodeId: episodeId,

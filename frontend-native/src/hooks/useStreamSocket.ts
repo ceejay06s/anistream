@@ -95,7 +95,7 @@ export function useStreamSocket(): UseStreamSocketResult {
           setStatus(prev => ({
             ...prev,
             isLoading: false,
-            error: 'Connection timed out. Try "Use REST API" below.',
+            error: 'Connection timed out. Tap retry below.',
           }));
         }
       }, WS_CONNECT_TIMEOUT_MS);
@@ -126,7 +126,7 @@ export function useStreamSocket(): UseStreamSocketResult {
             sourcesTimeoutRef.current = null;
             setStatus(prev => {
               if (prev.isLoading) {
-                return { ...prev, isLoading: false, error: 'Servers took too long. Try "Use REST API" or retry.' };
+                return { ...prev, isLoading: false, error: 'Servers took too long. Tap retry below.' };
               }
               return prev;
             });
@@ -311,7 +311,7 @@ export function useStreamSocket(): UseStreamSocketResult {
         sourcesTimeoutRef.current = null;
         setStatus(prev => {
           if (prev.isLoading) {
-            return { ...prev, isLoading: false, error: 'Servers took too long. Try "Use REST API" or retry.' };
+            return { ...prev, isLoading: false, error: 'Servers took too long. Tap retry below.' };
           }
           return prev;
         });

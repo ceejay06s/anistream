@@ -14,10 +14,14 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { animeApi, AnimeInfo, Episode, VoiceActor, RelatedAnime } from '@/services/api';
+import { animeApi, AnimeInfo, Episode, RelatedAnime } from '@/services/api';
 import { getProxiedImageUrl } from '@/utils/imageProxy';
 import { useAuth } from '@/context/AuthContext';
 import { savedAnimeService, SavedAnime, CollectionStatus, COLLECTION_LABELS } from '@/services/savedAnimeService';
+import { SynopsisTab } from '@/components/tabs/SynopsisTab';
+import { CastTab } from '@/components/tabs/CastTab';
+import { StudioTab } from '@/components/tabs/StudioTab';
+import { SuggestionsTab } from '@/components/tabs/SuggestionsTab';
 
 const COLLECTION_ICONS: Record<CollectionStatus, keyof typeof Ionicons.glyphMap> = {
   watching: 'play-circle',
@@ -221,251 +225,14 @@ export default function DetailScreen() {
     });
   }, [totalPages, episodes.length, needsPagination]);
 
-  // Tab content renderers
-  const renderSynopsisTab = () => (
-    <View style={styles.tabContent}>
-      {animeInfo?.description && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Synopsis</Text>
-          <Text style={styles.description}>{animeInfo.description}</Text>
-        </View>
-      )}
-
-      {/* Anime Details */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Details</Text>
-        <View style={styles.detailsGrid}>
-          {animeInfo?.japanese && (
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Japanese</Text>
-              <Text style={styles.detailValue}>{animeInfo.japanese}</Text>
-            </View>
-          )}
-          {animeInfo?.status && (
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Status</Text>
-              <Text style={styles.detailValue}>{animeInfo.status}</Text>
-            </View>
-          )}
-          {animeInfo?.aired && (
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Aired</Text>
-              <Text style={styles.detailValue}>{animeInfo.aired}</Text>
-            </View>
-          )}
-          {animeInfo?.premiered && (
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Premiered</Text>
-              <Text style={styles.detailValue}>{animeInfo.premiered}</Text>
-            </View>
-          )}
-          {animeInfo?.duration && (
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Duration</Text>
-              <Text style={styles.detailValue}>{animeInfo.duration}</Text>
-            </View>
-          )}
-          {animeInfo?.type && (
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Type</Text>
-              <Text style={styles.detailValue}>{animeInfo.type}</Text>
-            </View>
-          )}
-        </View>
-      </View>
-    </View>
-  );
-
-  const renderCastTab = () => (
-    <View style={styles.tabContent}>
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Voice Actors</Text>
-        {animeInfo?.characters && animeInfo.characters.length > 0 ? (
-          <View style={styles.castGrid}>
-            {animeInfo.characters.map((cv, index) => (
-              <View key={`${cv.character.id || cv.character.name || 'character'}-${index}`} style={styles.castItem}>
-                <View style={styles.castRow}>
-                  {/* Character */}
-                  <View style={styles.castPerson}>
-                    <Image
-                      source={{ uri: getProxiedImageUrl(cv.character.poster) || 'https://via.placeholder.com/60' }}
-                      style={styles.castImage}
-                    />
-                    <Text style={styles.castName} numberOfLines={2}>
-                      {cv.character.name || 'Unknown Character'}
-                    </Text>
-                    <Text style={styles.castRole}>Character</Text>
-                  </View>
-
-                  {/* Connector */}
-                  <View style={styles.castConnector}>
-                    <Ionicons name="arrow-forward" size={16} color="#666" />
-                  </View>
-
-                  {/* Voice Actor */}
-                  <View style={styles.castPerson}>
-                    <Image
-                      source={{ uri: getProxiedImageUrl(cv.voiceActor.poster) || 'https://via.placeholder.com/60' }}
-                      style={styles.castImage}
-                    />
-                    <Text style={styles.castName} numberOfLines={2}>
-                      {cv.voiceActor.name || 'Unknown Voice Actor'}
-                    </Text>
-                    <Text style={styles.castRole}>Voice Actor</Text>
-                  </View>
-                </View>
-              </View>
-            ))}
-          </View>
-        ) : (
-          <Text style={styles.emptyText}>No voice actor information available</Text>
-        )}
-      </View>
-    </View>
-  );
-
-  const renderStudioTab = () => (
-    <View style={styles.tabContent}>
-      {/* Studios */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Studios</Text>
-        {animeInfo?.studios && animeInfo.studios.length > 0 ? (
-          <View style={styles.studioList}>
-            {animeInfo.studios.map((studio, index) => (
-              <View key={index} style={styles.studioChip}>
-                <Ionicons name="business-outline" size={16} color="#e50914" />
-                <Text style={styles.studioName}>{studio.name}</Text>
-              </View>
-            ))}
-          </View>
-        ) : (
-          <Text style={styles.emptyText}>No studio information available</Text>
-        )}
-      </View>
-
-      {/* Producers */}
-      {animeInfo?.producers && animeInfo.producers.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Producers</Text>
-          <View style={styles.producerList}>
-            {animeInfo.producers.map((producer, index) => (
-              <View key={index} style={styles.producerChip}>
-                <Text style={styles.producerName}>{producer}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-      )}
-    </View>
-  );
-
-  const renderSuggestionsTab = () => (
-    <View style={styles.tabContent}>
-      {/* Seasons */}
-      {animeInfo?.seasons && animeInfo.seasons.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Seasons</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={Platform.OS !== 'web'} style={styles.horizontalScroll}>
-            <View style={styles.animeRow}>
-              {animeInfo.seasons.map((anime, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.animeCard}
-                  onPress={() => handleAnimePress(anime)}
-                >
-                  <Image
-                    source={{ uri: getProxiedImageUrl(anime.poster) || '' }}
-                    style={styles.animeCardImage}
-                  />
-                  <Text style={styles.animeCardTitle} numberOfLines={2}>
-                    {anime.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </ScrollView>
-        </View>
-      )}
-
-      {/* Related Anime */}
-      {animeInfo?.relatedAnime && animeInfo.relatedAnime.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Related Anime</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={Platform.OS !== 'web'} style={styles.horizontalScroll}>
-            <View style={styles.animeRow}>
-              {animeInfo.relatedAnime.map((anime, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.animeCard}
-                  onPress={() => handleAnimePress(anime)}
-                >
-                  <Image
-                    source={{ uri: getProxiedImageUrl(anime.poster) || '' }}
-                    style={styles.animeCardImage}
-                  />
-                  <Text style={styles.animeCardTitle} numberOfLines={2}>
-                    {anime.name}
-                  </Text>
-                  {anime.type && (
-                    <Text style={styles.animeCardType}>{anime.type}</Text>
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
-          </ScrollView>
-        </View>
-      )}
-
-      {/* Recommendations */}
-      {animeInfo?.recommendedAnime && animeInfo.recommendedAnime.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Recommendations</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={Platform.OS !== 'web'} style={styles.horizontalScroll}>
-            <View style={styles.animeRow}>
-              {animeInfo.recommendedAnime.map((anime, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.animeCard}
-                  onPress={() => handleAnimePress(anime)}
-                >
-                  <Image
-                    source={{ uri: getProxiedImageUrl(anime.poster) || '' }}
-                    style={styles.animeCardImage}
-                  />
-                  <Text style={styles.animeCardTitle} numberOfLines={2}>
-                    {anime.name}
-                  </Text>
-                  {anime.type && (
-                    <Text style={styles.animeCardType}>{anime.type}</Text>
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
-          </ScrollView>
-        </View>
-      )}
-
-      {/* Empty state */}
-      {(!animeInfo?.relatedAnime || animeInfo.relatedAnime.length === 0) &&
-       (!animeInfo?.recommendedAnime || animeInfo.recommendedAnime.length === 0) &&
-       (!animeInfo?.seasons || animeInfo.seasons.length === 0) && (
-        <Text style={styles.emptyText}>No suggestions available</Text>
-      )}
-    </View>
-  );
-
   const renderTabContent = () => {
+    if (!animeInfo) return null;
     switch (activeTab) {
-      case 'synopsis':
-        return renderSynopsisTab();
-      case 'cast':
-        return renderCastTab();
-      case 'studio':
-        return renderStudioTab();
-      case 'suggestions':
-        return renderSuggestionsTab();
-      default:
-        return null;
+      case 'synopsis': return <SynopsisTab animeInfo={animeInfo} />;
+      case 'cast': return <CastTab animeInfo={animeInfo} />;
+      case 'studio': return <StudioTab animeInfo={animeInfo} />;
+      case 'suggestions': return <SuggestionsTab animeInfo={animeInfo} onAnimePress={handleAnimePress} />;
+      default: return null;
     }
   };
 
@@ -891,118 +658,11 @@ const styles = StyleSheet.create({
   tabTextActive: {
     color: '#fff',
   },
-  tabContent: {
-    padding: 16,
-  },
-  section: {
-    marginBottom: 24,
-  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#fff',
     marginBottom: 12,
-  },
-  description: {
-    fontSize: 14,
-    color: '#aaa',
-    lineHeight: 22,
-  },
-  // Details
-  detailsGrid: {
-    gap: 12,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1a1a1a',
-  },
-  detailLabel: {
-    color: '#888',
-    fontSize: 14,
-  },
-  detailValue: {
-    color: '#fff',
-    fontSize: 14,
-    flex: 1,
-    textAlign: 'right',
-    marginLeft: 16,
-  },
-  // Cast
-  castGrid: {
-    gap: 16,
-  },
-  castItem: {
-    backgroundColor: '#111',
-    borderRadius: 8,
-    padding: 12,
-  },
-  castRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  castPerson: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  castConnector: {
-    paddingHorizontal: 8,
-  },
-  castImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#222',
-    marginBottom: 8,
-  },
-  castName: {
-    color: '#fff',
-    fontSize: 12,
-    textAlign: 'center',
-    fontWeight: '500',
-  },
-  castRole: {
-    color: '#666',
-    fontSize: 10,
-    textAlign: 'center',
-    marginTop: 2,
-  },
-  // Studio
-  studioList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  studioChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1a1a1a',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 8,
-    gap: 8,
-  },
-  studioName: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  producerList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  producerChip: {
-    backgroundColor: '#222',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  producerName: {
-    color: '#aaa',
-    fontSize: 12,
   },
   // Horizontal scroll for web
   horizontalScroll: {
@@ -1014,38 +674,6 @@ const styles = StyleSheet.create({
       } as any,
       default: {},
     }),
-  },
-  // Anime cards
-  animeRow: {
-    flexDirection: 'row',
-    gap: 12,
-    paddingRight: 16,
-  },
-  animeCard: {
-    width: 120,
-  },
-  animeCardImage: {
-    width: 120,
-    height: 180,
-    borderRadius: 8,
-    backgroundColor: '#222',
-    marginBottom: 8,
-  },
-  animeCardTitle: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  animeCardType: {
-    color: '#666',
-    fontSize: 10,
-    marginTop: 2,
-  },
-  emptyText: {
-    color: '#666',
-    fontSize: 14,
-    textAlign: 'center',
-    padding: 20,
   },
   // Episodes
   episodesSection: {

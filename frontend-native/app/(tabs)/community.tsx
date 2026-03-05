@@ -20,52 +20,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
-import { communityService, Post, Comment, MediaItem, type MediaFileInput } from '@/services/communityService';
+import { communityService, Post, Comment, type MediaFileInput } from '@/services/communityService';
 import { userNotificationService } from '@/services/userNotificationService';
-import { executeRecaptcha } from '@/utils/recaptcha';
-import { isRecaptchaEnabled, RECAPTCHA_SITE_KEY } from '@/config/recaptcha';
-import { verifyRecaptchaToken } from '@/services/recaptchaService';
-import { CommunityPostVideo } from '@/components/CommunityPostVideo';
-import { getSignedUrlWithAutoRenewal, getSignedUrl } from '@/services/uploadService';
-
-/** Resolves and renews Backblaze signed URL when filePath is present */
-function PostMediaItem({ mediaItem, imageStyle, videoStyle }: { mediaItem: MediaItem; imageStyle: any; videoStyle: any }) {
-  const [url, setUrl] = useState(mediaItem.url);
-  const [retryKey, setRetryKey] = useState(0);
-
-  useEffect(() => {
-    if (mediaItem.filePath) {
-      getSignedUrlWithAutoRenewal(mediaItem.filePath)
-        .then(setUrl)
-        .catch(() => {});
-    }
-  }, [mediaItem.filePath]);
-
-  const onMediaError = useCallback(() => {
-    if (mediaItem.filePath) {
-      getSignedUrl(mediaItem.filePath)
-        .then((fresh) => {
-          setUrl(fresh);
-          setRetryKey((k) => k + 1);
-        })
-        .catch(() => {});
-    }
-  }, [mediaItem.filePath]);
-
-  if (mediaItem.type === 'image') {
-    return (
-      <Image
-        source={{ uri: url }}
-        style={imageStyle}
-        resizeMode="cover"
-        onError={onMediaError}
-      />
-    );
-  }
-  return (
-    <CommunityPostVideo key={retryKey} url={url} style={videoStyle} />
-  );
-}
+import { withRecaptcha } from '@/utils/withRecaptcha';
+import { PostCard } from '@/components/PostCard';
+import { CommentsModal } from '@/components/CommentsModal';
 
 export default function CommunityScreen() {
   const router = useRouter();
@@ -236,21 +195,7 @@ export default function CommunityScreen() {
 
     setSubmitting(true);
     try {
-      // Verify reCAPTCHA if enabled
-      if (isRecaptchaEnabled() && Platform.OS === 'web') {
-        try {
-          const token = await executeRecaptcha(RECAPTCHA_SITE_KEY, 'create_post');
-          // Verify token with backend
-          const isValid = await verifyRecaptchaToken(token);
-          if (!isValid) {
-            throw new Error('reCAPTCHA verification failed');
-          }
-        } catch (recaptchaError) {
-          console.warn('reCAPTCHA verification failed:', recaptchaError);
-          // Continue with post creation even if reCAPTCHA fails
-          // In production, you might want to block the request
-        }
-      }
+      await withRecaptcha('create_post');
 
       const mediaFiles: MediaFileInput[] = selectedMedia.map((m) =>
         m.file
@@ -345,21 +290,7 @@ export default function CommunityScreen() {
 
     setSubmittingComment(true);
     try {
-      // Verify reCAPTCHA if enabled
-      if (isRecaptchaEnabled() && Platform.OS === 'web') {
-        try {
-          const token = await executeRecaptcha(RECAPTCHA_SITE_KEY, 'add_comment');
-          // Verify token with backend
-          const isValid = await verifyRecaptchaToken(token);
-          if (!isValid) {
-            throw new Error('reCAPTCHA verification failed');
-          }
-        } catch (recaptchaError) {
-          console.warn('reCAPTCHA verification failed:', recaptchaError);
-          // Continue with comment creation even if reCAPTCHA fails
-          // In production, you might want to block the request
-        }
-      }
+      await withRecaptcha('add_comment');
 
       await communityService.addComment(
         { uid: user.uid, displayName: user.displayName, photoURL: user.photoURL },
@@ -382,116 +313,16 @@ export default function CommunityScreen() {
     }
   };
 
-  const renderPost = ({ item }: { item: Post }) => {
-    const isLiked = user ? item.likes.includes(user.uid) : false;
-    const isOwner = user?.uid === item.userId;
-
-    return (
-      <View style={styles.postCard}>
-        <View style={styles.postHeader}>
-          <View style={styles.postAuthor}>
-            {item.userPhoto ? (
-              <Image source={{ uri: item.userPhoto }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Ionicons name="person" size={16} color="#888" />
-              </View>
-            )}
-            <View>
-              <Text style={styles.authorName}>{item.userName}</Text>
-              <Text style={styles.postTime}>
-                {communityService.formatTimeAgo(item.createdAt)}
-              </Text>
-            </View>
-          </View>
-          {isOwner && (
-            <TouchableOpacity
-              style={styles.deleteButton}
-              onPress={() => handleDeletePost(item.id)}
-            >
-              <Ionicons name="trash-outline" size={18} color="#e50914" />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {item.content ? <Text style={styles.postContent}>{item.content}</Text> : null}
-
-        {item.media && item.media.length > 0 && (
-          <View style={styles.mediaContainer}>
-            {item.media.map((mediaItem, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.mediaItem,
-                  item.media!.length === 1 && styles.mediaItemSingle,
-                  item.media!.length === 2 && styles.mediaItemHalf,
-                  item.media!.length > 2 && styles.mediaItemQuarter,
-                ]}
-              >
-                <PostMediaItem
-                  mediaItem={mediaItem}
-                  imageStyle={styles.mediaImage}
-                  videoStyle={styles.videoContainer}
-                />
-              </View>
-            ))}
-          </View>
-        )}
-
-        {item.animeName && (
-          <View style={styles.animeTag}>
-            <Ionicons name="film-outline" size={14} color="#e50914" />
-            <Text style={styles.animeTagText}>{item.animeName}</Text>
-          </View>
-        )}
-
-        <View style={styles.postActions}>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => handleLike(item.id)}
-          >
-            <Ionicons
-              name={isLiked ? 'heart' : 'heart-outline'}
-              size={20}
-              color={isLiked ? '#e50914' : '#888'}
-            />
-            <Text style={[styles.actionText, isLiked && styles.actionTextActive]}>
-              {item.likes.length}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => openComments(item)}
-          >
-            <Ionicons name="chatbubble-outline" size={18} color="#888" />
-            <Text style={styles.actionText}>{item.commentCount}</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  };
-
-  const renderComment = ({ item }: { item: Comment }) => (
-    <View style={styles.commentItem}>
-      <View style={styles.commentAuthor}>
-        {item.userPhoto ? (
-          <Image source={{ uri: item.userPhoto }} style={styles.commentAvatar} />
-        ) : (
-          <View style={styles.commentAvatarPlaceholder}>
-            <Ionicons name="person" size={12} color="#888" />
-          </View>
-        )}
-        <Text style={styles.commentAuthorName}>{item.userName}</Text>
-        <Text style={styles.commentTime}>
-          {communityService.formatTimeAgo(item.createdAt)}
-        </Text>
-      </View>
-      <Text style={styles.commentContent}>{item.content}</Text>
-    </View>
+  const renderPost = ({ item }: { item: Post }) => (
+    <PostCard
+      post={item}
+      currentUserId={user?.uid}
+      onLike={handleLike}
+      onComment={openComments}
+      onDelete={handleDeletePost}
+      showMedia
+    />
   );
-
-  // Comments Modal rendered inline to prevent recreation issues
 
   // Not logged in view (web: full prompt + list; native: fall through to main content so list still renders)
   if (!user && Platform.OS === 'web') {
@@ -669,115 +500,18 @@ export default function CommunityScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Comments Modal - Rendered inline to prevent recreation */}
-      <Modal
+      <CommentsModal
         visible={!!selectedPost}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={closeComments}
-        statusBarTranslucent
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.modalKeyboardView}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-        >
-          <View style={styles.commentsModalContent}>
-            <TouchableOpacity
-              style={styles.commentsModalOverlay}
-              activeOpacity={1}
-              onPress={closeComments}
-            />
-            <TouchableOpacity
-              activeOpacity={1}
-              onPress={(e) => e.stopPropagation()}
-              style={styles.commentsModalInner}
-            >
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Comments</Text>
-                <TouchableOpacity onPress={closeComments}>
-                  <Ionicons name="close" size={24} color="#fff" />
-                </TouchableOpacity>
-              </View>
-
-              <ScrollView
-                style={styles.commentsContent}
-                keyboardShouldPersistTaps="handled"
-                keyboardDismissMode="none"
-                nestedScrollEnabled={true}
-              >
-                {loadingComments ? (
-                  <View style={styles.commentsLoadingContainer}>
-                    <ActivityIndicator size="small" color="#e50914" />
-                  </View>
-                ) : comments.length === 0 ? (
-                  <View style={styles.emptyComments}>
-                    <Ionicons name="chatbubble-outline" size={48} color="#444" />
-                    <Text style={styles.emptyCommentsText}>No comments yet</Text>
-                    <Text style={styles.emptyCommentsSubtext}>Be the first to comment!</Text>
-                  </View>
-                ) : (
-                  <View style={styles.commentsListContent}>
-                    {comments.map((comment) => (
-                      <View key={comment.id} style={styles.commentItem}>
-                        <View style={styles.commentAuthor}>
-                          {comment.userPhoto ? (
-                            <Image source={{ uri: comment.userPhoto }} style={styles.commentAvatar} />
-                          ) : (
-                            <View style={styles.commentAvatarPlaceholder}>
-                              <Ionicons name="person" size={12} color="#888" />
-                            </View>
-                          )}
-                          <Text style={styles.commentAuthorName}>{comment.userName}</Text>
-                          <Text style={styles.commentTime}>
-                            {communityService.formatTimeAgo(comment.createdAt)}
-                          </Text>
-                        </View>
-                        <Text style={styles.commentContent}>{comment.content}</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-              </ScrollView>
-
-              {user && (
-                <View style={styles.commentInputContainer}>
-                  <TextInput
-                    key="comments-input"
-                    ref={commentInputRef}
-                    style={styles.commentInput}
-                    placeholder="Add a comment..."
-                    placeholderTextColor="#666"
-                    value={newComment}
-                    onChangeText={setNewComment}
-                    maxLength={280}
-                    multiline
-                    numberOfLines={1}
-                    returnKeyType="default"
-                    blurOnSubmit={false}
-                    textAlignVertical="center"
-                    editable={!submittingComment}
-                  />
-                  <TouchableOpacity
-                    style={[
-                      styles.sendButton,
-                      (!newComment.trim() || submittingComment) && styles.sendButtonDisabled,
-                    ]}
-                    onPress={handleAddComment}
-                    disabled={!newComment.trim() || submittingComment}
-                  >
-                    {submittingComment ? (
-                      <ActivityIndicator size="small" color="#fff" />
-                    ) : (
-                      <Ionicons name="send" size={18} color="#fff" />
-                    )}
-                  </TouchableOpacity>
-                </View>
-              )}
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+        title="Comments"
+        comments={comments}
+        loading={loadingComments}
+        submitting={submittingComment}
+        newComment={newComment}
+        onChangeComment={setNewComment}
+        onSubmit={handleAddComment}
+        onClose={closeComments}
+        currentUserId={user?.uid}
+      />
 
       <View style={styles.header}>
         {/* Notification bell — top left */}

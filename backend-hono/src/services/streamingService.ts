@@ -1,26 +1,7 @@
-import axios from 'axios';
 import {
   getEpisodeSourcesProvider,
   getEpisodeServersProvider,
 } from './aniwatchApiClient.js';
-
-// Fallback order: api-v1 -> api-v2 -> other consumet-style APIs (after stream proxy fails)
-const DEFAULT_FALLBACK_APIS = [
-  'https://api-v1-anime.vercel.app/api',
-  'https://api-v2-anime.vercel.app/api/v2/hianime',
-  'https://api.consumet.org/anime/zoro',
-  'https://consumet-api.vercel.app/anime/zoro',
-];
-
-const configuredFallbackApis = (process.env.STREAMING_FALLBACK_APIS || '')
-  .split(',')
-  .map((entry) => entry.trim())
-  .filter(Boolean)
-  .map((entry) => entry.replace(/\/+$/, ''));
-
-const FALLBACK_APIS = configuredFallbackApis.length > 0
-  ? [...configuredFallbackApis, ...DEFAULT_FALLBACK_APIS]
-  : DEFAULT_FALLBACK_APIS;
 
 export interface StreamingSource {
   url: string;
@@ -54,7 +35,7 @@ export async function getEpisodeSources(
   let finalEpisodeId = episodeId;
   try {
     console.log('Fetching episode sources:', { episodeId, server, category });
-    
+
     // The episodeId should be in format: {animeId}?ep={episodeNumber}
     // Frontend should construct this, but we'll handle it here as fallback
 
@@ -72,9 +53,9 @@ export async function getEpisodeSources(
         finalEpisodeId = `${cleanAnimeId}?ep=1`;
       }
     }
-    
+
     console.log('Using episodeId format:', finalEpisodeId);
-    
+
     let data;
     try {
       data = await getEpisodeSourcesProvider(finalEpisodeId, server, category);
@@ -90,21 +71,8 @@ export async function getEpisodeSources(
       throw new Error(`Aniwatch error: ${aniwatchError.message || 'Unknown error'}`);
     }
 
-    if (!data) {
-      console.warn('No data returned from episode sources provider');
-      const fallbackResult = await tryFallbackApis(finalEpisodeId, server, category);
-      if (fallbackResult && fallbackResult.sources.length > 0) {
-        return fallbackResult;
-      }
-      return { sources: [] };
-    }
-
-    if (!data.sources || !Array.isArray(data.sources) || data.sources.length === 0) {
+    if (!data || !data.sources || !Array.isArray(data.sources) || data.sources.length === 0) {
       console.warn('No sources found in data:', data);
-      const fallbackResult = await tryFallbackApis(finalEpisodeId, server, category);
-      if (fallbackResult && fallbackResult.sources.length > 0) {
-        return fallbackResult;
-      }
       return { sources: [] };
     }
 
@@ -116,10 +84,6 @@ export async function getEpisodeSources(
 
     if (sources.length === 0) {
       console.warn('No valid sources after mapping');
-      const fallbackResult = await tryFallbackApis(finalEpisodeId, server, category);
-      if (fallbackResult && fallbackResult.sources.length > 0) {
-        return fallbackResult;
-      }
       return { sources: [] };
     }
 
@@ -138,7 +102,6 @@ export async function getEpisodeSources(
           const label = (sub.label || '').toLowerCase();
           const lang = (sub.lang || '').toLowerCase();
 
-          // Check all possible fields for "thumbnail" indicator
           if (kind === 'thumbnails' || kind === 'thumbnail') return false;
           if (label === 'thumbnails' || label === 'thumbnail') return false;
           if (lang === 'thumbnails' || lang === 'thumbnail') return false;
@@ -161,7 +124,6 @@ export async function getEpisodeSources(
       result.outro = (data as any).outro;
     }
 
-    // Include embed URL for iframe fallback
     if ((data as any).embedURL) {
       result.embedURL = (data as any).embedURL;
       console.log('Embed URL available:', result.embedURL);
@@ -171,14 +133,6 @@ export async function getEpisodeSources(
     return result;
   } catch (error: any) {
     console.error('Error in getEpisodeSources:', error.message);
-
-    // Try fallback APIs
-    console.log('Trying fallback APIs...');
-    const fallbackResult = await tryFallbackApis(finalEpisodeId, server, category);
-    if (fallbackResult && fallbackResult.sources.length > 0) {
-      return fallbackResult;
-    }
-
     throw new Error(error.message || 'Failed to get episode sources');
   }
 }
@@ -225,81 +179,6 @@ export async function getEpisodeSourcesParallel(
 
     if (offset + MAX_PARALLEL_CONCURRENCY < servers.length && PARALLEL_BATCH_DELAY_MS > 0) {
       await new Promise((resolve) => setTimeout(resolve, PARALLEL_BATCH_DELAY_MS));
-    }
-  }
-
-  return null;
-}
-
-/**
- * Try fallback consumet APIs when aniwatch fails
- */
-async function tryFallbackApis(
-  episodeId: string,
-  server: string,
-  category: 'sub' | 'dub' | 'raw'
-): Promise<StreamingData | null> {
-  // Extract anime ID and episode number from episodeId
-  // Format: anime-id?ep=123
-  const match = episodeId.match(/^(.+)\?ep=(\d+)$/);
-  if (!match) {
-    console.log('Could not parse episode ID for fallback:', episodeId);
-    return null;
-  }
-
-  const [, animeId, epNumber] = match;
-
-  for (const baseUrl of FALLBACK_APIS) {
-    try {
-      console.log(`Trying fallback API: ${baseUrl}`);
-
-      // First get episode list to find episode ID
-      const infoUrl = `${baseUrl}/info?id=${animeId}`;
-      const infoRes = await axios.get(infoUrl, { timeout: 10000 });
-
-      if (!infoRes.data?.episodes) {
-        continue;
-      }
-
-      // Find the episode
-      const episode = infoRes.data.episodes.find((ep: any) =>
-        ep.number === parseInt(epNumber) || ep.number === epNumber
-      );
-
-      if (!episode?.id) {
-        console.log(`Episode ${epNumber} not found in API response`);
-        continue;
-      }
-
-      // Get sources for the episode
-      const sourcesUrl = `${baseUrl}/watch?episodeId=${episode.id}&server=${server}`;
-      const sourcesRes = await axios.get(sourcesUrl, { timeout: 10000 });
-
-      if (sourcesRes.data?.sources && sourcesRes.data.sources.length > 0) {
-        console.log(`Fallback API success: ${sourcesRes.data.sources.length} sources`);
-
-        const sources: StreamingSource[] = sourcesRes.data.sources.map((source: any) => ({
-          url: source.url || '',
-          quality: source.quality || 'auto',
-          isM3U8: source.isM3U8 ?? source.url?.includes('.m3u8') ?? false,
-        })).filter((s: StreamingSource) => s.url);
-
-        const result: StreamingData = {
-          sources,
-          headers: sourcesRes.data.headers || { Referer: 'https://hianime.to/' },
-        };
-
-        if (sourcesRes.data.subtitles) {
-          result.tracks = sourcesRes.data.subtitles.map((sub: any) => ({
-            url: sub.url || '',
-            lang: sub.lang || 'Unknown',
-          })).filter((t: any) => t.url);
-        }
-
-        return result;
-      }
-    } catch (err: any) {
-      console.log(`Fallback API ${baseUrl} failed:`, err.message);
     }
   }
 
